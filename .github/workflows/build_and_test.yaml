@@ -50,6 +50,6 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_TESTS=ON -DQUAKE_ENABLE_GPU=OFF
+          cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_TESTS=ON -DQUAKE_ENABLE_GPU=OFF ../
           make bindings -j2
           cd ..
