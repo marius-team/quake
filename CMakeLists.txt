@@ -40,6 +40,13 @@ message(STATUS "CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 
+# enable GPU if set
+if (QUAKE_ENABLE_GPU)
+    set(FAISS_ENABLE_GPU ON)
+else ()
+    set(FAISS_ENABLE_GPU OFF)
+endif ()
+
 if (APPLE)
     include_directories("/opt/homebrew/opt/openblas/include")
     set(FAISS_ENABLE_GPU OFF)
@@ -52,7 +59,6 @@ add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 find_package(Torch REQUIRED)
 find_package(Python3 COMPONENTS Development Interpreter REQUIRED)
 find_package(OpenMP REQUIRED)
-
 
 message(STATUS "Torch include dir: ${TORCH_INCLUDE_DIRS}")
 message(STATUS "Torch libraries: ${TORCH_LIBRARIES}")
