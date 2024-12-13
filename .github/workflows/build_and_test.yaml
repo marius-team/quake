@@ -35,10 +35,10 @@ jobs:
         shell: bash
         run:   |
           
-          python3 --version
+          python3.13 --version
           
           if [ "$RUNNER_OS" == "Linux" ]; then
-               sudo pip3 install torch --extra-index-url https://download.pytorch.org/whl/cpu
+               python3.13 -m pip install torch --extra-index-url https://download.pytorch.org/whl/cpu
           else
                echo "$RUNNER_OS not supported"
                exit 1
