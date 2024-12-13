@@ -37,15 +37,8 @@ jobs:
           python3.13 --version
           python3.13 -m ensurepip --upgrade
           python3.13 -m pip install --upgrade pip
+          python3.13 -m pip install --upgrade python-dev
           python3.13 -m pip install numpy torch --extra-index-url https://download.pytorch.org/whl/cpu
-
-          if [ "$RUNNER_OS" == "Linux" ]; then
-              sudo apt-get update
-              sudo apt-get install -y python3.13-dev
-          else
-              echo "$RUNNER_OS not supported"
-              exit 1
-          fi
 
       - name: Build Quake Python Bindings
         working-directory: ${{github.workspace}}
