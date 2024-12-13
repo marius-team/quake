@@ -1,0 +1,9 @@
+[submodule "src/cpp/third_party/faiss"]
+	path = src/cpp/third_party/faiss
+	url = https://github.com/facebookresearch/faiss.git
+[submodule "src/cpp/third_party/SimSIMD"]
+	path = src/cpp/third_party/SimSIMD
+	url = https://github.com/ashvardanian/SimSIMD.git
+[submodule "src/cpp/third_party/pybind11"]
+	path = src/cpp/third_party/pybind11
+	url = https://github.com/pybind/pybind11.git
