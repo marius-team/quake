@@ -1,0 +1,51 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+env:
+  BUILD_TYPE: Debug
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+            name: "Ubuntu 20.04 GCC", artifact: "Linux.7z",
+            os: ubuntu-20.04,
+            cc: "gcc", cxx: "g++"
+          }
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install dependencies
+        working-directory: ${{github.workspace}}
+        shell: bash
+        run:   |
+          
+          python3 --version
+          
+          if [ "$RUNNER_OS" == "Linux" ]; then
+               sudo pip3 install torch --extra-index-url https://download.pytorch.org/whl/cpu
+          else
+               echo "$RUNNER_OS not supported"
+               exit 1
+          fi
+
+      - name: Build Quake Python Bindings
+        working-directory: ${{github.workspace}}
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_TESTS=ON ..
+          make bindings -j2
+          cd ..
