@@ -25,34 +25,46 @@ jobs:
           }
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13-dev"
 
-      - name: Install dependencies
+      - name: Install system dependencies
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y software-properties-common
+            sudo add-apt-repository -y ppa:deadsnakes/ppa
+            sudo apt-get update
+            sudo apt-get install -y python3.13 python3.13-dev python3.13-distutils
+            curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
+          else
+            echo "$RUNNER_OS not supported"
+            exit 1
+          fi
+
+      - name: Install Quake dependencies
         working-directory: ${{github.workspace}}
         shell: bash
-        run:   |
+        run: |
           python3.13 --version
           python3.13 -m ensurepip --upgrade
           python3.13 -m pip install --upgrade pip
           python3.13 -m pip install numpy torch --extra-index-url https://download.pytorch.org/whl/cpu
 
-          if [ "$RUNNER_OS" == "Linux" ]; then
-              sudo apt-get update
-              sudo apt-get install libpython3.13-dev
-          else
-              echo "$RUNNER_OS not supported"
-              exit 1
-          fi
 
-      - name: Build Quake Python Bindings
-        working-directory: ${{github.workspace}}
-        shell: bash
-        run: |
-          mkdir build
-          cd build
-          cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_TESTS=ON -DQUAKE_ENABLE_GPU=OFF -DPython_EXECUTABLE=$(which python3.13) ../
-          make bindings -j2
-          cd ..
+#          if [ "$RUNNER_OS" == "Linux" ]; then
+#              sudo apt-get update
+#              sudo apt-get install libpython3-dev
+#          else
+#              echo "$RUNNER_OS not supported"
+#              exit 1
+#          fi
+#
+#      - name: Build Quake Python Bindings
+#        working-directory: ${{github.workspace}}
+#        shell: bash
+#        run: |
+#          mkdir build
+#          cd build
+#          cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_TESTS=ON -DQUAKE_ENABLE_GPU=OFF -DPython_EXECUTABLE=$(which python3.13) ../
+#          make bindings -j2
+#          cd ..
