@@ -4,8 +4,6 @@ project(quake_c VERSION 0.1 LANGUAGES CXX)
 # ---------------------------------------------------------------
 # Important System Variables and Their Defaults
 # ---------------------------------------------------------------
-# CMAKE_BUILD_TYPE: Build type (Debug, Release, RelWithDebInfo, etc.)
-# Default: Release
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
@@ -26,16 +24,15 @@ else()
     set(QUAKE_USE_NUMA OFF)
 endif()
 
-# CMAKE_CXX_STANDARD: C++ standard used for compilation
-# Default: 17
+# C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Set default compiler flags for build types
+# Compiler flags
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
-# If inside a conda environment, favor conda packages over system packages
+# If in a conda environment, favor conda packages
 if(EXISTS $ENV{CONDA_PREFIX})
     set(CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX} ${CMAKE_PREFIX_PATH})
 endif()
@@ -70,19 +67,16 @@ message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
 message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
-
 message(STATUS "QUAKE_ENABLE_GPU: ${QUAKE_ENABLE_GPU} (FAISS_ENABLE_GPU: ${FAISS_ENABLE_GPU})")
 message(STATUS "QUAKE_USE_NUMA: ${QUAKE_USE_NUMA}")
 
-# On Apple systems, handle OpenBLAS and disable GPU for Faiss
+# Apple-specific adjustments
 if(APPLE)
     include_directories("/opt/homebrew/opt/openblas/include")
     set(FAISS_ENABLE_GPU OFF)
 endif()
 
-# ---------------------------------------------------------------
-# Compiler and Definitions
-# ---------------------------------------------------------------
+# Compiler options and definitions
 add_compile_options(-march=native)
 add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 add_definitions(-DSIMSIMD_NATIVE_F16=0)
@@ -102,14 +96,12 @@ message(STATUS "OpenMP include dirs: ${OpenMP_CXX_INCLUDE_DIRS}")
 
 set(PYTHON_INCLUDE_DIR ${Python3_INCLUDE_DIRS})
 
-# Add third-party dependencies (e.g. Faiss)
 add_subdirectory(${project_THIRD_PARTY_DIR})
 
 # ---------------------------------------------------------------
-# Source Files and Library
+# Sources and Library
 # ---------------------------------------------------------------
 file(GLOB_RECURSE project_SOURCES ${project_SOURCE_DIR}/*.cpp)
-
 add_library(${PROJECT_NAME} SHARED ${project_SOURCES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
@@ -122,46 +114,39 @@ target_include_directories(${PROJECT_NAME}
 )
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
+target_compile_options(${PROJECT_NAME} PRIVATE ${OpenMP_CXX_FLAGS})
 
 # ---------------------------------------------------------------
-# Linking Libraries
+# Set Up Link Libraries Conditionally
 # ---------------------------------------------------------------
+# Base libraries common to all platforms
+set(LINK_LIBS
+        ${TORCH_LIBRARIES}
+        OpenMP::OpenMP_CXX
+        -ffast-math
+        -lpthread
+        -fPIC
+)
+
 if(APPLE)
-    target_link_libraries(${PROJECT_NAME}
-            PUBLIC
-            ${TORCH_LIBRARIES}
-            faiss
-            OpenMP::OpenMP_CXX
-            -ffast-math
-            -lpthread
-            -fPIC
-    )
-elseif(UNIX AND NOT APPLE)
-    # Linux
-    target_link_libraries(${PROJECT_NAME}
-            PUBLIC
-            ${TORCH_LIBRARIES}
-            faiss_avx512
-            OpenMP::OpenMP_CXX
-            -ffast-math
-            -lpthread
-            -liomp5
-            -lnuma
-            -fPIC
-    )
+    list(APPEND LINK_LIBS faiss)
+else()
+    # Linux or other UNIX-likes
+    list(APPEND LINK_LIBS faiss_avx512)
+    if(QUAKE_USE_NUMA)
+        list(APPEND LINK_LIBS -lnuma)
+    endif()
 endif()
 
-target_compile_options(${PROJECT_NAME} PRIVATE ${OpenMP_CXX_FLAGS})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${LINK_LIBS})
 
 # ---------------------------------------------------------------
 # Python Bindings
 # ---------------------------------------------------------------
 find_library(TORCH_PYTHON_LIBRARY torch_python PATHS "${TORCH_INSTALL_PREFIX}/lib")
 file(GLOB_RECURSE BINDINGS ${project_BINDINGS_DIR}/*.cpp)
-
 pybind11_add_module(_bindings ${BINDINGS})
 set_target_properties(_bindings PROPERTIES LINKER_LANGUAGE CXX)
-
 target_link_libraries(_bindings PRIVATE ${PROJECT_NAME} ${TORCH_PYTHON_LIBRARY})
 add_custom_target(bindings)
 add_dependencies(bindings _bindings)
@@ -174,39 +159,14 @@ file(GLOB BENCHMARK_SOURCES "src/cpp/test/benchmark/*.cpp")
 foreach(SOURCE ${BENCHMARK_SOURCES})
     get_filename_component(EXECUTABLE_NAME ${SOURCE} NAME_WE)
     add_executable(${EXECUTABLE_NAME} ${SOURCE})
-
-    if(APPLE)
-        target_link_libraries(${EXECUTABLE_NAME}
-                PUBLIC
-                ${TORCH_LIBRARIES}
-                faiss
-                OpenMP::OpenMP_CXX
-                -ffast-math
-                -lpthread
-                -fPIC
-        )
-        target_include_directories(${EXECUTABLE_NAME}
-                PUBLIC
-                ${TORCH_INCLUDE_DIRS}
-                ${project_INCLUDE_DIR}
-                ${project_THIRD_PARTY_DIR}/SimSIMD/include/
-                faiss
-        )
-        target_link_libraries(${EXECUTABLE_NAME} PRIVATE ${PROJECT_NAME})
-    elseif(UNIX AND NOT APPLE)
-        target_link_libraries(${EXECUTABLE_NAME}
-                PUBLIC
-                ${TORCH_LIBRARIES}
-                faiss_avx512
-                OpenMP::OpenMP_CXX
-                -ffast-math
-                -lpthread
-                -liomp5
-                -lnuma
-                -fPIC
-        )
-    endif()
-
+    target_link_libraries(${EXECUTABLE_NAME} PUBLIC ${LINK_LIBS} ${PROJECT_NAME})
+    target_include_directories(${EXECUTABLE_NAME}
+            PUBLIC
+            ${TORCH_INCLUDE_DIRS}
+            ${project_INCLUDE_DIR}
+            ${project_THIRD_PARTY_DIR}/SimSIMD/include/
+            faiss
+    )
     target_compile_features(${EXECUTABLE_NAME} PRIVATE cxx_std_17)
     target_compile_options(${EXECUTABLE_NAME} PRIVATE ${OpenMP_CXX_FLAGS})
 endforeach()
