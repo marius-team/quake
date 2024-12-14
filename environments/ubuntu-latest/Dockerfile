@@ -17,6 +17,7 @@ RUN apt-get update && \
       build-essential \
       cmake \
       ca-certificates \
+      git \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
