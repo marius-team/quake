@@ -18,8 +18,9 @@ jobs:
       image: ghcr.io/marius-team/quake/ubuntu-latest:latest
     steps:
       - uses: actions/checkout@v4
-        submodules: true
-        fetch-depth: 0
+        with:
+          submodules: true
+          fetch-depth: 0
 
       - name: Build project
         run: |
