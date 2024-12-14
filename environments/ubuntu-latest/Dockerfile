@@ -27,8 +27,8 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 # -----------------------------
 # Set up and activate conda environment
 # -----------------------------
-COPY conda.yml /tmp/conda.yml
-RUN conda env create -f /tmp/conda.yml && \
+COPY conda.yaml /tmp/conda.yaml
+RUN conda env create -f /tmp/conda.yaml && \
     conda clean -afy \
 
 SHELL ["bash", "-c"]
