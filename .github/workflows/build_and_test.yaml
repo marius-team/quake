@@ -17,10 +17,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04]
         cc: [gcc]
         include:
+          - os: ubuntu-20.04
+            cc: gcc
+            python_version: "3.11"
           - os: ubuntu-22.04
+            cc: gcc
+            python_version: "3.11"
+          - os: ubuntu-24.04
             cc: gcc
             python_version: "3.11"
     name: ${{ matrix.os }} - ${{ matrix.cc }}

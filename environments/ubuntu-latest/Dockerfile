@@ -5,6 +5,7 @@ FROM ubuntu:20.04
 # -----------------------------
 ENV CONDA_DIR=/opt/miniconda
 ENV PATH="${CONDA_DIR}/bin:${PATH}"
+ENV DEBIAN_FRONTEND=noninteractive
 
 # -----------------------------
 # Install system dependencies
