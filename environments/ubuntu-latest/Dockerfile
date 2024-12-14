@@ -16,6 +16,7 @@ RUN apt-get update && \
       curl \
       build-essential \
       ca-certificates \
+      swig \
       git \
     && rm -rf /var/lib/apt/lists/*
 
