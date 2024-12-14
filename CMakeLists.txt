@@ -47,6 +47,11 @@ else ()
     set(FAISS_ENABLE_GPU OFF)
 endif ()
 
+if (QUAKE_USE_NUMA)
+    set(QUAKE_USE_NUMA ON)
+else ()
+    set(QUAKE_USE_NUMA OFF)
+
 if (APPLE)
     include_directories("/opt/homebrew/opt/openblas/include")
     set(FAISS_ENABLE_GPU OFF)

@@ -15,7 +15,7 @@
 #include <dynamic_inverted_list.h>
 #include <chrono>
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
 #include <numa.h>
 #include <numaif.h>
 #endif
@@ -158,7 +158,7 @@ struct SearchTimingInfo {
         std::cout << indent_str << "Partition scan search time (us): " << partition_scan_search_time_us << std::endl;
         std::cout << indent_str << "Partition scan post process time (us): " << partition_scan_post_process_time_us << std::endl;
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         if(using_numa) {
             std::cout << indent_str << "Total numa preprocessing time (us): " << total_numa_preprocessing_time_us << std::endl;
             std::cout << indent_str << "Total numa adaptive preprocessing time (us): " << total_numa_adaptive_preprocess_time_us << std::endl;
@@ -217,7 +217,7 @@ struct SearchTimingInfo {
     */
     void print_summary() const {
         std::cout << "Partition scan search time (us): " << partition_scan_search_time_us << std::endl;
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         if(using_numa) {
             std::cout << "Total numa job wait time (us): " << total_result_wait_time_us << std::endl;
         }
@@ -769,7 +769,7 @@ public:
     */
     void distribute_clusters(bool only_current_level = false);
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
     /**
     * @brief Determines the number of numa nodes to use
     * @returns Returns the number of numa nodes we should use

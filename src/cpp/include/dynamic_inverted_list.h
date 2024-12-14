@@ -86,7 +86,7 @@ namespace faiss {
         void resize(size_t nlist, size_t code_size) override;
 
         int curr_list_id_ = 0;
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         int total_numa_nodes_;
         int next_numa_node_;
 

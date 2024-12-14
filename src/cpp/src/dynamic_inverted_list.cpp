@@ -10,7 +10,7 @@
 #include <iostream>
 #include <cassert>
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
 #include <numa.h>
 #include <numaif.h>
 #endif
@@ -51,7 +51,7 @@ namespace faiss {
 
     DynamicInvertedLists::DynamicInvertedLists(size_t nlist, size_t code_size, bool use_map_for_ids)
         : InvertedLists(nlist, code_size) {
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         // Initialize as empty lists
         for(size_t i = 0; i < nlist; i++) {
             curr_thread_[i] = -1;
@@ -75,7 +75,7 @@ namespace faiss {
     } 
 
     DynamicInvertedLists::~DynamicInvertedLists() {
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         // Free all allocated buffers
         for(size_t i = 0; i < nlist; i++) {
             if(codes_[i] == nullptr) continue;
@@ -272,7 +272,7 @@ namespace faiss {
                 }
 
                 if(new_buffer_size > prev_buffer_size) {
-#ifdef __linux__
+#ifdef QUAKE_NUMA
                     // Realloc the codes
                     uint8_t* prev_codes = codes_[curr_partition_id];
                     codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(numa_alloc_onnode(new_buffer_size * code_size * sizeof(uint8_t), list_numa_node));
@@ -323,7 +323,7 @@ namespace faiss {
             throw std::runtime_error("List does not exist in add_entries");
         }
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         // First determine if this node is handled using numa or not
         int list_numa_node = curr_numa_node_[list_no];
         size_t num_existing_vectors = num_vectors_[list_no];
@@ -433,7 +433,7 @@ namespace faiss {
         ids_.erase(list_no);
         num_vectors_.erase(list_no);
         nlist--;
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         curr_numa_node_.erase(list_no);
         unassigned_clusters_.erase(list_no);
 #endif
@@ -443,7 +443,7 @@ namespace faiss {
         if (codes_.find(list_no) != codes_.end() || ids_.find(list_no) != ids_.end()) {
             throw std::runtime_error("List already exists in add_list");
         }
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         codes_[list_no] = nullptr;
         ids_[list_no] = nullptr;
         curr_numa_node_[list_no] = -1;
@@ -461,7 +461,7 @@ namespace faiss {
     void DynamicInvertedLists::reset() {
         codes_.clear();
         ids_.clear();
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         curr_thread_.clear();
         curr_numa_node_.clear();
 #endif
@@ -513,7 +513,7 @@ namespace faiss {
         return curr_list_id_++;
     }
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
     int DynamicInvertedLists::get_numa_node(size_t list_no) {
         if(curr_numa_node_.find(list_no) != curr_numa_node_.end()) {
             return curr_numa_node_.at(list_no);
