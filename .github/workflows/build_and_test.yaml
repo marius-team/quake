@@ -22,14 +22,28 @@ jobs:
           submodules: true
           fetch-depth: 0
 
+      # Cache the build directory for incremental builds
+      - name: Cache build directory
+        uses: actions/cache@v3
+        with:
+          path: build
+          key: ${{ runner.os }}-cmake-build-${{ hashFiles('src/**/*', 'CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-build-
+
       - name: Build project
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate test-env
-          mkdir build && cd build
-          cmake -DCMAKE_BUILD_TYPE=Release -DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF ../
-          make -j2
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                -DQUAKE_USE_NUMA=OFF \
+                -DQUAKE_ENABLE_GPU=OFF \
+                -DBUILD_TESTS=ON \
+                ../
+          make bindings -j2
 
       - name: Run tests
         run: |
