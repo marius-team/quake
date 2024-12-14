@@ -47,23 +47,21 @@ jobs:
           bash miniconda.sh -b -p $HOME/miniconda
           echo "$HOME/miniconda/bin" >> $GITHUB_PATH
           export PATH="$HOME/miniconda/bin:$PATH"
-          conda init bash
 
       - name: Create and activate conda environment
         shell: bash
         run: |
-          source ~/.bashrc
-          conda init bash
-          conda create -q -n test-env "python=${{ matrix.python_version }}"
+          # Initialize conda in current shell
+          eval "$(conda shell.bash hook)"
+          conda create -q -y -n test-env python=${{ matrix.python_version }}
           conda activate test-env
-
-          # Install dependencies with conda, including PyTorch
-          conda install numpy pytorch cpuonly -c pytorch
+          conda install -y numpy pytorch cpuonly -c pytorch
 
       - name: Build Project
         shell: bash
         run: |
-          source ~/.bashrc
+          # Re-activate environment in the new step's shell
+          eval "$(conda shell.bash hook)"
           conda activate test-env
           mkdir build
           cd build
