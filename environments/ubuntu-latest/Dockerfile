@@ -15,10 +15,15 @@ RUN apt-get update && \
       wget \
       curl \
       build-essential \
-      cmake \
       ca-certificates \
       git \
     && rm -rf /var/lib/apt/lists/*
+
+
+RUN wget -qO /tmp/cmake.sh https://github.com/Kitware/CMake/releases/download/v3.23.1/cmake-3.23.1-linux-x86_64.sh && \
+    chmod +x /tmp/cmake.sh && \
+    /tmp/cmake.sh --skip-license --prefix=/usr/local && \
+    rm /tmp/cmake.sh
 
 # -----------------------------
 # Install Miniconda
