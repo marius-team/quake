@@ -12,56 +12,20 @@ env:
   BUILD_TYPE: Debug
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04]
-        cc: [gcc]
-        include:
-          - os: ubuntu-22.04
-            cc: gcc
-            python_version: "3.11"
-    name: ${{ matrix.os }} - ${{ matrix.cc }}
-
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        shell: bash
+      - name: Build project
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl wget build-essential
+          mkdir build && cd build
+          cmake -DCMAKE_BUILD_TYPE=Release -DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF ../
+          make -j2
 
-      - name: Install Miniconda
-        shell: bash
+      - name: Run tests
         run: |
-          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-          bash miniconda.sh -b -p $HOME/miniconda
-          echo "$HOME/miniconda/bin" >> $GITHUB_PATH
-          export PATH="$HOME/miniconda/bin:$PATH"
-
-      - name: Create and activate conda environment
-        shell: bash
-        run: |
-          # Initialize conda in current shell
-          eval "$(conda shell.bash hook)"
-          conda create -q -y -n test-env python=${{ matrix.python_version }}
-          conda activate test-env
-          conda install -y numpy pytorch cpuonly -c pytorch
-
-      - name: Build Project
-        shell: bash
-        run: |
-          # Re-activate environment in the new step's shell
-          eval "$(conda shell.bash hook)"
-          conda activate test-env
-          mkdir build
           cd build
-          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-                -DBUILD_TESTS=ON \
-                -DQUAKE_ENABLE_GPU=OFF \
-                -DPython_EXECUTABLE=$(which python) \
-                ..
-          make bindings -j2
+          ctest --output-on-failure

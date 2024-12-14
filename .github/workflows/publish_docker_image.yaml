@@ -3,9 +3,6 @@ name: Build and Publish Docker Image
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches:
-      - main
 
 jobs:
   build-and-push-image:
@@ -47,8 +44,3 @@ jobs:
           mkdir build && cd build
           cmake -DCMAKE_BUILD_TYPE=Release -DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF ../
           make -j2
-
-      - name: Run tests
-        run: |
-          cd build
-          ctest --output-on-failure
