@@ -7,64 +7,72 @@ on:
   pull_request:
     branches:
       - main
+
 env:
   BUILD_TYPE: Debug
 
 jobs:
   build:
-    name: ${{ matrix.config.name }}
-    runs-on: ${{ matrix.config.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        config:
-          - {
-            name: "Ubuntu 20.04 GCC", artifact: "Linux.7z",
-            os: ubuntu-20.04,
-            cc: "gcc", cxx: "g++"
-          }
+        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+        cc: [gcc]
+        include:
+          - os: ubuntu-20.04
+            cc: gcc
+            python_version: "3.11"
+          - os: ubuntu-22.04
+            cc: gcc
+            python_version: "3.11"
+          - os: ubuntu-24.04
+            cc: gcc
+            python_version: "3.11"
+    name: ${{ matrix.os }} - ${{ matrix.cc }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
         shell: bash
         run: |
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            sudo apt-get update
-            sudo apt-get install -y software-properties-common
+          sudo apt-get update
+          if [ "${{ matrix.os }}" = "ubuntu-20.04" ] || [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
+            # Use deadsnakes PPA for Python 3.11
+            sudo apt-get install -y software-properties-common curl
             sudo add-apt-repository -y ppa:deadsnakes/ppa
             sudo apt-get update
-            sudo apt-get install -y python3.13 python3.13-dev python3.13-distutils
-            curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
+            sudo apt-get install -y python3.11 python3.11-dev python3.11-distutils curl
+          elif [ "${{ matrix.os }}" = "ubuntu-24.04" ]; then
+            # Python 3.11 is in default repos for newer Ubuntu
+            sudo apt-get install -y python3.11 python3.11-dev curl
+            # If distutils is needed and not installed by default:
+            # sudo apt-get install -y python3.11-distutils
           else
-            echo "$RUNNER_OS not supported"
+            echo "${{ matrix.os }} not supported"
             exit 1
           fi
 
-      - name: Install Quake dependencies
-        working-directory: ${{github.workspace}}
+          # Install pip for Python 3.11
+          curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+
+      - name: Install Python dependencies
         shell: bash
         run: |
-          python3.13 --version
-          python3.13 -m ensurepip --upgrade
-          python3.13 -m pip install --upgrade pip
-          python3.13 -m pip install numpy torch --extra-index-url https://download.pytorch.org/whl/cpu
+          python3.11 --version
+          python3.11 -m ensurepip --upgrade
+          python3.11 -m pip install --upgrade pip
+          python3.11 -m pip install numpy torch --extra-index-url https://download.pytorch.org/whl/cpu
 
-
-#          if [ "$RUNNER_OS" == "Linux" ]; then
-#              sudo apt-get update
-#              sudo apt-get install libpython3-dev
-#          else
-#              echo "$RUNNER_OS not supported"
-#              exit 1
-#          fi
-#
-#      - name: Build Quake Python Bindings
-#        working-directory: ${{github.workspace}}
-#        shell: bash
-#        run: |
-#          mkdir build
-#          cd build
-#          cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_TESTS=ON -DQUAKE_ENABLE_GPU=OFF -DPython_EXECUTABLE=$(which python3.13) ../
-#          make bindings -j2
-#          cd ..
+      - name: Build Project
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                -DBUILD_TESTS=ON \
+                -DQUAKE_ENABLE_GPU=OFF \
+                -DPython_EXECUTABLE=$(which python3.11) \
+                ..
+          make bindings -j2
