@@ -31,7 +31,7 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 # -----------------------------
 COPY environments/ubuntu-latest/conda.yaml /tmp/conda.yaml
 RUN conda env create -f /tmp/conda.yaml && \
-    conda clean -afy \
+    conda clean -afy
 
 SHELL ["bash", "-c"]
 RUN echo "conda activate test-env" >> ~/.bashrc
