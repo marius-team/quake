@@ -22,15 +22,6 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      # Cache the build directory for incremental builds
-      - name: Cache build directory
-        uses: actions/cache@v3
-        with:
-          path: build
-          key: ${{ runner.os }}-cmake-build-${{ hashFiles('src/**/*', 'CMakeLists.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-cmake-build-
-
       - name: Build project
         run: |
           git config --global --add safe.directory '*'
