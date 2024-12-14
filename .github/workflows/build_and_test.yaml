@@ -53,6 +53,7 @@ jobs:
         shell: bash
         run: |
           source ~/.bashrc
+          conda init bash
           conda create -q -n test-env "python=${{ matrix.python_version }}"
           conda activate test-env
 
