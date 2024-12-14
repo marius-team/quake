@@ -30,7 +30,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: envs/ubuntu-latest/Dockerfile
+          file: docker/ubuntu-latest/Dockerfile
           tags: ghcr.io/marius-team/quake/ubuntu-latest:latest
           push: true
 
