@@ -1,0 +1,9 @@
+name: test-env
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - pytorch
+  - cpuonly

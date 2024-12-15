@@ -1,0 +1,37 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  BUILD_TYPE: Debug
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Build project
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate test-env
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                -DQUAKE_USE_NUMA=OFF \
+                -DQUAKE_ENABLE_GPU=OFF \
+                -DBUILD_TESTS=ON \
+                ../
+          make bindings -j2

@@ -42,7 +42,7 @@
 #include <faiss/gpu/GpuCloner.h>
 #endif
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
 #include <pthread.h>
 #include <numa.h>
 #include <numaif.h>
@@ -142,7 +142,7 @@ DynamicIVF_C::DynamicIVF_C(int d, int nlist, int metric, int num_workers, int m,
     verify_numa_ = using_numa_optimizations_ && verify_numa;
     workers_numa_nodes_.reserve(num_scan_workers_);
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
     int num_numa_nodes = get_num_numa_nodes();
     for(int i = 0; i < num_scan_workers_; i++) {
         workers_numa_nodes_[i] = i % num_numa_nodes;
@@ -181,7 +181,7 @@ DynamicIVF_C::~DynamicIVF_C() {
         delete refine_index_;
     }
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
     if(using_numa_optimizations_) {
         // Stop all of the running workers
         if(scan_workers_.size() > 0) {
@@ -275,7 +275,7 @@ void DynamicIVF_C::reset_workers(int num_workers, bool same_core, bool use_numa_
     using_numa_optimizations_ = use_numa_optimizations;
 
     workers_numa_nodes_.reserve(num_scan_workers_);
-#ifdef __linux__
+#ifdef QUAKE_NUMA
 
     int num_numa_nodes = get_num_numa_nodes();
     for(int i = 0; i < num_scan_workers_; i++) {
@@ -584,14 +584,14 @@ Tensor DynamicIVF_C::add_centroids(Tensor centroids) {
         auto centroid_ids_accessor = centroid_ids.accessor<int64_t, 1>();
 
         // add empty partitions to the invlists
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         int curr_numa_node = 0;
         int num_numa_nodes = this->get_num_numa_nodes();
 #endif
         for (int i = 0; i < centroids.size(0); i++) {
             size_t new_list_id = invlists->get_new_list_id();
             invlists->add_list(new_list_id);
-#ifdef __linux__
+#ifdef QUAKE_NUMA
             if(using_numa_optimizations_) {
                 invlists->set_numa_node(new_list_id, curr_numa_node);
                 curr_numa_node = (curr_numa_node + 1) % num_numa_nodes;
@@ -797,7 +797,7 @@ void DynamicIVF_C::load(const std::string &path, bool launch_workers) {
     }
 
     d_ = index_->d;
-#ifdef __linux__
+#ifdef QUAKE_NUMA
     int num_numa_nodes = get_num_numa_nodes();
     curr_queries_per_node_.reserve(num_numa_nodes);
     int total_buffer_size = QUERY_BUFFER_REUSE_THRESHOLD * d_;
@@ -1194,7 +1194,7 @@ void DynamicIVF_C::search_all_centroids(Tensor x, int k, int64_t* ret_ids, float
     int temp_buffer_size;
     std::vector<float*> numa_reuse_buffers;
     if(using_numa_optimizations_ && num_search_vectors_ > QUERY_BUFFER_REUSE_THRESHOLD) {
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         int num_numa_nodes = this->get_num_numa_nodes();
         numa_reuse_buffers.reserve(num_numa_nodes);
         temp_buffer_size = num_search_vectors_ * vector_dimension;
@@ -1214,7 +1214,7 @@ void DynamicIVF_C::search_all_centroids(Tensor x, int k, int64_t* ret_ids, float
 
     auto search_start_time = std::chrono::high_resolution_clock::now();
     if(using_numa_optimizations_) {
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         // Copy over the vector into each numa node
         timing_info->using_numa = true;
         auto numa_pre_start = std::chrono::high_resolution_clock::now();
@@ -1333,7 +1333,7 @@ void DynamicIVF_C::search_all_centroids(Tensor x, int k, int64_t* ret_ids, float
 
     // See if we need to free up the temporary buffer
     if(using_numa_optimizations_ && num_search_vectors_ > QUERY_BUFFER_REUSE_THRESHOLD) {
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         int num_numa_nodes = this->get_num_numa_nodes();
         for(int i = 0; i < num_numa_nodes; i++) {
             // Free the temporary buffer
@@ -1923,7 +1923,7 @@ std::tuple<Tensor, Tensor, shared_ptr<SearchTimingInfo> > DynamicIVF_C::scan_par
         int temp_buffer_size;
         std::vector<float*> numa_reuse_buffers;
         if(using_numa_optimizations_ && num_search_vectors_ > QUERY_BUFFER_REUSE_THRESHOLD) {
-    #ifdef __linux__
+    #ifdef QUAKE_NUMA
             int num_numa_nodes = this->get_num_numa_nodes();
             numa_reuse_buffers.reserve(num_numa_nodes);
             temp_buffer_size = num_search_vectors_ * vector_dimension;
@@ -1946,7 +1946,7 @@ std::tuple<Tensor, Tensor, shared_ptr<SearchTimingInfo> > DynamicIVF_C::scan_par
         target_latency_us -= timing_info->partition_scan_setup_time_us;
 
         auto search_scan_start = std::chrono::high_resolution_clock::now();
-#ifdef __linux__
+#ifdef QUAKE_NUMA
         if(using_numa_optimizations_) {
             timing_info->using_numa = true;
             
@@ -2194,7 +2194,7 @@ std::tuple<Tensor, Tensor, shared_ptr<SearchTimingInfo> > DynamicIVF_C::scan_par
 
         // See if we need to free up the temporary buffer
         if(using_numa_optimizations_ && num_search_vectors_ > QUERY_BUFFER_REUSE_THRESHOLD) {
-#ifdef __linux__
+#ifdef QUAKE_NUMA
             int num_numa_nodes = this->get_num_numa_nodes();
             for(int i = 0; i < num_numa_nodes; i++) {
                 // Free the temporary buffer
@@ -3011,7 +3011,7 @@ void DynamicIVF_C::launch_cluster_scan_workers(bool only_current_level) {
         distribute_clusters(only_current_level);
     }
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
     // Ensure the cluster has been distributed
 
     if(using_numa_optimizations_) {
@@ -3064,7 +3064,7 @@ void DynamicIVF_C::launch_cluster_scan_workers(bool only_current_level) {
 void DynamicIVF_C::distribute_clusters(bool only_current_level) {
     bool is_top_level = parent_ == nullptr;
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
     int num_numa_nodes = this->get_num_numa_nodes();
     if(!is_top_level && using_numa_optimizations_) {
         // Get the unassigned inverted list from the index and sequentially assign each unassigned to a different numa node
@@ -3091,7 +3091,7 @@ void DynamicIVF_C::distribute_clusters(bool only_current_level) {
     }
 }
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
 void DynamicIVF_C::centroids_scan_worker_function(int thread_id) {
     int thread_numa_node = workers_numa_nodes_[thread_id];
     int num_numa_nodes = this->get_num_numa_nodes();
