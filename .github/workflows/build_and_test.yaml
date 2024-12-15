@@ -35,3 +35,9 @@ jobs:
                 -DBUILD_TESTS=ON \
                 ../
           make bindings -j2
+
+      - name: Run tests
+        run: |
+            cd build
+            make quake_tests -j2
+            test/cpp/quake_tests
