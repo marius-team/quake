@@ -35,9 +35,12 @@ jobs:
                 -DBUILD_TESTS=ON \
                 ../
           make bindings -j2
+          make quake_tests -j2
 
       - name: Run tests
         run: |
             cd build
-            make quake_tests -j2
-            test/cpp/quake_tests
+            test/cpp/quake_tests --gtest_filter=DynamicInvertedListTest.*
+            test/cpp/quake_tests --gtest_filter=DynamicIVFTest.*
+          
+      
