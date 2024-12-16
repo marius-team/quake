@@ -133,13 +133,8 @@ if(APPLE)
 else()
     # Linux or other UNIX-likes
     list(APPEND LINK_LIBS faiss_avx512
-            -lmkl_intel_lp64
-            -lmkl_intel_thread
-            -lmkl_core
             -liomp5
-            -lpthread
-            -lm
-            -ldl)
+            -lpthread)
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()
