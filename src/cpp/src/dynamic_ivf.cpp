@@ -19,43 +19,8 @@
 #include <faiss/utils/utils.h>
 #include "dynamic_inverted_list.h"
 #include "geometry.h"
-
-#include <iostream>
-#include <vector>
-#include <chrono>
-#include <filesystem>
-#include <unordered_set>
-#include <sstream>
-#include <thread>
-#include <omp.h>
-
-#include <sstream>
-#include <iomanip>
-#include <chrono>
-#include <ctime>
-
-#ifdef FAISS_ENABLE_GPU
-#include <faiss/gpu/GpuIndexFlat.h>
-#include <faiss/gpu/GpuIndexIVFFlat.h>
-#include <faiss/gpu/GpuIndexIVFPQ.h>
-#include <faiss/gpu/StandardGpuResources.h>
-#include <faiss/gpu/GpuCloner.h>
-#endif
-
-#ifdef QUAKE_NUMA
-#include <pthread.h>
-#include <numa.h>
-#include <numaif.h>
-#endif
-#include <sys/mman.h>
-
-#include "simsimd/simsimd.h"
 #include "clustering.h"
 
-using std::vector;
-using std::shared_ptr;
-using torch::Tensor;
-using std::chrono::high_resolution_clock;
 
 /**
  * @brief Reorders search results by merging two heaps.

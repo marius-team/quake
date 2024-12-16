@@ -2,19 +2,6 @@
 
 #include "dynamic_inverted_list.h"
 
-#include <stdexcept>
-#include <algorithm>
-#include <cstdlib>
-#include <cstdint>
-#include <cstring>
-#include <iostream>
-#include <cassert>
-
-#ifdef QUAKE_NUMA
-#include <numa.h>
-#include <numaif.h>
-#endif
-
 namespace faiss {
     ArrayInvertedLists *convert_to_array_invlists(DynamicInvertedLists *invlists, std::unordered_map<size_t, size_t>& remap_ids) {
         auto ret = new ArrayInvertedLists(invlists->nlist, invlists->code_size);

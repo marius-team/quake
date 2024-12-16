@@ -1,18 +1,4 @@
-
 #include "dynamic_centroid_store.h"
-
-#include <stdexcept>
-#include <algorithm>
-#include <cstdlib>
-#include <cstdint>
-#include <cstring>
-#include <iostream>
-#include <sys/mman.h>
-
-#ifdef QUAKE_NUMA
-#include <numa.h>
-#include <numaif.h>
-#endif
 
 namespace faiss {
     DynamicCentroidStore::DynamicCentroidStore(int vector_dimension, bool log_mode) : 

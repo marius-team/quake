@@ -244,23 +244,6 @@ TEST_F(MaintenanceTest, QueryOnly) {
         Tensor recalls = calculate_recall(ids, ground_truth);
         std::cout << "Recall: " << torch::stack(recalls).mean().item<float>() << std::endl;
         MaintenanceTimingInfo timing_info = index->maintenance_policy_->maintenance();
-
-        // check the state before  maintenance
-        std::cout << "Before maintenance: " << std::endl;
-        std::cout << timing_info.audit_before.current_scan_fraction << std::endl;
-        std::cout << timing_info.audit_before.running_sum_scan_fraction << std::endl;
-        std::cout << timing_info.audit_before.average_hit_rate << std::endl;
-
-        // check the state after maintenance
-        std::cout << "After maintenance: " << std::endl;
-        std::cout << timing_info.audit_after.current_scan_fraction << std::endl;
-        std::cout << timing_info.audit_after.running_sum_scan_fraction << std::endl;
-        std::cout << timing_info.audit_after.average_hit_rate << std::endl;
-        
-        // number of operations
-        std::cout << "Split Ids Size: " << timing_info.audit_after.split_partition_ids.size(0) << std::endl;
-        std::cout << "Delete Ids Size: " << timing_info.audit_after.delete_partition_ids.size(0) << std::endl;
-        std::cout << "New Ids Size: " << timing_info.audit_after.new_partition_ids.size(0) << std::endl;
     }
 }
 

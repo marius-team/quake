@@ -7,13 +7,9 @@
 #ifndef DYNAMIC_INVERTED_LIST_H
 #define DYNAMIC_INVERTED_LIST_H
 
+#include <common.h>
 #include <faiss/invlists/InvertedLists.h>
-#include <unordered_map>
-#include <vector>
-#include <set>
 #include <faiss/invlists/InvertedListsIOHook.h>
-
-using std::size_t;
 
 namespace faiss {
     /**
@@ -86,6 +82,7 @@ namespace faiss {
         void resize(size_t nlist, size_t code_size) override;
 
         int curr_list_id_ = 0;
+
 #ifdef QUAKE_NUMA
         int total_numa_nodes_;
         int next_numa_node_;
