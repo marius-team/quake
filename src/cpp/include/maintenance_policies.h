@@ -68,9 +68,9 @@ public:
 
     virtual void refine_split(Tensor partition_ids, Tensor old_centroids) {}
 
-    virtual std::pair<Tensor, Tensor> check_and_delete_partitions() {}
+    virtual std::pair<Tensor, Tensor> check_and_delete_partitions() { return {}; }
 
-    virtual std::tuple<Tensor, Tensor, Tensor> check_and_split_partitions() {}
+    virtual std::tuple<Tensor, Tensor, Tensor> check_and_split_partitions() { return {}; }
 
     virtual MaintenanceTimingInfo maintenance();
 };

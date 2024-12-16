@@ -132,7 +132,14 @@ if(APPLE)
     list(APPEND LINK_LIBS faiss)
 else()
     # Linux or other UNIX-likes
-    list(APPEND LINK_LIBS faiss_avx512)
+    list(APPEND LINK_LIBS faiss_avx512
+            -lmkl_intel_lp64
+            -lmkl_intel_thread
+            -lmkl_core
+            ${LIBIOMP5}
+            -lpthread
+            -lm
+            -ldl)
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()
