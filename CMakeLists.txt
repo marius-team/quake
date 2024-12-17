@@ -143,6 +143,8 @@ elseif(UNIX)
         list(APPEND LINK_LIBS faiss_avx512)
     else()
         list(APPEND LINK_LIBS faiss)
+    endif()
+
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()
