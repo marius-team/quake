@@ -24,6 +24,11 @@ else()
     set(QUAKE_USE_NUMA OFF)
 endif()
 
+if (QUAKE_USE_AVX512)
+    set(QUAKE_USE_AVX512 ON)
+else()
+    set(QUAKE_USE_AVX512 OFF)
+
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -133,7 +138,10 @@ if(APPLE)
     list(APPEND LINK_LIBS faiss)
 elseif(UNIX)
     # Linux or other UNIX-likes
-    list(APPEND LINK_LIBS faiss_avx512)
+    if (QUAKE_USE_AVX512)
+        list(APPEND LINK_LIBS faiss_avx512)
+    else()
+        list(APPEND LINK_LIBS faiss)
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()

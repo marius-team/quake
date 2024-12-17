@@ -33,6 +33,7 @@ jobs:
                 -DQUAKE_USE_NUMA=OFF \
                 -DQUAKE_ENABLE_GPU=OFF \
                 -DBUILD_TESTS=ON \
+                -DQUAKE_USE_AVX512=OFF \
                 ../
           make bindings -j2
           make quake_tests -j2
