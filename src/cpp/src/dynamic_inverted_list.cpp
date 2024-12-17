@@ -221,10 +221,19 @@ namespace faiss {
         }
     }
 
-    void DynamicInvertedLists::batch_update_entries(size_t old_vector_partition, int64_t* new_vector_partitions, uint8_t* new_vectors, 
-        int64_t* new_vector_ids, int num_vectors) {
-        
-        // Get the number of new vectors per partition
+    void DynamicInvertedLists::batch_update_entries(
+        size_t old_vector_partition,
+        int64_t* new_vector_partitions,
+        uint8_t* new_vectors,
+        int64_t* new_vector_ids,
+        int num_vectors)
+    {
+        if (num_vectors <= 0) {
+            // No vectors to update
+            return;
+        }
+
+        // Step 1: Count new vectors per partition
         std::unordered_map<size_t, size_t> new_vectors_per_partition;
         for(int i = 0; i < num_vectors; i++) {
             size_t curr_new_partition = static_cast<size_t>(new_vector_partitions[i]);
@@ -233,64 +242,172 @@ namespace faiss {
             }
         }
 
-        // Now create the new buffers
+        // Step 2: Allocate/Reallocate buffers for each affected partition
         for(auto& pair : new_vectors_per_partition) {
-            // Determine the new buffer size
             size_t curr_partition_id = pair.first;
-            size_t new_total_vectors = num_vectors_[curr_partition_id] + pair.second;
+            size_t vectors_to_add = pair.second;
+            size_t existing_vectors = num_vectors_[curr_partition_id];
+            size_t new_total_vectors = existing_vectors + vectors_to_add;
 
-            // See if we need to perform a realloc
+#ifdef QUAKE_NUMA
             int list_numa_node = curr_numa_node_[curr_partition_id];
             if(list_numa_node == -1) {
+                // Non-NUMA allocation
                 if(codes_[curr_partition_id] == nullptr) {
-                    // Allocate the buffer for the first time
-                    codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(std::malloc(new_total_vectors * code_size * sizeof(uint8_t)));
-                    ids_[curr_partition_id] = reinterpret_cast<idx_t*>(std::malloc(new_total_vectors * sizeof(idx_t)));
+                    // Initial allocation
+                    codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(
+                        std::malloc(new_total_vectors * code_size * sizeof(uint8_t))
+                    );
+                    ids_[curr_partition_id] = reinterpret_cast<idx_t*>(
+                        std::malloc(new_total_vectors * sizeof(idx_t))
+                    );
                 } else {
-                    // Perform a realloc of the buffer to the new size
-                    codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(std::realloc(codes_[curr_partition_id], new_total_vectors * code_size * sizeof(uint8_t)));
-                    ids_[curr_partition_id] = reinterpret_cast<idx_t*>(std::realloc(ids_[curr_partition_id], new_total_vectors * sizeof(idx_t)));
+                    // Reallocate existing buffers
+                    uint8_t* temp_codes = reinterpret_cast<uint8_t*>(
+                        std::realloc(codes_[curr_partition_id], new_total_vectors * code_size * sizeof(uint8_t))
+                    );
+                    if (temp_codes == nullptr) {
+                        throw std::bad_alloc();
+                    }
+                    codes_[curr_partition_id] = temp_codes;
+
+                    idx_t* temp_ids = reinterpret_cast<idx_t*>(
+                        std::realloc(ids_[curr_partition_id], new_total_vectors * sizeof(idx_t))
+                    );
+                    if (temp_ids == nullptr) {
+                        throw std::bad_alloc();
+                    }
+                    ids_[curr_partition_id] = temp_ids;
                 }
             } else {
+                // NUMA-aware allocation
                 size_t prev_buffer_size = curr_buffer_sizes_[curr_partition_id];
                 size_t new_buffer_size = std::max(prev_buffer_size, static_cast<size_t>(1024));
-                while(new_buffer_size <= new_total_vectors) {
+                while(new_buffer_size < new_total_vectors) {
                     new_buffer_size *= 2;
                 }
 
                 if(new_buffer_size > prev_buffer_size) {
-#ifdef QUAKE_NUMA
-                    // Realloc the codes
-                    uint8_t* prev_codes = codes_[curr_partition_id];
-                    codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(numa_alloc_onnode(new_buffer_size * code_size * sizeof(uint8_t), list_numa_node));
-                    std::memcpy(codes_[curr_partition_id], prev_codes, prev_buffer_size * code_size * sizeof(uint8_t));
-                    numa_free(prev_codes, prev_buffer_size * code_size * sizeof(uint8_t));
-                        
-                    // Realloc the ids
-                    idx_t* prev_ids = ids_[curr_partition_id];
-                    ids_[curr_partition_id] = reinterpret_cast<idx_t*>(numa_alloc_onnode(new_buffer_size * sizeof(idx_t), list_numa_node));
-                    std::memcpy(ids_[curr_partition_id], prev_ids, prev_buffer_size * sizeof(idx_t));
-                    numa_free(prev_ids, prev_buffer_size * sizeof(idx_t));
+                    // Allocate new NUMA buffers
+                    uint8_t* new_codes = reinterpret_cast<uint8_t*>(
+                        numa_alloc_onnode(new_buffer_size * code_size * sizeof(uint8_t), list_numa_node)
+                    );
+                    if(new_codes == nullptr) {
+                        throw std::runtime_error("NUMA allocation failed for codes.");
+                    }
+                    idx_t* new_ids = reinterpret_cast<idx_t*>(
+                        numa_alloc_onnode(new_buffer_size * sizeof(idx_t), list_numa_node)
+                    );
+                    if(new_ids == nullptr) {
+                        numa_free(new_codes, new_buffer_size * code_size * sizeof(uint8_t));
+                        throw std::runtime_error("NUMA allocation failed for ids.");
+                    }
 
+                    // Copy existing data to new buffers
+                    if(codes_[curr_partition_id] != nullptr) {
+                        std::memcpy(new_codes, codes_[curr_partition_id], existing_vectors * code_size * sizeof(uint8_t));
+                        std::memcpy(new_ids, ids_[curr_partition_id], existing_vectors * sizeof(idx_t));
+
+                        // Free old buffers
+                        numa_free(codes_[curr_partition_id], prev_buffer_size * code_size * sizeof(uint8_t));
+                        numa_free(ids_[curr_partition_id], prev_buffer_size * sizeof(idx_t));
+                    }
+
+                    // Update buffer pointers and sizes
+                    codes_[curr_partition_id] = new_codes;
+                    ids_[curr_partition_id] = new_ids;
                     curr_buffer_sizes_[curr_partition_id] = new_buffer_size;
-#endif
                 }
             }
+#else
+            // Non-NUMA allocation
+            if(codes_[curr_partition_id] == nullptr) {
+                // Initial allocation
+                codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(
+                    std::malloc(new_total_vectors * code_size * sizeof(uint8_t))
+                );
+                if (codes_[curr_partition_id] == nullptr) {
+                    throw std::bad_alloc();
+                }
+                ids_[curr_partition_id] = reinterpret_cast<idx_t*>(
+                    std::malloc(new_total_vectors * sizeof(idx_t))
+                );
+                if (ids_[curr_partition_id] == nullptr) {
+                    std::free(codes_[curr_partition_id]);
+                    throw std::bad_alloc();
+                }
+            } else {
+                // Reallocate existing buffers
+                uint8_t* temp_codes = reinterpret_cast<uint8_t*>(
+                    std::realloc(codes_[curr_partition_id], new_total_vectors * code_size * sizeof(uint8_t))
+                );
+                if (temp_codes == nullptr) {
+                    throw std::bad_alloc();
+                }
+                codes_[curr_partition_id] = temp_codes;
+
+                idx_t* temp_ids = reinterpret_cast<idx_t*>(
+                    std::realloc(ids_[curr_partition_id], new_total_vectors * sizeof(idx_t))
+                );
+                if (temp_ids == nullptr) {
+                    throw std::bad_alloc();
+                }
+                ids_[curr_partition_id] = temp_ids;
+            }
+#endif
+
+            // Update the total number of vectors
+            num_vectors_[curr_partition_id] = new_total_vectors;
         }
 
-        // Add in the new elements
-        size_t vector_size = code_size * sizeof(uint8_t);
+        // Step 3: Add new entries
+        std::unordered_map<size_t, size_t> write_indices;
+        for(auto& pair : new_vectors_per_partition) {
+            size_t curr_partition_id = pair.first;
+            size_t vectors_added = pair.second;
+            write_indices[curr_partition_id] = num_vectors_[curr_partition_id] - vectors_added;
+        }
+
         for(int i = 0; i < num_vectors; i++) {
             if(old_vector_partition == new_vector_partitions[i]) {
-                continue;
+                continue; // No update needed for this vector
             }
 
-            // Add in the element to the new buffer
             size_t curr_new_partition = static_cast<size_t>(new_vector_partitions[i]);
-            size_t curr_num_vectors = num_vectors_[curr_new_partition];
-            ids_[curr_new_partition][curr_num_vectors] = static_cast<idx_t>(new_vector_ids[i]);
-            std::memcpy(codes_[curr_new_partition] + curr_num_vectors * vector_size, new_vectors + i * vector_size , vector_size);
-            num_vectors_[curr_new_partition] = curr_num_vectors + 1;
+
+            // Ensure the partition exists
+            if (codes_.find(curr_new_partition) == codes_.end() || ids_.find(curr_new_partition) == ids_.end()) {
+                throw std::runtime_error("Target partition does not exist during batch_update_entries.");
+            }
+
+            // Get the current write index
+            size_t write_idx = write_indices[curr_new_partition];
+            size_t allocated_vectors = num_vectors_[curr_new_partition];
+            size_t vectors_to_add = new_vectors_per_partition[curr_new_partition];
+
+            // Safety check: Ensure we do not exceed allocated space
+            assert(write_idx + vectors_to_add <= allocated_vectors && "Write index exceeds allocated buffer size.");
+
+            // Add the new vector ID
+            ids_[curr_new_partition][write_idx] = static_cast<idx_t>(new_vector_ids[i]);
+
+            // Add the new vector codes
+            std::memcpy(
+                codes_[curr_new_partition] + write_idx * code_size,
+                new_vectors + i * code_size,
+                code_size * sizeof(uint8_t)
+            );
+
+            // Update the write index
+            write_indices[curr_new_partition]++;
+        }
+
+        // Step 4: Final verification (optional but recommended)
+        for(auto& pair : new_vectors_per_partition) {
+            size_t curr_partition_id = pair.first;
+            size_t expected_total = num_vectors_[curr_partition_id];
+            size_t actual_total = write_indices[curr_partition_id];
+            assert(actual_total <= expected_total && "Actual total exceeds expected total after batch update.");
         }
     }
 
