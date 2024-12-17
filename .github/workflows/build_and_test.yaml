@@ -68,7 +68,7 @@ jobs:
 
       - name: Build project
         run: |
-          eval "$(conda shell.bash hook)"
+          source ~/.bashrc
           conda activate test-env
           mkdir -p build
           cd build
