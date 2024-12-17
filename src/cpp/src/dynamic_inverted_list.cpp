@@ -259,7 +259,7 @@ namespace faiss {
                 }
 
                 if(new_buffer_size > prev_buffer_size) {
-#ifdef QUAKE_NUMA
+#ifdef __linux__
                     // Realloc the codes
                     uint8_t* prev_codes = codes_[curr_partition_id];
                     codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(numa_alloc_onnode(new_buffer_size * code_size * sizeof(uint8_t), list_numa_node));
@@ -289,7 +289,7 @@ namespace faiss {
             size_t curr_new_partition = static_cast<size_t>(new_vector_partitions[i]);
             size_t curr_num_vectors = num_vectors_[curr_new_partition];
             ids_[curr_new_partition][curr_num_vectors] = static_cast<idx_t>(new_vector_ids[i]);
-            std::memcpy(codes_[curr_new_partition] + curr_num_vectors * vector_size, new_vectors + i * vector_size, vector_size);
+            std::memcpy(codes_[curr_new_partition] + curr_num_vectors * vector_size, new_vectors + i * vector_size , vector_size);
             num_vectors_[curr_new_partition] = curr_num_vectors + 1;
         }
     }
