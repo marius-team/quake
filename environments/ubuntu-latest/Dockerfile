@@ -18,6 +18,8 @@ RUN apt-get update && \
       ca-certificates \
       swig \
       git \
+      libomp5 \
+      libomp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 
