@@ -34,6 +34,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # If in a conda environment, favor conda packages
 if(EXISTS $ENV{CONDA_PREFIX})
+    message(STATUS "Conda environment detected. Using conda packages.")
     set(CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX} ${CMAKE_PREFIX_PATH})
 endif()
 
@@ -133,7 +134,7 @@ if(APPLE)
 elseif(UNIX)
     # Linux or other UNIX-likes
     list(APPEND LINK_LIBS faiss_avx512
-            -liomp
+            -lomp
             -lpthread)
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
