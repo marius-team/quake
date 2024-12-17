@@ -28,6 +28,7 @@ if (QUAKE_USE_AVX512)
     set(QUAKE_USE_AVX512 ON)
 else()
     set(QUAKE_USE_AVX512 OFF)
+endif()
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
