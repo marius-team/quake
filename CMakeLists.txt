@@ -134,7 +134,6 @@ if(APPLE)
 elseif(UNIX)
     # Linux or other UNIX-likes
     list(APPEND LINK_LIBS faiss_avx512
-            -lomp
             -lpthread)
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
