@@ -221,7 +221,7 @@ namespace faiss {
         }
     }
 
-    void DynamicInvertedLists::batch_update_entries(
+void DynamicInvertedLists::batch_update_entries(
         size_t old_vector_partition,
         int64_t* new_vector_partitions,
         uint8_t* new_vectors,
@@ -246,11 +246,27 @@ namespace faiss {
         for(auto& pair : new_vectors_per_partition) {
             size_t curr_partition_id = pair.first;
             size_t vectors_to_add = pair.second;
-            size_t existing_vectors = num_vectors_[curr_partition_id];
+            size_t existing_vectors = 0;
+
+            // Retrieve existing vector count safely
+            auto it = num_vectors_.find(curr_partition_id);
+            if(it != num_vectors_.end()) {
+                existing_vectors = it->second;
+            } else {
+                // If the partition does not exist, initialize it
+                existing_vectors = 0;
+                num_vectors_[curr_partition_id] = 0;
+            }
+
             size_t new_total_vectors = existing_vectors + vectors_to_add;
 
 #ifdef QUAKE_NUMA
-            int list_numa_node = curr_numa_node_[curr_partition_id];
+            int list_numa_node = -1;
+            auto numa_it = curr_numa_node_.find(curr_partition_id);
+            if(numa_it != curr_numa_node_.end()) {
+                list_numa_node = numa_it->second;
+            }
+
             if(list_numa_node == -1) {
                 // Non-NUMA allocation
                 if(codes_[curr_partition_id] == nullptr) {
@@ -258,9 +274,16 @@ namespace faiss {
                     codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(
                         std::malloc(new_total_vectors * code_size * sizeof(uint8_t))
                     );
+                    if (codes_[curr_partition_id] == nullptr) {
+                        throw std::bad_alloc();
+                    }
                     ids_[curr_partition_id] = reinterpret_cast<idx_t*>(
                         std::malloc(new_total_vectors * sizeof(idx_t))
                     );
+                    if (ids_[curr_partition_id] == nullptr) {
+                        std::free(codes_[curr_partition_id]);
+                        throw std::bad_alloc();
+                    }
                 } else {
                     // Reallocate existing buffers
                     uint8_t* temp_codes = reinterpret_cast<uint8_t*>(
@@ -281,7 +304,12 @@ namespace faiss {
                 }
             } else {
                 // NUMA-aware allocation
-                size_t prev_buffer_size = curr_buffer_sizes_[curr_partition_id];
+                size_t prev_buffer_size = 0;
+                auto buffer_it = curr_buffer_sizes_.find(curr_partition_id);
+                if(buffer_it != curr_buffer_sizes_.end()) {
+                    prev_buffer_size = buffer_it->second;
+                }
+
                 size_t new_buffer_size = std::max(prev_buffer_size, static_cast<size_t>(1024));
                 while(new_buffer_size < new_total_vectors) {
                     new_buffer_size *= 2;
@@ -304,7 +332,7 @@ namespace faiss {
                     }
 
                     // Copy existing data to new buffers
-                    if(codes_[curr_partition_id] != nullptr) {
+                    if(codes_[curr_partition_id] != nullptr && existing_vectors > 0) {
                         std::memcpy(new_codes, codes_[curr_partition_id], existing_vectors * code_size * sizeof(uint8_t));
                         std::memcpy(new_ids, ids_[curr_partition_id], existing_vectors * sizeof(idx_t));
 
@@ -356,18 +384,27 @@ namespace faiss {
             }
 #endif
 
-            // Update the total number of vectors
-            num_vectors_[curr_partition_id] = new_total_vectors;
+            // Note: Do NOT update num_vectors_ here. It will be updated after writing.
         }
 
-        // Step 3: Add new entries
+        // Step 3: Prepare write indices
+        // Initialize write indices to existing vectors (before addition)
         std::unordered_map<size_t, size_t> write_indices;
         for(auto& pair : new_vectors_per_partition) {
             size_t curr_partition_id = pair.first;
-            size_t vectors_added = pair.second;
-            write_indices[curr_partition_id] = num_vectors_[curr_partition_id] - vectors_added;
+            size_t vectors_to_add = pair.second;
+
+            // Retrieve existing vector count
+            size_t existing_vectors = 0;
+            auto it = num_vectors_.find(curr_partition_id);
+            if(it != num_vectors_.end()) {
+                existing_vectors = it->second;
+            }
+
+            write_indices[curr_partition_id] = existing_vectors;
         }
 
+        // Step 4: Add new entries
         for(int i = 0; i < num_vectors; i++) {
             if(old_vector_partition == new_vector_partitions[i]) {
                 continue; // No update needed for this vector
@@ -382,11 +419,20 @@ namespace faiss {
 
             // Get the current write index
             size_t write_idx = write_indices[curr_new_partition];
-            size_t allocated_vectors = num_vectors_[curr_new_partition];
-            size_t vectors_to_add = new_vectors_per_partition[curr_new_partition];
+            size_t allocated_vectors = 0;
+
+            // Retrieve allocated vectors (new_total_vectors = existing + vectors_to_add)
+            auto it = num_vectors_.find(curr_new_partition);
+            if(it != num_vectors_.end()) {
+                allocated_vectors = it->second;
+            } else {
+                throw std::runtime_error("Partition not found in num_vectors_ during writing.");
+            }
 
             // Safety check: Ensure we do not exceed allocated space
-            assert(write_idx + vectors_to_add <= allocated_vectors && "Write index exceeds allocated buffer size.");
+            if(write_idx >= allocated_vectors) {
+                throw std::runtime_error("Write index exceeds allocated buffer size.");
+            }
 
             // Add the new vector ID
             ids_[curr_new_partition][write_idx] = static_cast<idx_t>(new_vector_ids[i]);
@@ -400,14 +446,40 @@ namespace faiss {
 
             // Update the write index
             write_indices[curr_new_partition]++;
+
+            // Optionally, you can add additional safety checks here
+            // For example, ensure that write_indices[curr_new_partition] does not exceed allocated_vectors
+            if(write_indices[curr_new_partition] > allocated_vectors) {
+                throw std::runtime_error("Write index exceeded allocated buffer during writing.");
+            }
         }
 
-        // Step 4: Final verification (optional but recommended)
+        // Step 5: Update num_vectors_ after successful writing
         for(auto& pair : new_vectors_per_partition) {
             size_t curr_partition_id = pair.first;
-            size_t expected_total = num_vectors_[curr_partition_id];
-            size_t actual_total = write_indices[curr_partition_id];
-            assert(actual_total <= expected_total && "Actual total exceeds expected total after batch update.");
+            size_t vectors_added = pair.second;
+
+            // Retrieve existing vector count before addition
+            size_t existing_vectors = 0;
+            auto it = num_vectors_.find(curr_partition_id);
+            if(it != num_vectors_.end()) {
+                existing_vectors = it->second - vectors_added;
+            } else {
+                throw std::runtime_error("Partition not found in num_vectors_ during final update.");
+            }
+
+            // Update the total number of vectors
+            num_vectors_[curr_partition_id] = existing_vectors + vectors_added;
+        }
+
+        // Optionally, you can add final assertions to ensure consistency
+        for(auto& pair : new_vectors_per_partition) {
+            size_t curr_partition_id = pair.first;
+            size_t vectors_to_add = pair.second;
+            size_t allocated_vectors = num_vectors_[curr_partition_id];
+            size_t final_count = write_indices[curr_partition_id];
+
+            assert(final_count == allocated_vectors && "Final count does not match allocated vectors after batch update.");
         }
     }
 
