@@ -259,7 +259,7 @@ namespace faiss {
                 }
 
                 if(new_buffer_size > prev_buffer_size) {
-#ifdef __linux__
+#ifdef QUAKE_USE_NUMA
                     // Realloc the codes
                     uint8_t* prev_codes = codes_[curr_partition_id];
                     codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(numa_alloc_onnode(new_buffer_size * code_size * sizeof(uint8_t), list_numa_node));
