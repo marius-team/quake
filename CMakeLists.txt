@@ -130,7 +130,7 @@ set(LINK_LIBS
 
 if(APPLE)
     list(APPEND LINK_LIBS faiss)
-else()
+elif(UNIX)
     # Linux or other UNIX-likes
     list(APPEND LINK_LIBS faiss_avx512
             -liomp5
@@ -138,6 +138,9 @@ else()
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()
+else()
+    # unsupported platform
+    message(FATAL_ERROR "Unsupported platform")
 endif()
 
 target_link_libraries(${PROJECT_NAME} PUBLIC ${LINK_LIBS})
