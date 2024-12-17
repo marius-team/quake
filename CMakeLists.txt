@@ -130,7 +130,7 @@ set(LINK_LIBS
 
 if(APPLE)
     list(APPEND LINK_LIBS faiss)
-elif(UNIX)
+elseif(UNIX)
     # Linux or other UNIX-likes
     list(APPEND LINK_LIBS faiss_avx512
             -liomp5

@@ -58,11 +58,11 @@ jobs:
           bash /tmp/miniconda.sh -b -p $HOME/miniconda
 
           # Initialize conda
-          echo ". $HOME/miniconda/etc/profile.d/conda.sh" >> $BASH_ENV
+          echo ". $HOME/miniconda/etc/profile.d/conda.sh" >> ~/.bashrc
 
       - name: Create conda environment
         run: |
-          source $BASH_ENV
+          source ~/.bashrc
           conda env create -f environments/macos/conda.yaml
         shell: bash
 
@@ -84,8 +84,6 @@ jobs:
 
       - name: Run tests
         run: |
-          source $BASH_ENV
-          conda activate test-env
           cd build
           test/cpp/quake_tests --gtest_filter=DynamicInvertedListTest.*
           test/cpp/quake_tests --gtest_filter=DynamicIVFTest.*
