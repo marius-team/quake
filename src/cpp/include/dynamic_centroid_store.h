@@ -2,14 +2,8 @@
 #ifndef DYNAMIC_CENTROID_STORE_H
 #define DYNAMIC_CENTROID_STORE_H
 
+#include <common.h>
 #include <faiss/invlists/InvertedLists.h>
-#include <unordered_map>
-#include <vector>
-#include <set>
-#include <tuple>
-#include "faiss/impl/platform_macros.h"
-
-using std::size_t;
 
 namespace faiss {
     class DynamicCentroidStore {

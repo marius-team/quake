@@ -1,12 +1,8 @@
 #ifndef CPP_UTILS_GEOMETRY_H
 #define CPP_UTILS_GEOMETRY_H
 
-#include <cmath>
-#include <torch/torch.h>
+#include <common.h>
 #include <simsimd/simsimd.h>
-#include <vector>
-#include <algorithm>
-#include <iostream>
 
 #define NUM_X_VALUES 1001
 

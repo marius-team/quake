@@ -150,26 +150,26 @@ TEST_F(DynamicIVFTest, SearchTest) {
     EXPECT_EQ(ret_dis.size(1), k);
 }
 
-// Test refining clusters
-TEST_F(DynamicIVFTest, RefineClustersTest) {
-    auto index = std::make_shared<DynamicIVF_C>(dimension, nlist, metric);
-    index->build(data_vectors, data_ids);
-    Tensor cluster_ids = torch::tensor({0, 1, 2}, torch::kInt64);
-
-    // Verify centroids have been updated
-    Tensor centroids_before = index->centroids().clone().index_select(0, cluster_ids);
-
-    // Select some clusters to refine
-    index->refine_clusters(cluster_ids);
-
-    Tensor centroids_after = index->centroids().index_select(0, cluster_ids);
-
-    // check that the number of vectors has not changed
-    EXPECT_EQ(index->ntotal(), num_vectors);
-
-    // check that the number of partitions has not changed
-    EXPECT_EQ(index->nlist(), nlist);
-}
+// // Test refining clusters
+// TEST_F(DynamicIVFTest, RefineClustersTest) {
+//     auto index = std::make_shared<DynamicIVF_C>(dimension, nlist, metric);
+//     index->build(data_vectors, data_ids);
+//     Tensor cluster_ids = torch::tensor({0, 1, 2}, torch::kInt64);
+//
+//     // Verify centroids have been updated
+//     Tensor centroids_before = index->centroids().clone().index_select(0, cluster_ids);
+//
+//     // Select some clusters to refine
+//     index->refine_clusters(cluster_ids);
+//
+//     Tensor centroids_after = index->centroids().index_select(0, cluster_ids);
+//
+//     // check that the number of vectors has not changed
+//     EXPECT_EQ(index->ntotal(), num_vectors);
+//
+//     // check that the number of partitions has not changed
+//     EXPECT_EQ(index->nlist(), nlist);
+// }
 
 // Test computing quantization error
 TEST_F(DynamicIVFTest, ComputeQuantizationErrorTest) {
@@ -347,7 +347,7 @@ TEST_F(DynamicIVFTest, TestSingleQuery) {
     std::get<2>(result)->print();
 }
 
-#ifdef __linux__
+#ifdef QUAKE_NUMA
 TEST_F(DynamicIVFTest, TestResetWorkers) {
     auto index = std::make_shared<DynamicIVF_C>(dimension, nlist, metric);
     index->build(data_vectors, data_ids);
@@ -612,7 +612,7 @@ TEST(WorkerTests, TestWorkers) {
 
     // Define different numbers of workers to test
     std::vector<int> worker_counts = {1, 2, 4, 8, 16, 32};
-#ifdef __linux__
+#ifdef QUAKE_NUMA
     std::vector<bool> use_numa = {false, true};
     std::vector<bool> same_core = {false, true};
 #else

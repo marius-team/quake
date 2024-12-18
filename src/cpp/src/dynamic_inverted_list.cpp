@@ -2,19 +2,6 @@
 
 #include "dynamic_inverted_list.h"
 
-#include <stdexcept>
-#include <algorithm>
-#include <cstdlib>
-#include <cstdint>
-#include <cstring>
-#include <iostream>
-#include <cassert>
-
-#ifdef QUAKE_NUMA
-#include <numa.h>
-#include <numaif.h>
-#endif
-
 namespace faiss {
     ArrayInvertedLists *convert_to_array_invlists(DynamicInvertedLists *invlists, std::unordered_map<size_t, size_t>& remap_ids) {
         auto ret = new ArrayInvertedLists(invlists->nlist, invlists->code_size);
@@ -234,9 +221,9 @@ namespace faiss {
         }
     }
 
-    void DynamicInvertedLists::batch_update_entries(size_t old_vector_partition, int64_t* new_vector_partitions, uint8_t* new_vectors, 
+    void DynamicInvertedLists::batch_update_entries(size_t old_vector_partition, int64_t* new_vector_partitions, uint8_t* new_vectors,
         int64_t* new_vector_ids, int num_vectors) {
-        
+
         // Get the number of new vectors per partition
         std::unordered_map<size_t, size_t> new_vectors_per_partition;
         for(int i = 0; i < num_vectors; i++) {
@@ -272,13 +259,13 @@ namespace faiss {
                 }
 
                 if(new_buffer_size > prev_buffer_size) {
-#ifdef QUAKE_NUMA
+#ifdef QUAKE_USE_NUMA
                     // Realloc the codes
                     uint8_t* prev_codes = codes_[curr_partition_id];
                     codes_[curr_partition_id] = reinterpret_cast<uint8_t*>(numa_alloc_onnode(new_buffer_size * code_size * sizeof(uint8_t), list_numa_node));
                     std::memcpy(codes_[curr_partition_id], prev_codes, prev_buffer_size * code_size * sizeof(uint8_t));
                     numa_free(prev_codes, prev_buffer_size * code_size * sizeof(uint8_t));
-                        
+
                     // Realloc the ids
                     idx_t* prev_ids = ids_[curr_partition_id];
                     ids_[curr_partition_id] = reinterpret_cast<idx_t*>(numa_alloc_onnode(new_buffer_size * sizeof(idx_t), list_numa_node));

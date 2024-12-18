@@ -33,5 +33,13 @@ jobs:
                 -DQUAKE_USE_NUMA=OFF \
                 -DQUAKE_ENABLE_GPU=OFF \
                 -DBUILD_TESTS=ON \
+                -DQUAKE_USE_AVX512=OFF \
                 ../
           make bindings -j2
+          make quake_tests -j2
+
+      - name: Run tests
+        run: |
+            cd build
+            test/cpp/quake_tests --gtest_filter=DynamicInvertedListTest.*
+            test/cpp/quake_tests --gtest_filter=DynamicIVFTest.*

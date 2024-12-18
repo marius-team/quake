@@ -24,6 +24,12 @@ else()
     set(QUAKE_USE_NUMA OFF)
 endif()
 
+if(QUAKE_USE_AVX512)
+    set(QUAKE_USE_AVX512 ON)
+else()
+    set(QUAKE_USE_AVX512 OFF)
+endif()
+
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +40,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # If in a conda environment, favor conda packages
 if(EXISTS $ENV{CONDA_PREFIX})
+    message(STATUS "Conda environment detected. Using conda packages.")
     set(CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX} ${CMAKE_PREFIX_PATH})
 endif()
 
@@ -130,15 +137,35 @@ set(LINK_LIBS
 
 if(APPLE)
     list(APPEND LINK_LIBS faiss)
-else()
+elseif(UNIX)
     # Linux or other UNIX-likes
-    list(APPEND LINK_LIBS faiss_avx512)
+    if (QUAKE_USE_AVX512)
+        list(APPEND LINK_LIBS faiss_avx512)
+    else()
+        list(APPEND LINK_LIBS faiss)
+    endif()
+
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()
+else()
+    # unsupported platform
+    message(FATAL_ERROR "Unsupported platform")
 endif()
 
 target_link_libraries(${PROJECT_NAME} PUBLIC ${LINK_LIBS})
+
+IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
+    message("Using thread sanitizer")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+    set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=thread")
+ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
+
+IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
+    message("Using address sanitizer")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=leak")
+    set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=address -fsanitize=leak")
+ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
 
 # ---------------------------------------------------------------
 # Python Bindings
@@ -189,4 +216,10 @@ message(STATUS "GPU Enabled: ${FAISS_ENABLE_GPU}")
 message(STATUS "NUMA Enabled: ${QUAKE_USE_NUMA}")
 message(STATUS "Python used: ${Python3_EXECUTABLE}")
 message(STATUS "Torch Path: ${TorchPath}")
+message(STATUS "MKL_ARCH: ${MKL_ARCH}")
+message(STATUS "MKL_ROOT: ${MKL_ROOT}")
+message(STATUS "MKL_LINK: ${MKL_LINK}")
+message(STATUS "MKL_INTERFACE_FULL: ${MKL_INTERFACE_FULL}")
+message(STATUS "MKL_THREADING: ${MKL_THREADING}")
+message(STATUS "MKL_MPI: ${MKL_MPI}")
 message(STATUS "------------------------------------------------")

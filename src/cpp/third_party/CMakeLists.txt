@@ -16,6 +16,10 @@ endfunction(initialize_submodule)
 initialize_submodule(pybind11)
 add_subdirectory(pybind11 EXCLUDE_FROM_ALL)
 
+set(FAISS_ENABLE_PYTHON OFF)
+set(FAISS_BUILD_TESTS OFF)
+set(FAISS_BUILD_BENCHMARKS OFF)
+set(FAISS_BUILD_EXAMPLES OFF)
 initialize_submodule(faiss)
 add_subdirectory(faiss)
 
