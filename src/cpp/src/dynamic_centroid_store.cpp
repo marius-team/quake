@@ -13,7 +13,7 @@ namespace faiss {
             int num_centroids = worker.second;
             if(num_centroids > 0) {
                 if(using_numa_) {
-                    #ifdef QUAKE_NUMA
+                    #ifdef QUAKE_USE_NUMA
                     numa_free(vectors_per_worker_[worker_id], num_centroids * vector_dimension_ * sizeof(float));
                     numa_free(ids_per_worker_[worker_id], num_centroids * sizeof(idx_t));
                     #endif
@@ -123,7 +123,7 @@ namespace faiss {
                 // See if then need to reallocate the buffers
                 if(new_buffer_size > prev_buffer_size) {
                     if(using_numa_) {
-                        #ifdef QUAKE_NUMA
+                        #ifdef QUAKE_USE_NUMA
                         // First allocate the new buffer
                         int worker_numa_node = curr_numa_node_[curr_worker_id];
                         float* old_vector_ptr = vectors_per_worker_[curr_worker_id];
@@ -288,7 +288,7 @@ namespace faiss {
 
             // Allocate and copy over the vectors
             if(using_numa_) {
-                #ifdef QUAKE_NUMA
+                #ifdef QUAKE_USE_NUMA
                 vectors_per_worker_[i] = reinterpret_cast<float*>(numa_alloc_onnode(starting_buffer_size * vector_dimension_ * sizeof(float), curr_worker_numa_node));
                 #endif
             } else {
@@ -305,7 +305,7 @@ namespace faiss {
 
             // Do the same for the ids
             if(using_numa_) {
-                #ifdef QUAKE_NUMA
+                #ifdef QUAKE_USE_NUMA
                 ids_per_worker_[i] = reinterpret_cast<idx_t*>(numa_alloc_onnode(starting_buffer_size * sizeof(idx_t), curr_worker_numa_node));
                 #endif
             } else {

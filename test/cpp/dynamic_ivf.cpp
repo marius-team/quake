@@ -347,7 +347,7 @@ TEST_F(DynamicIVFTest, TestSingleQuery) {
     std::get<2>(result)->print();
 }
 
-#ifdef QUAKE_NUMA
+#ifdef QUAKE_USE_NUMA
 TEST_F(DynamicIVFTest, TestResetWorkers) {
     auto index = std::make_shared<DynamicIVF_C>(dimension, nlist, metric);
     index->build(data_vectors, data_ids);
@@ -612,7 +612,7 @@ TEST(WorkerTests, TestWorkers) {
 
     // Define different numbers of workers to test
     std::vector<int> worker_counts = {1, 2, 4, 8, 16, 32};
-#ifdef QUAKE_NUMA
+#ifdef QUAKE_USE_NUMA
     std::vector<bool> use_numa = {false, true};
     std::vector<bool> same_core = {false, true};
 #else

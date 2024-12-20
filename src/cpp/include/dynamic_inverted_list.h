@@ -9,24 +9,30 @@
 
 #include <common.h>
 #include <faiss/invlists/InvertedLists.h>
-#include <faiss/invlists/InvertedListsIOHook.h>
+#include <index_partition.h>
 
 namespace faiss {
     /**
      * @brief InvertedLists implementation using std::unordered_map.
      *
-     * This class stores the codes and IDs for each list in unordered_maps.
+     * This class stores codes and IDs for each list in a map of IndexPartition objects.
      */
     class DynamicInvertedLists : public InvertedLists {
     public:
-        /**
-         * @brief Constructor for UnorderedMapInvertedLists.
-         *
-         * @param nlist      Number of lists (partitions).
-         * @param code_size  Size of each code in bytes.
-         * @param use_map_for_ids Whether we should use to a map to determine the location of the map (optional)
-         */
 
+        int curr_list_id_ = 0;
+        int total_numa_nodes_ = 0;
+        int next_numa_node_ = 0;
+        std::unordered_map<size_t, IndexPartition> partitions_;
+
+
+        /**
+         * @brief Constructor for DynamicInvertedLists.
+         *
+         * @param nlist          Number of lists (partitions).
+         * @param code_size      Size of each code in bytes.
+         * @param use_map_for_ids (Currently unused, kept for compatibility)
+         */
         DynamicInvertedLists(size_t nlist, size_t code_size, bool use_map_for_ids = false);
 
         ~DynamicInvertedLists() override;
@@ -59,11 +65,11 @@ namespace faiss {
             size_t n_entry,
             const idx_t *ids,
             const uint8_t *codes) override;
-        
+
         void batch_update_entries(
-            size_t old_vector_partition, 
-            int64_t* new_vector_partitions, 
-            uint8_t* new_vectors, 
+            size_t old_vector_partition,
+            int64_t* new_vector_partitions,
+            uint8_t* new_vectors,
             int64_t* new_vector_ids,
             int num_vectors);
 
@@ -81,41 +87,22 @@ namespace faiss {
 
         void resize(size_t nlist, size_t code_size) override;
 
-        int curr_list_id_ = 0;
-
-#ifdef QUAKE_NUMA
-        int total_numa_nodes_;
-        int next_numa_node_;
-
         void set_numa_details(int num_numa_nodes, int next_numa_node);
 
         int get_numa_node(size_t list_no);
 
-        // This can be called before adding/updating the entry and the numa node will get assigned to that node
+        // Set the NUMA node for this partition
         void set_numa_node(size_t list_no, int new_numa_node, bool interleaved = false);
 
-        // Returns the cluster in the current inverted list that are not assigned to a numa node
+        // Returns the cluster IDs currently unassigned to a NUMA node
         std::set<size_t> get_unassigned_clusters();
-        
-        // Get the thread that this cluster is mapped to
+
+        // Get/set the thread mapped to this partition
         int get_thread(size_t list_no);
-
-        // Record that the cluster is mapped to this thread
         void set_thread(size_t list_no, int new_thread_id);
-
-        std::unordered_map<size_t, int> curr_thread_;
-        std::set<size_t> unassigned_clusters_;
-#endif
-
-        std::unordered_map<size_t, int> curr_numa_node_;
-        std::unordered_map<size_t, size_t> curr_buffer_sizes_;
-        std::unordered_map<size_t, size_t> num_vectors_;
-        std::unordered_map<size_t, uint8_t*> codes_;
-        std::unordered_map<size_t, idx_t*> ids_;
     };
 
     ArrayInvertedLists *convert_to_array_invlists(DynamicInvertedLists *invlists, std::unordered_map<size_t, size_t>& remap_ids);
-
     DynamicInvertedLists *convert_from_array_invlists(ArrayInvertedLists *invlists);
 } // namespace faiss
 
