@@ -155,6 +155,9 @@ endif()
 
 target_link_libraries(${PROJECT_NAME} PUBLIC ${LINK_LIBS})
 
+# ---------------------------------------------------------------
+# Sanitizers
+# ---------------------------------------------------------------
 IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
     message("Using thread sanitizer")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
@@ -212,14 +215,20 @@ endif()
 # ---------------------------------------------------------------
 message(STATUS "--------- Final Configuration Summary ---------")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "GPU Enabled: ${FAISS_ENABLE_GPU}")
+message(STATUS "GPU Enabled: ${QUAKE_ENABLE_GPU}")
+message(STATUS "AVX512 Enabled: ${QUAKE_USE_AVX512}")
 message(STATUS "NUMA Enabled: ${QUAKE_USE_NUMA}")
 message(STATUS "Python used: ${Python3_EXECUTABLE}")
 message(STATUS "Torch Path: ${TorchPath}")
+message(STATUS "OpenMP Enabled: ${OpenMP_CXX_FOUND}")
+message(STATUS "OpenMP CXX Flags: ${OpenMP_CXX_FLAGS}")
 message(STATUS "MKL_ARCH: ${MKL_ARCH}")
 message(STATUS "MKL_ROOT: ${MKL_ROOT}")
 message(STATUS "MKL_LINK: ${MKL_LINK}")
 message(STATUS "MKL_INTERFACE_FULL: ${MKL_INTERFACE_FULL}")
 message(STATUS "MKL_THREADING: ${MKL_THREADING}")
 message(STATUS "MKL_MPI: ${MKL_MPI}")
+message(STATUS "Flags: ${CMAKE_CXX_FLAGS}")
+message(STATUS "Address Sanitizer: ${QUAKE_USE_ASAN}")
+message(STATUS "Thread Sanitizer: ${QUAKE_USE_TSAN}")
 message(STATUS "------------------------------------------------")
