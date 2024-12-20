@@ -33,7 +33,7 @@
 #include <pthread.h>
 #include <ctime>
 
-#ifdef QUAKE_NUMA
+#ifdef QUAKE_USE_NUMA
 #include <numa.h>
 #include <numaif.h>
 #endif

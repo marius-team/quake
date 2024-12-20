@@ -503,8 +503,6 @@ public:
     // utility functions for measure inputs to adaptive nprobe model
     Tensor compute_partition_boundary_distances(Tensor query, Tensor partition_ids = Tensor());
 
-    Tensor get_partition_ids_for_vector_ids(Tensor vector_ids);
-
     float compute_kth_nearest_neighbor_distance(Tensor query, int k);
 
     Tensor compute_partition_probabilities(Tensor query, int k, Tensor partition_ids = Tensor(), bool use_size = false);
@@ -539,7 +537,7 @@ public:
     */
     void distribute_clusters(bool only_current_level = false);
 
-#ifdef QUAKE_NUMA
+#ifdef QUAKE_USE_NUMA
     /**
     * @brief Determines the number of numa nodes to use
     * @returns Returns the number of numa nodes we should use

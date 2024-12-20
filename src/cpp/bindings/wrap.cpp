@@ -90,7 +90,6 @@ PYBIND11_MODULE(_bindings, m) {
             .def("search_quantizer", &DynamicIVF_C::search_quantizer)
             .def("refine_clusters", &DynamicIVF_C::refine_clusters)
             .def("compute_partition_boundary_distances", &DynamicIVF_C::compute_partition_boundary_distances)
-            .def("get_partition_ids_for_vector_ids", &DynamicIVF_C::get_partition_ids_for_vector_ids)
             .def("compute_kth_nearest_neighbor_distance", &DynamicIVF_C::compute_kth_nearest_neighbor_distance)
             .def("compute_partition_probabilities", &DynamicIVF_C::compute_partition_probabilities)
             .def("compute_partition_intersection_volumes", &DynamicIVF_C::compute_partition_intersection_volumes)

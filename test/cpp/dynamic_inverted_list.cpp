@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstring> // for memcpy
 #include <iostream>
+#include <algorithm> // for std::find
 
 using namespace faiss;
 
@@ -27,7 +28,7 @@ protected:
     void generate_random_codes(size_t n, std::vector<uint8_t>& codes) {
         codes.resize(n * code_size);
         for (size_t i = 0; i < n * code_size; ++i) {
-            codes[i] = rand() % 256;
+            codes[i] = static_cast<uint8_t>(rand() % 256);
         }
     }
 
@@ -44,9 +45,8 @@ protected:
 TEST_F(DynamicInvertedListTest, ConstructorTest) {
     EXPECT_EQ(invlists->nlist, nlist);
     EXPECT_EQ(invlists->code_size, code_size);
-    // Check that codes_ and ids_ are initialized
-    EXPECT_EQ(invlists->codes_.size(), nlist);
-    EXPECT_EQ(invlists->ids_.size(), nlist);
+    // Check that partitions_ are initialized
+    EXPECT_EQ(invlists->partitions_.size(), nlist);
 }
 
 // Test adding entries to a list
@@ -187,9 +187,8 @@ TEST_F(DynamicInvertedListTest, ResetTest) {
     // Reset the inverted lists
     invlists->reset();
 
-    // Check that all lists are empty or do not exist
+    // Check that all lists are cleared
     for (size_t list_no = 0; list_no < nlist; ++list_no) {
-        // Since reset clears the maps, accessing any list should throw exception
         EXPECT_THROW(invlists->list_size(list_no), std::runtime_error);
         EXPECT_THROW(invlists->get_codes(list_no), std::runtime_error);
         EXPECT_THROW(invlists->get_ids(list_no), std::runtime_error);
@@ -203,7 +202,7 @@ TEST_F(DynamicInvertedListTest, GetNewListIdTest) {
     EXPECT_EQ(second_id, first_id + 1);
 }
 
-// Test exception handling
+// Test exception handling for invalid lists
 TEST_F(DynamicInvertedListTest, ExceptionHandlingTest) {
     size_t invalid_list_no = 999;
 
@@ -236,7 +235,7 @@ TEST_F(DynamicInvertedListTest, ConvertToFromArrayInvertedListsTest) {
     }
 
     // Convert to ArrayInvertedLists
-    std::unordered_map<size_t, size_t> old_to_new_ids; 
+    std::unordered_map<size_t, size_t> old_to_new_ids;
     ArrayInvertedLists* array_invlists = convert_to_array_invlists(invlists, old_to_new_ids);
 
     // Verify that array_invlists has the same data
@@ -258,7 +257,7 @@ TEST_F(DynamicInvertedListTest, ConvertToFromArrayInvertedListsTest) {
     }
 
     // Create the reverse map
-    std::unordered_map<size_t, size_t> new_to_old_ids; 
+    std::unordered_map<size_t, size_t> new_to_old_ids;
     for(auto& pair : old_to_new_ids) {
         new_to_old_ids[pair.second] = pair.first;
     }
@@ -366,3 +365,145 @@ TEST_F(DynamicInvertedListTest, RemoveMultipleEntriesTest) {
         EXPECT_NE(stored_ids[i], ids[3]);
     }
 }
+
+// Test id_in_list
+TEST_F(DynamicInvertedListTest, IdInListTest) {
+    size_t list_no = 1;
+    size_t n_entries = 5;
+    std::vector<uint8_t> codes;
+    std::vector<idx_t> ids;
+    generate_random_codes(n_entries, codes);
+    generate_sequential_ids(n_entries, ids);
+
+    invlists->add_entries(list_no, n_entries, ids.data(), codes.data());
+
+    // Test that all added IDs are found
+    for (auto id : ids) {
+        EXPECT_TRUE(invlists->id_in_list(list_no, id));
+    }
+
+    // Test that a non-existent ID is not found
+    EXPECT_FALSE(invlists->id_in_list(list_no, 9999));
+}
+
+// Test get_vector_for_id
+TEST_F(DynamicInvertedListTest, GetVectorForIdTest) {
+    size_t list_no = 2;
+    size_t n_entries = 3;
+    std::vector<uint8_t> codes;
+    std::vector<idx_t> ids;
+    generate_random_codes(n_entries, codes);
+    generate_sequential_ids(n_entries, ids, 50);
+
+    invlists->add_entries(list_no, n_entries, ids.data(), codes.data());
+
+    // Try retrieving each vector by ID
+    for (size_t i = 0; i < n_entries; ++i) {
+        std::vector<uint8_t> retrieved(code_size);
+        EXPECT_TRUE(invlists->get_vector_for_id(ids[i], reinterpret_cast<float*>(retrieved.data())));
+        EXPECT_EQ(std::memcmp(retrieved.data(), codes.data() + i * code_size, code_size), 0);
+    }
+
+    // Non-existent ID
+    std::vector<uint8_t> retrieved(code_size);
+    EXPECT_FALSE(invlists->get_vector_for_id(9999, reinterpret_cast<float*>(retrieved.data())));
+}
+
+// Test batch_update_entries
+TEST_F(DynamicInvertedListTest, BatchUpdateEntriesTest) {
+    // Create two partitions: old_partition = 0, new_partition = 1
+    size_t old_partition = 0;
+    size_t new_partition = 1;
+
+    // Add vectors to old_partition
+    size_t n_entries = 5;
+    std::vector<uint8_t> old_codes;
+    std::vector<idx_t> old_ids;
+    generate_random_codes(n_entries, old_codes);
+    generate_sequential_ids(n_entries, old_ids, 1000);
+
+    invlists->add_entries(old_partition, n_entries, old_ids.data(), old_codes.data());
+
+    // We'll move the last 2 vectors to new_partition using batch_update_entries
+    std::vector<int64_t> new_vector_partitions(n_entries, old_partition);
+    for (size_t i = 3; i < n_entries; i++) {
+        new_vector_partitions[i] = (int64_t)new_partition;
+    }
+
+    // The new_vectors and new_vector_ids arrays represent the updated state of these vectors
+    // Normally these might differ, but we can just reuse the same codes and ids for simplicity
+    // Because the last two move to new_partition
+    std::vector<uint8_t> new_vectors = old_codes; // same codes
+    std::vector<int64_t> new_vector_ids_int64(n_entries);
+    for (size_t i = 0; i < n_entries; i++) {
+        new_vector_ids_int64[i] = old_ids[i];
+    }
+
+    invlists->batch_update_entries(old_partition,
+                                   new_vector_partitions.data(),
+                                   new_vectors.data(),
+                                   new_vector_ids_int64.data(),
+                                   (int)n_entries);
+
+    // Now old_partition should have the first 3 vectors
+    EXPECT_EQ(invlists->list_size(old_partition), 3U);
+    // new_partition should have 2 vectors
+    EXPECT_EQ(invlists->list_size(new_partition), 2U);
+
+    // Check IDs in old_partition
+    const idx_t* old_stored_ids = invlists->get_ids(old_partition);
+    std::set<idx_t> old_partition_ids(old_stored_ids, old_stored_ids + 3);
+    for (size_t i = 0; i < 3; i++) {
+        EXPECT_TRUE(old_partition_ids.find(old_ids[i]) != old_partition_ids.end());
+    }
+
+    // Check IDs in new_partition
+    const idx_t* new_stored_ids = invlists->get_ids(new_partition);
+    std::set<idx_t> new_partition_ids(new_stored_ids, new_stored_ids + 2);
+    for (size_t i = 3; i < n_entries; i++) {
+        EXPECT_TRUE(new_partition_ids.find(old_ids[i]) != new_partition_ids.end());
+    }
+}
+
+// Test resize method (even though it may not do much)
+TEST_F(DynamicInvertedListTest, ResizeTest) {
+    // Current implementation of resize may do nothing, but let's just call it
+    size_t new_nlist = 20;
+    size_t new_code_size = 32;
+    invlists->resize(new_nlist, new_code_size);
+
+    // This won't change anything given the current code, but at least we test it
+    EXPECT_EQ(invlists->nlist, nlist);
+    EXPECT_EQ(invlists->code_size, code_size);
+}
+
+// NUMA related tests (only if QUAKE_USE_NUMA is defined)
+#ifdef QUAKE_USE_NUMA
+TEST_F(DynamicInvertedListTest, NumaTests) {
+    size_t list_no = 0;
+    // Initially numa_node_ should be -1 for new partitions
+    EXPECT_EQ(invlists->get_numa_node(list_no), -1);
+
+    // Set a numa node (if valid in your environment)
+    // We test set_numa_node and get_numa_node
+    invlists->set_numa_node(list_no, -1); // no change
+    EXPECT_EQ(invlists->get_numa_node(list_no), -1);
+
+    // If you have a machine with NUMA nodes, you could try setting to node 0
+    // For testing purpose, we assume node 0 is valid
+    invlists->set_numa_node(list_no, 0);
+    EXPECT_EQ(invlists->get_numa_node(list_no), 0);
+
+    // test thread mapping
+    invlists->set_thread(list_no, 2);
+    EXPECT_EQ(invlists->get_thread(list_no), 2);
+
+    // test unassigned clusters
+    // Initially all are created with numa_node = -1 except the one we changed
+    auto unassigned = invlists->get_unassigned_clusters();
+    // We changed list_no 0 to node 0, so it should not be unassigned
+    // But others (1 through 9) are still unassigned since they haven't been changed
+    EXPECT_EQ(unassigned.size(), nlist - 1);
+    EXPECT_TRUE(unassigned.find(list_no) == unassigned.end());
+}
+#endif
