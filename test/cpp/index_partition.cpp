@@ -43,10 +43,10 @@ protected:
     }
 
     // Helper function to generate sequential codes
-    void generate_sequential_codes(size_t n, std::vector<uint8_t>& codes, uint8_t start_val = 0) {
+    void generate_sequential_codes(size_t n, std::vector<uint8_t>& codes, unsigned int start_val = 0) {
         codes.resize(n * code_size);
         for (size_t i = 0; i < n * code_size; ++i) {
-            codes[i] = start_val + static_cast<uint8_t>(i % 256);
+            codes[i] = static_cast<uint8_t>((start_val + i) % 256);
         }
     }
 
@@ -561,7 +561,7 @@ TEST_F(IndexPartitionTest, AppendWithZeroEntriesTest) {
     verify_codes(partition->codes_, initial_codes_vec_, 0);
 }
 
-// Test that updating with zero entries does not change the partition
+// Test updating with zero entries throws an exception
 TEST_F(IndexPartitionTest, UpdateWithZeroEntriesTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> append_codes;
@@ -575,7 +575,9 @@ TEST_F(IndexPartitionTest, UpdateWithZeroEntriesTest) {
     size_t offset = initial_num_vectors;
     std::vector<uint8_t> new_codes;
     std::vector<idx_t> new_ids;
-    partition->update(offset, 0, new_ids.data(), new_codes.data());
+
+    // Expect an exception when n_entry is zero
+    EXPECT_THROW(partition->update(offset, 0, new_ids.data(), new_codes.data()), std::runtime_error);
 
     // Verify that data remains unchanged
     EXPECT_EQ(partition->num_vectors_, initial_num_vectors + n_entry);
