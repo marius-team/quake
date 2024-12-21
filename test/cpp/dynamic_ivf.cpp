@@ -33,12 +33,12 @@ Tensor generate_sequential_ids(int64_t num_vectors) {
 class DynamicIVFTest : public ::testing::Test {
 protected:
     int dimension = 3;
-    int nlist = 10;
+    int nlist = 100;
     int nprobe = 5;
     int num_codebooks = 8;
     int code_size = 8;
-    int num_vectors = 1000;
-    int num_queries = 10;
+    int num_vectors = 10000;
+    int num_queries = 1;
     Tensor data_vectors;
     Tensor data_ids;
     Tensor query_vectors;

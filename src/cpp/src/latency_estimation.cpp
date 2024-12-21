@@ -3,12 +3,65 @@
 // Prompt for GitHub Copilot:
 // - Conform to the google style guide
 // - Use descriptive variable names
+//
 
-#include <latency_estimation.h>
-#include <list_scanning.h>
+#include "latency_estimation.h"
+#include "list_scanning.h"
+
+// A simple helper to split a string by delimiter.
+// You can replace this with any library function if you wish.
+static std::vector<std::string> SplitString(const std::string &str,
+                                            char delim) {
+    std::vector<std::string> tokens;
+    std::stringstream ss(str);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        tokens.push_back(item);
+    }
+    return tokens;
+}
+
+ListScanLatencyEstimator::ListScanLatencyEstimator(
+    int d,
+    const std::vector<int> &n_values,
+    const std::vector<int> &k_values,
+    int n_trials,
+    bool /*adaptive_nprobe*/,
+    const std::string &profile_filename)
+    : d_(d),
+      n_values_(n_values),
+      k_values_(k_values),
+      n_trials_(n_trials),
+      profile_filename_(profile_filename) {
+    // Initialize the latency model grid
+    scan_latency_model_ = std::vector<std::vector<float> >(
+        n_values_.size(), std::vector<float>(k_values_.size(), 0.0f));
+
+    // Ensure n_values and k_values are sorted
+    if (!std::is_sorted(n_values_.begin(), n_values_.end())) {
+        throw std::runtime_error("n_values must be sorted in ascending order.");
+    }
+    if (!std::is_sorted(k_values_.begin(), k_values_.end())) {
+        throw std::runtime_error("k_values must be sorted in ascending order.");
+    }
+
+    // Attempt to load from file
+    bool loaded = false;
+    if (!profile_filename_.empty()) {
+        loaded = load_latency_profile(profile_filename_);
+    }
+
+    // If not loaded successfully, then do a fresh profile and save
+    if (!loaded) {
+        profile_scan_latency();
+        if (!profile_filename_.empty()) {
+            save_latency_profile(profile_filename_);
+        }
+    }
+}
 
 void ListScanLatencyEstimator::profile_scan_latency() {
-    // Generate random vectors
+    // Generate random vectors of size (max_n, d_)
     int max_n = n_values_.back();
     torch::Tensor vectors = torch::rand({max_n, d_});
     torch::Tensor ids = torch::randperm(max_n);
@@ -23,17 +76,19 @@ void ListScanLatencyEstimator::profile_scan_latency() {
             torch::Tensor curr_ids = ids.narrow(0, 0, n);
             TopkBuffer topk_buffer(k, false);
 
-            const float* query_ptr = query.data_ptr<float>();
-            const float* curr_vectors_ptr = curr_vectors.data_ptr<float>();
-            const int64_t* curr_ids_ptr = curr_ids.data_ptr<int64_t>();
+            const float *query_ptr = query.data_ptr<float>();
+            const float *curr_vectors_ptr = curr_vectors.data_ptr<float>();
+            const int64_t *curr_ids_ptr = curr_ids.data_ptr<int64_t>();
 
             uint64_t total_latency_ns = 0;
             for (int m = 0; m < n_trials_; ++m) {
                 auto start = std::chrono::high_resolution_clock::now();
-                scan_list(query_ptr, curr_vectors_ptr, curr_ids_ptr, n, d_, topk_buffer);
+                scan_list(query_ptr, curr_vectors_ptr, curr_ids_ptr, n, d_,
+                          topk_buffer);
                 auto end = std::chrono::high_resolution_clock::now();
 
-                auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+                auto duration =
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
                 total_latency_ns += duration.count();
             }
             double mean_latency_ns = static_cast<double>(total_latency_ns) / n_trials_;
@@ -42,19 +97,22 @@ void ListScanLatencyEstimator::profile_scan_latency() {
     }
 }
 
-bool ListScanLatencyEstimator::get_interpolation_info(const std::vector<int>& values, int target, int& lower, int& upper, float& frac) const {
+bool ListScanLatencyEstimator::get_interpolation_info(
+    const std::vector<int> &values, int target, int &lower, int &upper,
+    float &frac) const {
     if (target < values.front() || target > values.back()) {
         return false; // Out of bounds
     }
 
-    // Find the first element greater than target
+    // Find the first element > target
     auto it = std::upper_bound(values.begin(), values.end(), target);
     if (it == values.end()) {
+        // target is exactly the last or beyond
         lower = values.size() - 2;
         upper = values.size() - 1;
     } else {
-        lower = std::distance(values.begin(), it) - 1;
-        upper = lower + 1;
+        upper = static_cast<int>(std::distance(values.begin(), it));
+        lower = upper - 1;
     }
 
     int lower_val = values[lower];
@@ -62,7 +120,8 @@ bool ListScanLatencyEstimator::get_interpolation_info(const std::vector<int>& va
     if (upper_val == lower_val) {
         frac = 0.0f;
     } else {
-        frac = static_cast<float>(target - lower_val) / (upper_val - lower_val);
+        frac = static_cast<float>(target - lower_val) /
+               static_cast<float>(upper_val - lower_val);
     }
 
     return true;
@@ -82,12 +141,10 @@ float ListScanLatencyEstimator::estimate_scan_latency(int n, int k) const {
     bool n_within = (n <= n_values_.back());
     bool k_within = (k <= k_values_.back());
 
-    // Variables to hold interpolation indices and fractions for n
+    // Interpolation indices and fractions for n
     size_t i_lower, i_upper;
-    float t; // Fraction for n
-
+    float t; // fraction for n
     if (n_within) {
-        // Find the lower index for n
         auto it = std::upper_bound(n_values_.begin(), n_values_.end(), n);
         if (it == n_values_.end()) {
             // n is exactly the last value
@@ -95,7 +152,7 @@ float ListScanLatencyEstimator::estimate_scan_latency(int n, int k) const {
             i_upper = n_values_.size() - 1;
             t = 1.0f;
         } else {
-            i_upper = std::distance(n_values_.begin(), it);
+            i_upper = static_cast<size_t>(std::distance(n_values_.begin(), it));
             i_lower = i_upper - 1;
             int n1 = n_values_[i_lower];
             int n2 = n_values_[i_upper];
@@ -110,12 +167,10 @@ float ListScanLatencyEstimator::estimate_scan_latency(int n, int k) const {
         t = static_cast<float>(n - n2) / static_cast<float>(n2 - n1); // t > 1
     }
 
-    // Variables to hold interpolation indices and fractions for k
+    // Interpolation indices and fractions for k
     size_t j_lower, j_upper;
-    float u; // Fraction for k
-
+    float u; // fraction for k
     if (k_within) {
-        // Find the lower index for k
         auto it = std::upper_bound(k_values_.begin(), k_values_.end(), k);
         if (it == k_values_.end()) {
             // k is exactly the last value
@@ -123,7 +178,7 @@ float ListScanLatencyEstimator::estimate_scan_latency(int n, int k) const {
             j_upper = k_values_.size() - 1;
             u = 1.0f;
         } else {
-            j_upper = std::distance(k_values_.begin(), it);
+            j_upper = static_cast<size_t>(std::distance(k_values_.begin(), it));
             j_lower = j_upper - 1;
             int k1 = k_values_[j_lower];
             int k2 = k_values_[j_upper];
@@ -138,78 +193,177 @@ float ListScanLatencyEstimator::estimate_scan_latency(int n, int k) const {
         u = static_cast<float>(k - k2) / static_cast<float>(k2 - k1); // u > 1
     }
 
-    // Case 1: Both n and k are within the grid (Bilinear Interpolation)
+    // Both n and k within the grid => bilinear interpolation
     if (n_within && k_within) {
         float f11 = scan_latency_model_[i_lower][j_lower];
         float f12 = scan_latency_model_[i_lower][j_upper];
         float f21 = scan_latency_model_[i_upper][j_lower];
         float f22 = scan_latency_model_[i_upper][j_upper];
 
-        // Bilinear interpolation formula
-        float interpolated_latency = (1 - t) * (1 - u) * f11 +
-                                      t * (1 - u) * f21 +
-                                      (1 - t) * u * f12 +
-                                      t * u * f22;
+        // Bilinear interpolation
+        float interpolated_latency =
+                (1 - t) * (1 - u) * f11 + t * (1 - u) * f21 +
+                (1 - t) * u * f12 + t * u * f22;
         return interpolated_latency;
     }
 
-    // Helper lambda to perform linear extrapolation
-    auto linear_extrapolate = [&](float f1, float f2, float fraction) -> float {
-        float slope = f2 - f1;
-        return f2 + slope * fraction;
-    };
-
-    // Case 2: Extrapolate in n while k is within the grid
+    // Extrapolate in n, k within the grid
     if (!n_within && k_within) {
-        // Extrapolate latency at j_lower
         float f1 = scan_latency_model_[i_lower][j_lower];
         float f2 = scan_latency_model_[i_upper][j_lower];
         float extrapolated_f_lower = linear_extrapolate(f1, f2, t);
 
-        // Extrapolate latency at j_upper
         float f3 = scan_latency_model_[i_lower][j_upper];
         float f4 = scan_latency_model_[i_upper][j_upper];
         float extrapolated_f_upper = linear_extrapolate(f3, f4, t);
 
-        // Now interpolate between extrapolated_f_lower and extrapolated_f_upper based on u
-        float interpolated_latency = (1 - u) * extrapolated_f_lower + u * extrapolated_f_upper;
+        float interpolated_latency =
+                (1 - u) * extrapolated_f_lower + u * extrapolated_f_upper;
         return interpolated_latency;
     }
 
-    // Case 3: Extrapolate in k while n is within the grid
+    // Extrapolate in k, n within the grid
     if (n_within && !k_within) {
-        // Extrapolate latency at i_lower
         float f1 = scan_latency_model_[i_lower][j_lower];
         float f2 = scan_latency_model_[i_lower][j_upper];
         float extrapolated_f_lower = linear_extrapolate(f1, f2, u);
 
-        // Extrapolate latency at i_upper
         float f3 = scan_latency_model_[i_upper][j_lower];
         float f4 = scan_latency_model_[i_upper][j_upper];
         float extrapolated_f_upper = linear_extrapolate(f3, f4, u);
 
-        // Now interpolate between extrapolated_f_lower and extrapolated_f_upper based on t
-        float interpolated_latency = (1 - t) * extrapolated_f_lower + t * extrapolated_f_upper;
+        float interpolated_latency =
+                (1 - t) * extrapolated_f_lower + t * extrapolated_f_upper;
         return interpolated_latency;
     }
 
-    // Case 4: Extrapolate in both n and k
+    // Extrapolate in both n and k
     if (!n_within && !k_within) {
-        // Extrapolate latency at j_lower
         float f1 = scan_latency_model_[i_lower][j_lower];
         float f2 = scan_latency_model_[i_upper][j_lower];
         float extrapolated_f_lower = linear_extrapolate(f1, f2, t);
 
-        // Extrapolate latency at j_upper
         float f3 = scan_latency_model_[i_lower][j_upper];
         float f4 = scan_latency_model_[i_upper][j_upper];
         float extrapolated_f_upper = linear_extrapolate(f3, f4, t);
 
-        // Now extrapolate across k using u
-        float extrapolated_latency = linear_extrapolate(extrapolated_f_lower, extrapolated_f_upper, u);
+        float extrapolated_latency =
+                linear_extrapolate(extrapolated_f_lower, extrapolated_f_upper, u);
         return extrapolated_latency;
     }
 
-    // If none of the above cases match, throw an error
-    throw std::runtime_error("Unable to estimate scan latency.");
+    // If none of the above, we can’t estimate
+    throw std::runtime_error("Unable to estimate scan latency (unexpected case).");
+}
+
+bool ListScanLatencyEstimator::save_latency_profile(
+    const std::string &filename) const {
+    std::ofstream ofs(filename);
+    if (!ofs.is_open()) {
+        std::cerr << "Error opening file for write: " << filename << std::endl;
+        return false;
+    }
+
+    // Write a header line to give context
+    // Example: "# Latency Profile for dimension=128"
+    ofs << "# Latency Profile for dimension=" << d_
+            << ", n_values.size=" << n_values_.size()
+            << ", k_values.size=" << k_values_.size()
+            << ", n_trials=" << n_trials_ << "\n";
+
+    // 1) Write size info
+    ofs << n_values_.size() << "," << k_values_.size() << "\n";
+
+    // 2) Write n_values_
+    for (size_t i = 0; i < n_values_.size(); i++) {
+        ofs << n_values_[i];
+        if (i + 1 < n_values_.size()) ofs << ",";
+    }
+    ofs << "\n";
+
+    // 3) Write k_values_
+    for (size_t j = 0; j < k_values_.size(); j++) {
+        ofs << k_values_[j];
+        if (j + 1 < k_values_.size()) ofs << ",";
+    }
+    ofs << "\n";
+
+    // 4) Write scan_latency_model_ (N rows, each has K columns)
+    for (size_t i = 0; i < n_values_.size(); i++) {
+        for (size_t j = 0; j < k_values_.size(); j++) {
+            ofs << scan_latency_model_[i][j];
+            if (j + 1 < k_values_.size()) ofs << ",";
+        }
+        ofs << "\n";
+    }
+
+    ofs.close();
+    return true;
+}
+
+bool ListScanLatencyEstimator::load_latency_profile(const std::string &filename) {
+    std::ifstream ifs(filename);
+    if (!ifs.is_open()) {
+        // File not found or no permission => can't load
+        return false;
+    }
+
+    // Read header line
+    {
+        std::string header_line;
+        if (!std::getline(ifs, header_line)) {
+            return false;
+        }
+    }
+
+    std::string line;
+    // 1) Read size info
+    if (!std::getline(ifs, line)) return false;
+    auto tokens = SplitString(line, ',');
+    if (tokens.size() != 2) return false;
+
+    int n_size = std::stoi(tokens[0]);
+    int k_size = std::stoi(tokens[1]);
+
+    // 2) Read n_values_
+    if (!std::getline(ifs, line)) return false;
+    tokens = SplitString(line, ',');
+    if (static_cast<int>(tokens.size()) != n_size) return false;
+    std::vector<int> file_n_values(n_size);
+    for (int i = 0; i < n_size; i++) {
+        file_n_values[i] = std::stoi(tokens[i]);
+    }
+
+    // 3) Read k_values_
+    if (!std::getline(ifs, line)) return false;
+    tokens = SplitString(line, ',');
+    if (static_cast<int>(tokens.size()) != k_size) return false;
+    std::vector<int> file_k_values(k_size);
+    for (int j = 0; j < k_size; j++) {
+        file_k_values[j] = std::stoi(tokens[j]);
+    }
+
+    // Check if they match our current n_values_ and k_values_
+    if (file_n_values != n_values_ || file_k_values != k_values_) {
+        return false;
+    }
+
+    // 4) Read latency matrix
+    std::vector<std::vector<float> > file_latency_model(
+        n_size, std::vector<float>(k_size, 0.0f));
+
+    for (int i = 0; i < n_size; i++) {
+        if (!std::getline(ifs, line)) return false;
+        tokens = SplitString(line, ',');
+        if (static_cast<int>(tokens.size()) != k_size) return false;
+        for (int j = 0; j < k_size; j++) {
+            file_latency_model[i][j] = std::stof(tokens[j]);
+        }
+    }
+
+    ifs.close();
+
+    // Assign to our model
+    scan_latency_model_ = std::move(file_latency_model);
+    return true;
 }

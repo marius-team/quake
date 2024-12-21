@@ -8,6 +8,7 @@
 #define LATENCY_ESTIMATION_H
 
 #include <common.h>
+#include <fstream>
 
 // 2D function that estimates the scan latency of a list given it's size and the number of elements to retrieve
 // l(n, k) = latency
@@ -16,41 +17,61 @@
 // default grid: n = [16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576], k = [1, 4, 16, 64, 256, 1024]
 class ListScanLatencyEstimator {
 public:
-    ListScanLatencyEstimator(int d, const std::vector<int>& n_values, const std::vector<int>& k_values, int n_trials = 100, bool adaptive_nprobe = false)
-        : d_(d), n_values_(n_values), k_values_(k_values), n_trials_(n_trials) {
-        // Initialize the latency model grid
-        scan_latency_model_ = std::vector<std::vector<float>>(n_values_.size(), std::vector<float>(k_values_.size(), 0.0f));
+    // Constructor attempts to load latency profile from disk if the file path is
+    // provided. If loading fails (file not found or grid mismatch), it performs
+    // the profile_scan_latency() and saves to file.
+    ListScanLatencyEstimator(int d,
+                             const std::vector<int> &n_values,
+                             const std::vector<int> &k_values,
+                             int n_trials = 100,
+                             bool adaptive_nprobe = false,
+                             const std::string &profile_filename = "");
 
-        // Ensure n_values and k_values are sorted in ascending order
-        if (!std::is_sorted(n_values_.begin(), n_values_.end())) {
-            throw std::runtime_error("n_values must be sorted in ascending order.");
-        }
-
-        if (!std::is_sorted(k_values_.begin(), k_values_.end())) {
-            throw std::runtime_error("k_values must be sorted in ascending order.");
-        }
-    }
-
-    // Profiles the scan latency and populates the scan_latency_model_
+    // Profiles the scan latency and populates scan_latency_model_.
+    // This is expensive and should typically be called only once.
     void profile_scan_latency();
 
-    // Estimates the scan latency for given n and k
+    // Estimates the scan latency for given n and k.
     float estimate_scan_latency(int n, int k) const;
 
-    // Setter for n_trials_
+    // Setter for n_trials_.
     void set_n_trials(int n_trials) {
         n_trials_ = n_trials;
     }
 
+    // Saves the internally profiled latency model to a CSV file.
+    // Returns true on success, false otherwise.
+    bool save_latency_profile(const std::string &filename) const;
+
+    // Loads an existing latency profile from a CSV file.
+    // Returns true on success, false otherwise.
+    bool load_latency_profile(const std::string &filename);
+
+    // Public members for convenience/access.
     int d_;
     std::vector<int> n_values_;
     std::vector<int> k_values_;
-    std::vector<std::vector<float>> scan_latency_model_;
+    std::vector<std::vector<float> > scan_latency_model_;
     int n_trials_;
 
-    // Helper function for interpolation
-    // Returns the lower and upper indices and the fractional part for a given target
-    bool get_interpolation_info(const std::vector<int>& values, int target, int& lower, int& upper, float& frac) const;
+private:
+    // Helper function for interpolation (not used directly in this code, but
+    // shown as an example of how you might handle it).
+    bool get_interpolation_info(const std::vector<int> &values,
+                                int target,
+                                int &lower,
+                                int &upper,
+                                float &frac) const;
+
+    // Helper function to do linear extrapolation in 1D.
+    inline float linear_extrapolate(float f1, float f2, float fraction) const {
+        float slope = f2 - f1;
+        return f2 + slope * fraction;
+    }
+
+    // The name of the CSV file to load/save from. Empty means "don't load/save."
+    std::string profile_filename_;
 };
+
 
 #endif //LATENCY_ESTIMATION_H
