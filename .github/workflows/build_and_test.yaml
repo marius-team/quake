@@ -12,7 +12,7 @@ env:
   BUILD_TYPE: Debug
 
 jobs:
-  test:
+  test_quake:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/marius-team/quake/ubuntu-latest:latest
@@ -45,3 +45,37 @@ jobs:
             test/cpp/quake_tests --gtest_filter=DynamicInvertedListTest.*
             test/cpp/quake_tests --gtest_filter=ListScanLatencyEstimatorTest.*
             test/cpp/quake_tests --gtest_filter=DynamicIVFTest.*
+  test_quake_with_asan:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Build project
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate test-env
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                -DQUAKE_USE_NUMA=OFF \
+                -DQUAKE_ENABLE_GPU=OFF \
+                -DBUILD_TESTS=ON \
+                -DQUAKE_USE_AVX512=OFF \
+                -DQUAKE_USE_ASAN=ON \
+                ../
+          make bindings -j2
+          make quake_tests -j2
+
+      - name: Run tests
+        run: |
+          cd build
+          test/cpp/quake_tests --gtest_filter=IndexPartitionTest.* 
+          test/cpp/quake_tests --gtest_filter=DynamicInvertedListTest.*
+#          test/cpp/quake_tests --gtest_filter=ListScanLatencyEstimatorTest.*
+#          test/cpp/quake_tests --gtest_filter=DynamicIVFTest.*
