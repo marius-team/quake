@@ -145,7 +145,7 @@ TEST(ListScanLatencyEstimatorTest, EstimateVsActualLatency) {
   int d = 32;
   std::vector<int> n_values = {16, 64, 256};
   std::vector<int> k_values = {1, 4, 16};
-  int n_trials = 3;
+  int n_trials = 10;
 
   // In practice, you might have a bigger grid, but let's keep it short for test
   ListScanLatencyEstimator estimator(d, n_values, k_values, n_trials);
@@ -178,7 +178,6 @@ TEST(ListScanLatencyEstimatorTest, EstimateVsActualLatency) {
               << " => estimated=" << estimated_ms << "ms, actual=" << actual_ms
               << "ms\n";
 
-    // Tolerance of 40% because these are quite approximate with small n_trials
     float tolerance = 0.4f * actual_ms;
     EXPECT_NEAR(estimated_ms, actual_ms, tolerance)
         << "Difference is too large for n=" << n << ", k=" << k;
