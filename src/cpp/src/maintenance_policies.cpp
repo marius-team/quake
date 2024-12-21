@@ -267,9 +267,18 @@ QueryCostMaintenance::QueryCostMaintenance(std::shared_ptr<DynamicIVF_C> index, 
     index_ = index;
     current_scan_fraction_ = 1.0;
 
-    // initial the latency estimator
-    latency_estimator_ = std::make_shared<ListScanLatencyEstimator>(index_->d_, latency_grid_n_values_, latency_grid_k_values_, n_trials_);
-    latency_estimator_->profile_scan_latency();
+    // Specify the file where you want to store or load the profile
+    std::string profile_filename = "latency_profile.csv";
+
+    // Create the latency estimator
+    latency_estimator_ = std::make_shared<ListScanLatencyEstimator>(
+        index_->d_,
+        latency_grid_n_values_,
+        latency_grid_k_values_,
+        n_trials_,
+        false,
+        profile_filename);
+
 }
 
 float QueryCostMaintenance::compute_alpha_for_window() {
