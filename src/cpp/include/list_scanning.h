@@ -9,6 +9,7 @@
 
 #include <common.h>
 #include "simsimd/simsimd.h"
+#include "cblas.h"
 
 inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     Tensor num_correct = torch::zeros(ids.size(0), torch::kInt64);
@@ -35,7 +36,7 @@ inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     return recall;
 }
 
-#define TOP_K_BUFFER_CAPACITY (1024 * 128)
+#define TOP_K_BUFFER_CAPACITY (8 * 1024)
 
 template<typename DistanceType = float, typename IdType = int>
 class TypedTopKBuffer {
@@ -48,13 +49,13 @@ public:
     std::atomic<bool> processing_query_;
     std::atomic<int> jobs_left_;
 
-    TypedTopKBuffer(int k, bool is_descending)
-        : k_(k), is_descending_(is_descending), topk_(TOP_K_BUFFER_CAPACITY), processing_query_(true) {
-        assert(k <= TOP_K_BUFFER_CAPACITY); // Ensure k is smaller than or equal to buffer size
+    TypedTopKBuffer(int k, bool is_descending, int buffer_capacity = TOP_K_BUFFER_CAPACITY)
+        : k_(k), is_descending_(is_descending), topk_(buffer_capacity), processing_query_(true) {
+        assert(k <= buffer_capacity); // Ensure k is smaller than or equal to buffer size
 
         for (int i = 0; i < topk_.size(); i++) {
             if (is_descending_) {
-                topk_[i] = {std::numeric_limits<DistanceType>::min(), -1};
+                topk_[i] = {-std::numeric_limits<DistanceType>::infinity(), -1};
             } else {
                 topk_[i] = {std::numeric_limits<DistanceType>::max(), -1};
             }
@@ -134,9 +135,9 @@ public:
         curr_offset_ = 0;
         for (int i = 0; i < k_; i++) {
             if (is_descending_) {
-                topk_[i] = {std::numeric_limits<float>::min(), -1};
+                topk_[i] = { -std::numeric_limits<DistanceType>::infinity(), -1 };
             } else {
-                topk_[i] = {std::numeric_limits<float>::max(), -1};
+                topk_[i] = { std::numeric_limits<DistanceType>::max(), -1 };
             }
         }
     }
@@ -148,7 +149,7 @@ public:
         topk_[curr_offset_++] = {distance, index};
     }
 
-    void batch_add(DistanceType *distances, IdType *indicies, int num_values) {
+    void batch_add(DistanceType *distances, const IdType *indicies, int num_values) {
         if (num_values == 0) {
             jobs_left_.fetch_sub(1, std::memory_order_relaxed);
             return;
@@ -226,7 +227,7 @@ public:
 // Type alias for convenience
 using TopkBuffer = TypedTopKBuffer<float, int64_t>;
 
-inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<TopkBuffer *> buffers, bool clear_buffers = true) {
+inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer>> buffers) {
     int n = buffers.size();
     int k = buffers[0]->k_;
     Tensor topk_distances = torch::empty({n, k}, torch::kFloat32);
@@ -242,19 +243,13 @@ inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<TopkBuffer *> buffers
         }
     }
 
-    if (clear_buffers) {
-        for (int i = 0; i < n; i++) {
-            free(buffers[i]);
-        }
-    }
-
     return std::make_tuple(topk_indices, topk_distances);
 }
 
-inline vector<TopkBuffer *> create_buffers(int n, int k, bool is_descending) {
-    vector<TopkBuffer *> buffers(n);
+inline vector<shared_ptr<TopkBuffer>> create_buffers(int n, int k, bool is_descending) {
+    vector<shared_ptr<TopkBuffer>> buffers(n);
     for (int i = 0; i < n; i++) {
-        buffers[i] = new TopkBuffer(k, is_descending);
+        buffers[i] = make_shared<TopkBuffer>(k, is_descending, 4 * k);
     }
     return buffers;
 }
@@ -264,7 +259,7 @@ inline void scan_list(const float *query_vec,
                       const int64_t *list_ids,
                       int list_size,
                       int d,
-                      TopkBuffer &buffer,
+                      shared_ptr<TopkBuffer> buffer,
                       faiss::MetricType metric = faiss::METRIC_L2) {
     simsimd_distance_t dist;
     const float *vec;
@@ -275,14 +270,14 @@ inline void scan_list(const float *query_vec,
             for (int l = 0; l < list_size; l++) {
                 vec = list_vecs + l * d;
                 simsimd_dot_f32(query_vec, vec, d, &dist);
-                buffer.add(dist, l);
+                buffer->add(dist, l);
             }
         } else {
 #pragma unroll
             for (int l = 0; l < list_size; l++) {
                 vec = list_vecs + l * d;
                 simsimd_dot_f32(query_vec, vec, d, &dist);
-                buffer.add(dist, list_ids[l]);
+                buffer->add(dist, list_ids[l]);
             }
         }
     } else {
@@ -291,46 +286,110 @@ inline void scan_list(const float *query_vec,
             for (int l = 0; l < list_size; l++) {
                 vec = list_vecs + l * d;
                 simsimd_l2sq_f32(query_vec, vec, d, &dist);
-                buffer.add(dist, l);
+                buffer->add(sqrt(dist), l);
             }
         } else {
 #pragma unroll
             for (int l = 0; l < list_size; l++) {
                 vec = list_vecs + l * d;
                 simsimd_l2sq_f32(query_vec, vec, d, &dist);
-                buffer.add(dist, list_ids[l]);
+                buffer->add(sqrt(dist), list_ids[l]);
             }
         }
     }
 }
 
-// inline void batched_list_scan(const float *query_vecs,
-//                               const float *list_vecs,
-//                               const int64_t *list_ids,
-//                               int n,
-//                               int list_size,
-//                               int d,
-//                               vector<TopkBuffer *> buffers) {
-//
-//     simsimd_distance_t dist;
-//     const float *vec;
-//
-//     if (list_ids == nullptr) {
-//         for (int l = 0; l < list_size; l++) {
-//             for (int i = 0; i < n; i++) {
-//                 vec = list_vecs + l * d;
-//                 simsimd_l2sq_f32(query_vecs + i * d, vec, d, &dist);
-//                 buffers[i]->add(dist, l);
-//             }
-//         }
-//     } else {
-//         for (int l = 0; l < list_size; l++) {
-//             vec = list_vecs + l * d;
-//             for (int i = 0; i < n; i++) {
-//                 simsimd_l2sq_f32(query_vecs + i * d, vec, d, &dist);
-//                 buffers[i]->add(dist, list_ids[l]);
-//             }
-//         }
-//     }
+inline void batched_scan_list(const float *query_vecs,
+                              const float *list_vecs,
+                              const int64_t *list_ids,
+                              int num_queries,
+                              int list_size,
+                              int dim,
+                              vector<shared_ptr<TopkBuffer>> &topk_buffers,
+                              MetricType metric = faiss::METRIC_L2,
+                              int batch_size = 1024) {
+    // Determine if larger values are better based on the metric
+    bool largest = (metric == faiss::METRIC_INNER_PRODUCT);
+
+    // Handle the case when list_size == 0
+    if (list_size == 0 || list_vecs == nullptr) {
+        // No list vectors to process; all TopkBuffers remain with default values
+        return;
+    }
+
+    // Ensure k does not exceed list_size
+    int k = topk_buffers[0]->k_;
+    int k_max = std::min(k, list_size);
+
+    // Create tensors from raw pointers
+    Tensor query_tensor = torch::from_blob((void *) query_vecs, {num_queries, dim}, torch::kFloat32); // Clone to ensure memory safety
+    Tensor list_tensor = torch::from_blob((void *) list_vecs, {list_size, dim}, torch::kFloat32);// Clone to ensure memory safety
+
+    // Determine batching strategy
+    if (num_queries >= list_size && list_size > 0) {
+        // Batch over queries
+        for (int start = 0; start < num_queries; start += batch_size) {
+            int end = std::min(start + batch_size, num_queries);
+            int curr_size = end - start;
+
+            Tensor curr_queries = query_tensor.slice(0, start, end); // Shape: [curr_size, dim]
+            Tensor dist_matrix;
+            if (metric == faiss::METRIC_L2) {
+                // Compute L2 squared distances
+                dist_matrix = torch::cdist(curr_queries, list_tensor, 2.0); // Shape: [curr_size, list_size]
+            } else {
+                // Compute Inner Product
+                dist_matrix = torch::matmul(curr_queries, list_tensor.t()); // Shape: [curr_size, list_size]
+            }
+
+            // Perform top-k with k_max
+            auto topk = torch::topk(dist_matrix, k_max, /*dim=*/1, /*largest=*/largest, /*sorted=*/true);
+            auto topk_values_accessor = std::get<0>(topk).accessor<float, 2>();
+            auto topk_indices_accessor = std::get<1>(topk).accessor<int64_t, 2>();
+
+            // Update TopkBuffers
+            for (int i = 0; i < curr_size; i++) {
+                for (int j = 0; j < k_max; j++) {
+                    float distance = topk_values_accessor[i][j];
+                    int64_t idx = topk_indices_accessor[i][j];
+                    int64_t actual_id = (list_ids == nullptr) ? idx : list_ids[idx];
+                    topk_buffers[start + i]->add(distance, actual_id);
+                }
+            }
+        }
+    } else {
+        // Batch over list vectors
+        for (int start = 0; start < list_size; start += batch_size) {
+            int end = std::min(start + batch_size, list_size);
+            int curr_size = end - start;
+
+            Tensor curr_list = list_tensor.slice(0, start, end); // Shape: [curr_size, dim]
+            Tensor dist_matrix;
+            if (metric == faiss::METRIC_L2) {
+                // Compute L2 squared distances
+                dist_matrix = torch::cdist(query_tensor, curr_list, 2.0); // Shape: [num_queries, curr_size]
+            } else {
+                // Compute Inner Product
+                dist_matrix = torch::matmul(query_tensor, curr_list.t()); // Shape: [num_queries, curr_size]
+            }
+
+            // Perform top-k with k_max
+            auto topk = torch::topk(dist_matrix, k_max, /*dim=*/1, /*largest=*/largest, /*sorted=*/true);
+            auto topk_values_accessor = std::get<0>(topk).accessor<float, 2>();
+            auto topk_indices_accessor = std::get<1>(topk).accessor<int64_t, 2>();
+
+            // Update TopkBuffers
+            for (int q = 0; q < num_queries; q++) {
+                for (int j = 0; j < k_max; j++) {
+                    float distance = topk_values_accessor[q][j];
+                    int64_t idx = topk_indices_accessor[q][j] + start;
+                    int64_t actual_id = (list_ids == nullptr) ? idx : list_ids[idx];
+                    topk_buffers[q]->add(distance, actual_id);
+                }
+            }
+        }
+    }
+}
+
 // }
 #endif //LIST_SCANNING_H

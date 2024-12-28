@@ -4,14 +4,15 @@
 // - Conform to the google style guide
 // - Use descriptive variable names
 
+#include <quake_index.h>
 #ifndef COMPASS_WRAP_H
 #define COMPASS_WRAP_H
 
+#include "common.h"
 #include "pybind11/embed.h"
 #include "torch/extension.h"
 #include <pybind11/stl.h>
 #include <pybind11/stl/filesystem.h>
-#include <dynamic_ivf.h>
 
 namespace py = pybind11;
 
@@ -25,83 +26,19 @@ using std::shared_ptr;
 
 using faiss::idx_t;
 
-
-// struct SearchTimingInfo {
-//     int64_t n_queries;
-//     int64_t n_vectors;
-//     int64_t n_clusters;
-//     int d;
-//     int num_codebooks;
-//     int code_size;
-//     int k;
-//     int nprobe;
-//     float k_factor;
-//     float recall_target;
-//
-//     int quantizer_search_time_us;
-//     int scan_pq_time_us;
-//     int refine_time_us;
-//     int partition_scan_time_us;
-//     int total_time_us;
-//
-//     shared_ptr<SearchTimingInfo> parent_info = nullptr;
-// }
-
 PYBIND11_MODULE(_bindings, m) {
-    m.def("merge_faiss_ivf", &merge_faiss_ivf, "Merge two faiss IndexIVF objects");
-    // m.def("measure_list_scan_cost", &measure_list_scan_cost, "Measure the cost of scanning a list");
-
-    // wrap faiss IVF index
-    class_<DynamicIVF_C, shared_ptr<DynamicIVF_C> >(m, "DynamicIVF_C")
-            .def(init<int, int, int, int, int, int, bool, bool, bool, bool, bool, bool>(), arg("d"), arg("nlist"),
-                 arg("metric"), arg("num_workers") = 1, arg("m") = -1, arg("code_size") = -1, arg("use_numa") = false,
-                 arg("verbose") = false, arg("verify_numa") = false, arg("same_core") = true, arg("use_centroid_workers") = true,
-                 arg("use_adaptive_nprobe") = false)
-            .def("nlist", &DynamicIVF_C::nlist)
-            .def("ntotal", &DynamicIVF_C::ntotal)
-            .def_readonly("d", &DynamicIVF_C::d_)
-            .def("centroids", &DynamicIVF_C::centroids)
-            .def_readonly("parent", &DynamicIVF_C::parent_)
-            .def("index_ready", &DynamicIVF_C::index_ready)
-            .def("reset_workers", &DynamicIVF_C::reset_workers)
-            .def("set_timeout_values", &DynamicIVF_C::set_timeout_values)
-            .def("get_partition_ids", &DynamicIVF_C::get_partition_ids)
-            .def("get_scan_fraction", &DynamicIVF_C::get_scan_fraction)
-            .def("build_given_centroids", &DynamicIVF_C::build_given_centroids)
-            .def("add_level", &DynamicIVF_C::add_level)
-            .def("remove_level", &DynamicIVF_C::remove_level)
-            .def("build", &DynamicIVF_C::build)
-            .def("rebuild", &DynamicIVF_C::rebuild)
-            .def("save", &DynamicIVF_C::save)
-            .def("load", &DynamicIVF_C::load)
-            .def("add", &DynamicIVF_C::add)
-            .def("add_centroids_and_reassign_existing", &DynamicIVF_C::add_centroids_and_reassign_existing)
-            .def("remove", &DynamicIVF_C::remove)
-            .def("modify", &DynamicIVF_C::modify)
-            .def("maintenance", &DynamicIVF_C::maintenance)
-            .def("set_maintenance_policy_params", &DynamicIVF_C::set_maintenance_policy_params)
-            .def("search", &DynamicIVF_C::search)
-            .def("search_one", &DynamicIVF_C::search_one)
-            .def("get_cluster_sizes", &DynamicIVF_C::get_cluster_sizes)
-            .def("get_cluster_ids", &DynamicIVF_C::get_cluster_ids)
-            .def("recompute_centroids", &DynamicIVF_C::recompute_centroids)
-            .def("select_clusters", &DynamicIVF_C::select_clusters)
-            .def("select_vectors", &DynamicIVF_C::select_vectors)
-            .def("search_quantizer", &DynamicIVF_C::search_quantizer)
-            .def("refine_clusters", &DynamicIVF_C::refine_clusters)
-            .def("compute_partition_boundary_distances", &DynamicIVF_C::compute_partition_boundary_distances)
-            .def("compute_kth_nearest_neighbor_distance", &DynamicIVF_C::compute_kth_nearest_neighbor_distance)
-            .def("compute_partition_probabilities", &DynamicIVF_C::compute_partition_probabilities)
-            .def("compute_partition_intersection_volumes", &DynamicIVF_C::compute_partition_intersection_volumes)
-            .def("compute_partition_distances", &DynamicIVF_C::compute_partition_distances)
-            .def("compute_partition_density", &DynamicIVF_C::compute_partition_density)
-            .def("compute_partition_volume", &DynamicIVF_C::compute_partition_volume)
-            .def("compute_partition_variances", &DynamicIVF_C::compute_partition_variances)
-            .def("get_partition_sizes", &DynamicIVF_C::get_partition_sizes)
-            .def("compute_quantization_error", &DynamicIVF_C::compute_quantization_error)
-            .def("compute_partition_covariances", &DynamicIVF_C::compute_partition_covariances)
-            .def("selective_merge", &DynamicIVF_C::selective_merge)
-            .def("get_split_history", &DynamicIVF_C::get_split_history);
+    // wrap Quake Index
+    class_<QuakeIndex, shared_ptr<QuakeIndex> >(m, "QuakeIndex")
+            .def(init<int>(), py::arg("current_level") = 0)
+            .def("build", &QuakeIndex::build)
+            .def("search", &QuakeIndex::search)
+            .def("get", &QuakeIndex::get)
+            .def("add", &QuakeIndex::add)
+            .def("remove", &QuakeIndex::remove)
+            .def("save", &QuakeIndex::save)
+            .def("load", &QuakeIndex::load)
+            .def("ntotal", &QuakeIndex::ntotal)
+            .def("nlist", &QuakeIndex::nlist);
 
     class_<MaintenanceTimingInfo, shared_ptr<MaintenanceTimingInfo> >(m, "MaintenanceTimingInfo")
             .def_readonly("n_splits", &MaintenanceTimingInfo::n_splits)
@@ -110,8 +47,7 @@ PYBIND11_MODULE(_bindings, m) {
             .def_readonly("delete_refine_time_us", &MaintenanceTimingInfo::delete_refine_time_us)
             .def_readonly("split_time_us", &MaintenanceTimingInfo::split_time_us)
             .def_readonly("split_refine_time_us", &MaintenanceTimingInfo::split_refine_time_us)
-            .def_readonly("total_time_us", &MaintenanceTimingInfo::total_time_us)
-            .def("print", &MaintenanceTimingInfo::print);
+            .def_readonly("total_time_us", &MaintenanceTimingInfo::total_time_us);
 
     class_<BuildTimingInfo, shared_ptr<BuildTimingInfo> >(m, "BuildTimingInfo")
             .def_readonly("n_vectors", &BuildTimingInfo::n_vectors)
@@ -121,15 +57,13 @@ PYBIND11_MODULE(_bindings, m) {
             .def_readonly("code_size", &BuildTimingInfo::code_size)
             .def_readonly("train_time_us", &BuildTimingInfo::train_time_us)
             .def_readonly("assign_time_us", &BuildTimingInfo::assign_time_us)
-            .def_readonly("total_time_us", &BuildTimingInfo::total_time_us)
-            .def("print", &BuildTimingInfo::print);
+            .def_readonly("total_time_us", &BuildTimingInfo::total_time_us);
 
     class_<ModifyTimingInfo, shared_ptr<ModifyTimingInfo> >(m, "ModifyTimingInfo")
             .def_readonly("n_vectors", &ModifyTimingInfo::n_vectors)
             .def_readonly("find_partition_time_us", &ModifyTimingInfo::find_partition_time_us)
             .def_readonly("modify_time_us", &ModifyTimingInfo::modify_time_us)
-            .def_readonly("maintenance_time_us", &ModifyTimingInfo::maintenance_time_us)
-            .def("print", &ModifyTimingInfo::print);
+            .def_readonly("maintenance_time_us", &ModifyTimingInfo::maintenance_time_us);
 
     class_<SearchTimingInfo, shared_ptr<SearchTimingInfo> >(m, "SearchTimingInfo")
             .def(init<>())
@@ -190,6 +124,32 @@ PYBIND11_MODULE(_bindings, m) {
             .def_readwrite("modify_centroids", &MaintenancePolicyParams::modify_centroids)
             .def_readwrite("target_partition_size", &MaintenancePolicyParams::target_partition_size)
             .def_readwrite("max_partition_ratio", &MaintenancePolicyParams::max_partition_ratio);
+
+    class_<IndexBuildParams, shared_ptr<IndexBuildParams> >(m, "IndexBuildParams")
+            .def(init<>())
+            .def_readwrite("nlist", &IndexBuildParams::nlist)
+            .def_readwrite("metric", &IndexBuildParams::metric)
+            .def_readwrite("niter", &IndexBuildParams::niter)
+            .def_readwrite("num_codebooks", &IndexBuildParams::num_codebooks)
+            .def_readwrite("code_size", &IndexBuildParams::code_size)
+            .def_readwrite("num_workers", &IndexBuildParams::num_workers)
+            .def_readwrite("use_numa", &IndexBuildParams::use_numa)
+            .def_readwrite("verbose", &IndexBuildParams::verbose)
+            .def_readwrite("verify_numa", &IndexBuildParams::verify_numa)
+            .def_readwrite("same_core", &IndexBuildParams::same_core)
+            .def_readwrite("use_centroid_workers", &IndexBuildParams::use_centroid_workers)
+            .def_readwrite("use_adaptive_nprobe", &IndexBuildParams::use_adaptive_nprobe);
+
+    class_<SearchParams, shared_ptr<SearchParams> >(m, "SearchParams")
+            .def(init<>())
+            .def_readwrite("k", &SearchParams::k)
+            .def_readwrite("nprobe", &SearchParams::nprobe)
+            .def_readwrite("recall_target", &SearchParams::recall_target);
+
+    class_<SearchResult, shared_ptr<SearchResult> >(m, "SearchResult")
+            .def_readonly("ids", &SearchResult::ids)
+            .def_readonly("distances", &SearchResult::distances)
+            .def_readonly("timing_info", &SearchResult::timing_info);
 }
 
 

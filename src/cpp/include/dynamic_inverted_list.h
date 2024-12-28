@@ -24,7 +24,7 @@ namespace faiss {
         int total_numa_nodes_ = 0;
         int next_numa_node_ = 0;
         std::unordered_map<size_t, IndexPartition> partitions_;
-
+        int d_;
 
         /**
          * @brief Constructor for DynamicInvertedLists.
@@ -100,6 +100,12 @@ namespace faiss {
         // Get/set the thread mapped to this partition
         int get_thread(size_t list_no);
         void set_thread(size_t list_no, int new_thread_id);
+
+        void save(const std::string &path);
+
+        void load(const std::string &path);
+
+        Tensor get_partition_ids();
     };
 
     ArrayInvertedLists *convert_to_array_invlists(DynamicInvertedLists *invlists, std::unordered_map<size_t, size_t>& remap_ids);

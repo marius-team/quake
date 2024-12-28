@@ -8,12 +8,10 @@
 #define MAINTENANCE_POLICIES_H
 
 #include <common.h>
-#include <timing_info.h>
-#include <dynamic_ivf.h>
 #include <latency_estimation.h>
-#include <params.h>
+#include <partition_manager.h>
 
-class DynamicIVF_C;
+class PartitionManager;
 
 class MaintenancePolicy {
 public:
@@ -24,7 +22,7 @@ public:
     float current_scan_fraction_;
     std::string maintenance_policy_name_;
 
-    std::shared_ptr<DynamicIVF_C> index_;
+    std::shared_ptr<PartitionManager> partition_manager_;
     std::unordered_map<int64_t, int64_t> per_partition_hits_;
     std::unordered_map<int64_t, int64_t> ancestor_partition_hits_;
     std::unordered_map<int64_t, std::pair<int64_t, int64_t>> split_records_;
@@ -64,11 +62,13 @@ public:
 
     void remove_partition(int64_t partition_id);
 
+    void refine_partitions(Tensor partition_ids, int refinement_iterations);
+
     virtual void refine_delete(Tensor old_centroids) {}
 
     virtual void refine_split(Tensor partition_ids, Tensor old_centroids) {}
 
-    virtual std::pair<Tensor, Tensor> check_and_delete_partitions() { return {}; }
+    virtual Tensor check_and_delete_partitions() { return {}; }
 
     virtual std::tuple<Tensor, Tensor, Tensor> check_and_split_partitions() { return {}; }
 
@@ -77,7 +77,7 @@ public:
 
 class QueryCostMaintenance : public MaintenancePolicy {
 public:
-    QueryCostMaintenance(std::shared_ptr<DynamicIVF_C> index, MaintenancePolicyParams params = MaintenancePolicyParams());
+    QueryCostMaintenance(std::shared_ptr<PartitionManager> partition_manager, MaintenancePolicyParams params = MaintenancePolicyParams());
 
     float compute_alpha_for_window();
 
@@ -85,7 +85,7 @@ public:
 
     void refine_split(Tensor partition_ids, Tensor old_centroids) override;
 
-    std::pair<Tensor, Tensor> check_and_delete_partitions() override;
+    Tensor check_and_delete_partitions() override;
 
     std::tuple<Tensor, Tensor, Tensor> check_and_split_partitions() override;
 };
@@ -96,15 +96,15 @@ public:
     float max_partition_ratio_;
     int min_partition_size_;
 
-    LireMaintenance(std::shared_ptr<DynamicIVF_C> index, int target_partition_size, float max_partition_ratio, int min_partition_size) : target_partition_size_(target_partition_size), max_partition_ratio_(max_partition_ratio), min_partition_size_(min_partition_size) {
+    LireMaintenance(std::shared_ptr<PartitionManager> partition_manager, int target_partition_size, float max_partition_ratio, int min_partition_size) : target_partition_size_(target_partition_size), max_partition_ratio_(max_partition_ratio), min_partition_size_(min_partition_size) {
         maintenance_policy_name_ = "lire";
-        index_ = index;
+        partition_manager_ = partition_manager;
         refinement_iterations_ = 0;
     }
 
     void refine_split(Tensor partition_ids, Tensor old_centroids) override;
 
-    std::pair<Tensor, Tensor> check_and_delete_partitions() override;
+    Tensor check_and_delete_partitions() override;
 
     std::tuple<Tensor, Tensor, Tensor> check_and_split_partitions() override;
 };
@@ -116,9 +116,9 @@ public:
     int k_small_;
     bool modify_centroids_;
 
-    DeDriftMaintenance(std::shared_ptr<DynamicIVF_C> index, int k_large, int k_small, bool modify_centroids) : k_large_(k_large), k_small_(k_small), modify_centroids_(modify_centroids) {
+    DeDriftMaintenance(std::shared_ptr<PartitionManager> partition_manager, int k_large, int k_small, bool modify_centroids) : k_large_(k_large), k_small_(k_small), modify_centroids_(modify_centroids) {
         maintenance_policy_name_ = "dedrift";
-        index_ = index;
+        partition_manager_ = partition_manager;
     }
 
     MaintenanceTimingInfo maintenance() override;

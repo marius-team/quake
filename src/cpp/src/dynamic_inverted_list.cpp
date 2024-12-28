@@ -1,6 +1,8 @@
 // dynamic_inverted_list.cpp
 
 #include "dynamic_inverted_list.h"
+#include <iostream>
+#include <fstream>
 
 namespace faiss {
 
@@ -39,6 +41,7 @@ DynamicInvertedLists *convert_from_array_invlists(ArrayInvertedLists *invlists) 
 
 DynamicInvertedLists::DynamicInvertedLists(size_t nlist, size_t code_size, bool use_map_for_ids)
     : InvertedLists(nlist, code_size) {
+    d_ = code_size;
     // Initialize empty partitions
     for (size_t i = 0; i < nlist; i++) {
         IndexPartition ip;
@@ -227,9 +230,6 @@ void DynamicInvertedLists::batch_update_entries(
     }
 
     // If needed, remove them from old_vector_partition
-    // The problem statement doesn't show how they are originally removed from old_partition,
-    // but presumably we should remove them. If old_partition no longer exists or if these
-    // vectors are logically moved, remove them from old_vector_partition:
     auto old_it = partitions_.find(old_vector_partition);
     if (old_it != partitions_.end()) {
         IndexPartition &old_part = old_it->second;
@@ -312,6 +312,200 @@ void DynamicInvertedLists::reset() {
 void DynamicInvertedLists::resize(size_t nlist, size_t code_size) {
     // Not strictly needed because we use a map. But if required,
     // we can add or remove partitions. For now, do nothing.
+}
+
+void DynamicInvertedLists::save(const string &filename) {
+  /**
+   * 1) Serialization Format:
+   *    - 32-byte header:
+   *        [ magic(4) | version(4) | nlist(8) | code_size(8) | num_partitions(8) ]
+   *    - Offsets array (num_partitions + 1) of uint64_t
+   *    - Partition ID array (num_partitions) of uint64_t
+   *    - Concatenated chunks:
+   *        For each partition i:
+   *          [ codes (num_vectors * code_size) | ids (num_vectors * sizeof(idx_t)) ]
+   *      Each chunk starts at offsets[i] (relative to start of chunks), ends at offsets[i+1].
+   *
+   * 2) Serialization Logic:
+   *    - Gather partition IDs in a chosen order
+   *    - Build offsets array by writing each partition’s codes/IDs
+   *    - Write header
+   *    - Write offsets array
+   *    - Write partition ID array
+   *    - Write partition chunks
+   */
+  std::ofstream ofs(filename, std::ios::binary);
+  if (!ofs.is_open()) {
+    throw std::runtime_error("Could not open file for writing: " + std::string(filename));
+  }
+
+  // Write header
+  ofs.write(reinterpret_cast<const char*>(&SerializationMagicNumber),   sizeof(SerializationMagicNumber));
+  ofs.write(reinterpret_cast<const char*>(&SerializationVersion), sizeof(SerializationVersion));
+
+  uint64_t nlist_64       = static_cast<uint64_t>(nlist);
+  uint64_t code_size_64   = static_cast<uint64_t>(code_size);
+  uint64_t num_partitions = static_cast<uint64_t>(partitions_.size());
+
+  ofs.write(reinterpret_cast<const char*>(&nlist_64),       sizeof(nlist_64));
+  ofs.write(reinterpret_cast<const char*>(&code_size_64),   sizeof(code_size_64));
+  ofs.write(reinterpret_cast<const char*>(&num_partitions), sizeof(num_partitions));
+
+  // Gather partition IDs
+  std::vector<size_t> part_ids;
+  part_ids.reserve(partitions_.size());
+  for (auto& kv : partitions_) {
+    part_ids.push_back(kv.first);
+  }
+  // (Optional) sort(part_ids.begin(), part_ids.end());
+
+  // Prepare offsets
+  std::vector<uint64_t> offsets(num_partitions + 1, 0ULL);
+  uint64_t offset_table_bytes  = (num_partitions + 1) * sizeof(uint64_t);
+  uint64_t partition_ids_bytes = num_partitions * sizeof(uint64_t);
+  uint64_t start_of_chunks = 32 + offset_table_bytes + partition_ids_bytes;
+
+  // Move file pointer to where chunks begin
+  ofs.seekp(start_of_chunks, std::ios::beg);
+
+  uint64_t current_offset = 0;
+  for (size_t i = 0; i < num_partitions; i++) {
+    offsets[i] = current_offset;
+    const IndexPartition& part = partitions_.at(part_ids[i]);
+
+    size_t nv = static_cast<size_t>(part.num_vectors_);
+    size_t csize = nv * static_cast<size_t>(part.code_size_);
+    size_t isize = nv * sizeof(idx_t);
+
+    ofs.write(reinterpret_cast<const char*>(part.codes_), csize);
+    ofs.write(reinterpret_cast<const char*>(part.ids_),   isize);
+
+    current_offset += (csize + isize);
+  }
+  offsets[num_partitions] = current_offset;
+
+  // Go back and write offsets array, then partition ID array
+  ofs.seekp(32, std::ios::beg);
+  ofs.write(reinterpret_cast<const char*>(offsets.data()),
+            offsets.size() * sizeof(uint64_t));
+
+  for (size_t i = 0; i < num_partitions; i++) {
+    uint64_t pid_64 = static_cast<uint64_t>(part_ids[i]);
+    ofs.write(reinterpret_cast<const char*>(&pid_64), sizeof(pid_64));
+  }
+
+  ofs.close();
+}
+
+void DynamicInvertedLists::load(const string &filename) {
+  /**
+   * Deserialization Logic:
+   *  - Read header (magic, version, nlist, code_size, num_partitions)
+   *  - Read offsets array (num_partitions+1)
+   *  - Read partition ID array (num_partitions)
+   *  - For each partition i:
+   *      chunk_size = offsets[i+1] - offsets[i]
+   *      num_vectors = chunk_size / (code_size + sizeof(idx_t))
+   *      Seek to start_of_chunks + offsets[i]
+   *      Read codes (num_vectors*code_size)
+   *      Read ids   (num_vectors*sizeof(idx_t))
+   *      Construct IndexPartition and store in partitions_[pid].
+   */
+  reset();
+  std::ifstream ifs(filename, std::ios::binary);
+  if (!ifs.is_open()) {
+    throw std::runtime_error("Could not open file for reading: " + std::string(filename));
+  }
+
+  // Read header
+  uint32_t file_magic = 0;
+  uint32_t file_version = 0;
+  ifs.read(reinterpret_cast<char*>(&file_magic), sizeof(file_magic));
+  ifs.read(reinterpret_cast<char*>(&file_version), sizeof(file_version));
+
+  if (file_magic != SerializationMagicNumber) {
+    throw std::runtime_error("Invalid file format (bad magic number).");
+  }
+  if (file_version != SerializationVersion) {
+    throw std::runtime_error("Unsupported file version: " + std::to_string(file_version));
+  }
+
+  uint64_t nlist_64, code_size_64, num_partitions;
+  ifs.read(reinterpret_cast<char*>(&nlist_64),       sizeof(nlist_64));
+  ifs.read(reinterpret_cast<char*>(&code_size_64),   sizeof(code_size_64));
+  ifs.read(reinterpret_cast<char*>(&num_partitions), sizeof(num_partitions));
+
+  nlist     = static_cast<size_t>(nlist_64);
+  code_size = static_cast<size_t>(code_size_64);
+
+  // Read offsets
+  std::vector<uint64_t> offsets(num_partitions + 1);
+  ifs.read(reinterpret_cast<char*>(offsets.data()),
+            offsets.size() * sizeof(uint64_t));
+
+  // Read partition IDs
+  std::vector<uint64_t> pid_array(num_partitions);
+  ifs.read(reinterpret_cast<char*>(pid_array.data()),
+            pid_array.size() * sizeof(uint64_t));
+
+  // Calculate where chunks begin
+  uint64_t offset_table_bytes  = (num_partitions + 1) * sizeof(uint64_t);
+  uint64_t partition_ids_bytes = num_partitions * sizeof(uint64_t);
+  uint64_t start_of_chunks = 32 + offset_table_bytes + partition_ids_bytes;
+
+  // Read each partition chunk
+  for (uint64_t i = 0; i < num_partitions; i++) {
+    size_t pid = static_cast<size_t>(pid_array[i]);
+
+    uint64_t chunk_start = offsets[i];
+    uint64_t chunk_end   = offsets[i + 1];
+    uint64_t chunk_size  = chunk_end - chunk_start;
+
+    uint64_t record_size = static_cast<uint64_t>(code_size) + sizeof(idx_t);
+    if (chunk_size % record_size != 0) {
+      throw std::runtime_error("Partition chunk size not divisible by (code_size+sizeof(idx_t))");
+    }
+    uint64_t nv64 = chunk_size / record_size;
+
+    ifs.seekg(start_of_chunks + chunk_start, std::ios::beg);
+
+    IndexPartition part;
+    part.code_size_   = static_cast<int64_t>(code_size);
+    part.num_vectors_ = static_cast<int64_t>(nv64);
+    part.buffer_size_ = static_cast<int64_t>(nv64);
+
+    size_t csize = static_cast<size_t>(nv64) * code_size;
+    size_t isize = static_cast<size_t>(nv64) * sizeof(idx_t);
+
+    part.codes_ = new uint8_t[csize];
+    ifs.read(reinterpret_cast<char*>(part.codes_), csize);
+
+    part.ids_ = new idx_t[nv64];
+    ifs.read(reinterpret_cast<char*>(part.ids_), isize);
+
+    partitions_[pid] = std::move(part);
+  }
+
+  // Update curr_list_id_
+  size_t max_list_id = 0;
+  for (auto& kv : partitions_) {
+    max_list_id = std::max(max_list_id, kv.first);
+  }
+  curr_list_id_ = max_list_id + 1;
+
+  ifs.close();
+}
+
+Tensor DynamicInvertedLists::get_partition_ids() {
+    // Return a 1D tensor of partition IDs
+    Tensor result = torch::empty({(int64_t) partitions_.size()}, torch::kInt64);
+    auto result_accessor = result.accessor<int64_t, 1>();
+    size_t i = 0;
+    for (auto &kv : partitions_) {
+        result_accessor[i] = static_cast<int64_t>(kv.first);
+        i++;
+    }
+    return result;
 }
 
 #ifdef QUAKE_USE_NUMA

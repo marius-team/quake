@@ -159,11 +159,11 @@ IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
     message("Using thread sanitizer")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
     set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=thread")
-ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
+ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
 
 IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
     message("Using address sanitizer")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=leak")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
     set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=address -fsanitize=leak")
 ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
 
