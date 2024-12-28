@@ -8,18 +8,38 @@
 #define QUERY_COORDINATOR_H
 
 #include <common.h>
+#include <list_scanning.h>
+#include <blockingconcurrentqueue.h>
 
 class QuakeIndex;
 class PartitionManager;
+
+struct ScanJob {
+    int64_t query_id;
+    int64_t partition_id;
+    int k;
+    const float* query_vector; // Pointer to the query vector
+};
 
 class QueryCoordinator {
 public:
     shared_ptr<PartitionManager> partition_manager_;
     shared_ptr<QuakeIndex> parent_;
     MetricType metric_;
-    bool workers_initialized_ = false;
 
-    QueryCoordinator(shared_ptr<QuakeIndex> parent, shared_ptr<PartitionManager> partition_manager, MetricType metric);
+    vector<std::thread> worker_threads_;
+    int num_workers_;
+    bool workers_initialized_ = false;
+    std::vector<moodycamel::BlockingConcurrentQueue<int>> jobs_queue_;
+
+    // Top-K Buffers
+    vector<shared_ptr<TopkBuffer>> query_topk_buffers_;
+
+    // Synchronization
+    std::mutex result_mutex_;
+    std::atomic<bool> stop_workers_;
+
+    QueryCoordinator(shared_ptr<QuakeIndex> parent, shared_ptr<PartitionManager> partition_manager, MetricType metric, int num_workers=0);
 
     ~QueryCoordinator();
 
@@ -27,13 +47,18 @@ public:
 
     shared_ptr<SearchResult> scan_partitions(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
 
-    void partition_scan_worker_fn();
-
     shared_ptr<SearchResult> serial_scan(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
+
+    shared_ptr<SearchResult> batched_serial_scan(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
+
+    void initialize_workers(int num_workers);
+
+    void shutdown_workers();
+
+    void partition_scan_worker_fn(int worker_id);
 
     shared_ptr<SearchResult> worker_scan(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
 
-    shared_ptr<SearchResult> batched_serial_scan(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
 
     };
 

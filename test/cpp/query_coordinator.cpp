@@ -137,3 +137,23 @@ TEST_F(QueryCoordinatorTest, NullPartitionManagerThrows) {
                  coordinator->search(queries_, search_params);
                  }, std::runtime_error);
 }
+
+TEST_F(QueryCoordinatorTest, WorkerInitializationTest) {
+    auto coordinator = std::make_shared<QueryCoordinator>(
+        index_->parent_,
+        index_->partition_manager_,
+        faiss::METRIC_L2
+    );
+
+    // check that the workers are not initialized
+    ASSERT_FALSE(coordinator->workers_initialized_);
+
+    coordinator = std::make_shared<QueryCoordinator>(
+        index_->parent_,
+        index_->partition_manager_,
+        faiss::METRIC_L2,
+        4 /* num_workers */
+    );
+
+    ASSERT_TRUE(coordinator->workers_initialized_);
+}

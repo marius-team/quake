@@ -7,3 +7,6 @@
 [submodule "src/cpp/third_party/pybind11"]
 	path = src/cpp/third_party/pybind11
 	url = https://github.com/pybind/pybind11.git
+[submodule "src/cpp/third_party/concurrentqueue"]
+	path = src/cpp/third_party/concurrentqueue
+	url = https://github.com/cameron314/concurrentqueue.git
