@@ -74,8 +74,10 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         partition_manager_->init_partitions(parent_, clustering);
     }
 
+
+
     // create query coordinator
-    query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, metric_);
+    query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, metric_, build_params_->num_workers);
 
     return timing_info;
 }

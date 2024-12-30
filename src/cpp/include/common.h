@@ -97,21 +97,19 @@ struct IndexBuildParams {
     // Basic configuration
     int dimension = 0;          // e.g. d_
     int nlist = 0;              // number of clusters
-    int num_workers = 1;        // concurrency
+    int num_workers = 0;        // concurrency (0 means main thread processes queries)
     int code_size = -1;         // e.g. for product quantization
     int num_codebooks = -1;     // e.g. for product quantization
     faiss::MetricType metric = faiss::METRIC_L2; // distance metric
     int niter = 5;              // number of kmeans iterations
 
+    bool use_adaptive_nprobe = false;
     bool use_numa = false;
     bool verify_numa = false;
     bool same_core = true;
     bool verbose = false;
 
-    // Multi-level indexing or advanced features
-    bool use_centroid_workers = true;
-    bool use_adaptive_nprobe = false;
-    bool use_refine = false;
+    shared_ptr<IndexBuildParams> parent_params = nullptr;
 
     IndexBuildParams() = default;
 };

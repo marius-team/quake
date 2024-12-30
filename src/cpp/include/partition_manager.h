@@ -88,6 +88,18 @@ public:
      */
     shared_ptr<Clustering> select_partitions(const Tensor &partition_ids, bool copy = false);
 
+   /**
+    * @brief Randomly breaks up the single partition into multiple partitions and distributes the partitions. Only applicable for flat indexes.
+    * @param n_partitions The number of partitions to split the single partition into.
+    */
+    void distribute_flat(int n_partitions);
+
+    /**
+     * @brief Distribute the partitions across multiple workers.
+     * @param num_workers The number of workers to distribute the partitions across.
+     */
+    void distribute_partitions(int num_workers);
+
     /**
      * @brief Return total number of vectors across all partitions.
      */

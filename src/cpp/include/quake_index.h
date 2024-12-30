@@ -28,7 +28,7 @@ public:
 
     ~QuakeIndex();
 
-    shared_ptr<BuildTimingInfo> build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params = nullptr);
+    shared_ptr<BuildTimingInfo> build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params);
 
     shared_ptr<SearchResult> search(Tensor x, shared_ptr<SearchParams> search_params);
 

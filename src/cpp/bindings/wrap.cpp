@@ -137,7 +137,6 @@ PYBIND11_MODULE(_bindings, m) {
             .def_readwrite("verbose", &IndexBuildParams::verbose)
             .def_readwrite("verify_numa", &IndexBuildParams::verify_numa)
             .def_readwrite("same_core", &IndexBuildParams::same_core)
-            .def_readwrite("use_centroid_workers", &IndexBuildParams::use_centroid_workers)
             .def_readwrite("use_adaptive_nprobe", &IndexBuildParams::use_adaptive_nprobe);
 
     class_<SearchParams, shared_ptr<SearchParams> >(m, "SearchParams")

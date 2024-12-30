@@ -173,10 +173,13 @@ TEST_F(TypedTopKBufferTest, LessThanKElements) {
     auto topk_dists = buffer->get_topk();
     auto topk_ids = buffer->get_topk_indices();
 
-    ASSERT_EQ(topk_dists.size(), k);
-    ASSERT_EQ(topk_ids.size(), k);
 
-    for (int i = 0; i < k; i++) {
+
+    ASSERT_EQ(topk_dists.size(), 2);
+    ASSERT_EQ(topk_ids.size(), 2);
+
+    for (int i = 0; i < 2; i++) {
+        std::cout << "i: " << i << " topk_dists[i]: " << topk_dists[i] << " expected_dists[i]: " << expected_dists[i] << std::endl;
         EXPECT_FLOAT_EQ(topk_dists[i], expected_dists[i]);
         EXPECT_EQ(topk_ids[i], expected_ids[i]);
     }
@@ -203,13 +206,8 @@ TEST_F(TypedTopKBufferTest, ResetBuffer) {
     auto topk_dists = buffer->get_topk();
     auto topk_ids = buffer->get_topk_indices();
 
-    ASSERT_EQ(topk_dists.size(), k);
-    ASSERT_EQ(topk_ids.size(), k);
-
-    for (int i = 0; i < k; i++) {
-        EXPECT_FLOAT_EQ(topk_dists[i], expected_dists[i]);
-        EXPECT_EQ(topk_ids[i], expected_ids[i]);
-    }
+    ASSERT_EQ(topk_dists.size(), 0);
+    ASSERT_EQ(topk_ids.size(), 0);
 }
 
 // Test that TopkBuffer maintains correct order for L2

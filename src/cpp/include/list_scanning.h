@@ -189,6 +189,15 @@ public:
                                   [](const auto &a, const auto &b) { return a.first < b.first; });
             }
             curr_offset_ = k_; // After flush, retain only the top-k elements
+        } else {
+            // sort the curr_offset_ elements
+            if (is_descending_) {
+                std::sort(topk_.begin(), topk_.begin() + curr_offset_,
+                          [](const auto &a, const auto &b) { return a.first > b.first; });
+            } else {
+                std::sort(topk_.begin(), topk_.begin() + curr_offset_,
+                          [](const auto &a, const auto &b) { return a.first < b.first; });
+            }
         }
         return topk_[std::min(curr_offset_, k_ - 1)].first;
     }
@@ -233,13 +242,16 @@ inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer
     Tensor topk_distances = torch::empty({n, k}, torch::kFloat32);
     Tensor topk_indices = torch::empty({n, k}, torch::kInt64);
 
+    auto topk_distances_accessor = topk_distances.accessor<float, 2>();
+    auto topk_indices_accessor = topk_indices.accessor<int64_t, 2>();
+
     for (int i = 0; i < n; i++) {
         vector<float> distances = buffers[i]->get_topk();
         vector<int64_t> indices = buffers[i]->get_topk_indices();
 
         for (int j = 0; j < k; j++) {
-            topk_distances[i][j] = distances[j];
-            topk_indices[i][j] = indices[j];
+            topk_distances_accessor[i][j] = distances[j];
+            topk_indices_accessor[i][j] = indices[j];
         }
     }
 

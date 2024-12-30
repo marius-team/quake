@@ -44,9 +44,7 @@ void PartitionManager::init_partitions(
     }
 
     // if parent is null make sure there is only a single partition
-    if (!parent_ && nlist != 1) {
-        throw runtime_error("[PartitionManager] init_partitions: parent_ is null, so nlist must be 1.");
-    } else if (parent_ && nlist != parent_->ntotal()) {
+    if (parent_ && nlist != parent_->ntotal()) {
         throw runtime_error(
             "[PartitionManager] init_partitions: parent's ntotal does not match partition_ids.size(0).");
     }
@@ -73,12 +71,18 @@ void PartitionManager::init_partitions(
 
         // Insert them
         size_t count = v.size(0);
-        partitions_->add_entries(
-            partition_ids_accessor[i],
-            count,
-            id.data_ptr<int64_t>(),
-            as_uint8_ptr(v)
-        );
+
+        if (count == 0) {
+            // nothing to add
+            continue;
+        } else {
+            partitions_->add_entries(
+                partition_ids_accessor[i],
+                count,
+                id.data_ptr<int64_t>(),
+                as_uint8_ptr(v)
+            );
+        }
     }
 
     std::cout << "[PartitionManager] init_partitions: Created " << nlist
@@ -321,6 +325,63 @@ void PartitionManager::delete_partitions(const Tensor &partition_ids, bool reass
     }
 }
 
+void PartitionManager::distribute_flat(int n_partitions) {
+    if (parent_ != nullptr) {
+        throw std::runtime_error("Index is not flat");
+    } else {
+        auto codes = (float *) partitions_->get_codes(0);
+        auto ids = (int64_t *) partitions_->get_ids(0);
+        int64_t ntotal = partitions_->list_size(0);
+        Tensor vectors = torch::from_blob(codes, {ntotal, d()}, torch::kFloat32);
+        Tensor vector_ids = torch::from_blob(ids, {ntotal}, torch::kInt64);
+
+        // randomly assign vectors to new partitions
+        Tensor partition_assignments = torch::randint(n_partitions, {vectors.size(0)}, torch::kInt64);
+
+        Tensor partition_ids = torch::arange(n_partitions, torch::kInt64);
+        Tensor centroids = torch::empty({n_partitions, d()}, torch::kFloat32);
+        vector<Tensor> new_vectors(n_partitions);
+        vector<Tensor> new_ids(n_partitions);
+
+        for (int i = 0; i < n_partitions; i++) {
+            Tensor ids = torch::nonzero(partition_assignments == i).squeeze(1);
+            new_vectors[i] = vectors.index_select(0, ids);
+            new_ids[i] = vector_ids.index_select(0, ids);
+            centroids[i] = new_vectors[i].mean(0);
+        }
+
+        shared_ptr<Clustering> new_partitions = std::make_shared<Clustering>();
+        new_partitions->centroids = centroids;
+        new_partitions->partition_ids = partition_ids;
+        new_partitions->vectors = new_vectors;
+        new_partitions->vector_ids = new_ids;
+
+        init_partitions(nullptr, new_partitions);
+    }
+}
+
+void PartitionManager::distribute_partitions(int num_workers) {
+    if (parent_ == nullptr) {
+        throw std::runtime_error("Index is not partitioned");
+    } else {
+        // TODO: Implement distribute_partitions
+    }
+}
+
+
+//
+// /**
+//  * @brief Randomly breaks up the single partition into multiple partitions and distributes the partitions. Only applicable for flat indexes.
+//  * @param n_partitions The number of partitions to split the single partition into.
+//  */
+// void distribute_flat(int n_partitions);
+//
+// /**
+//  * @brief Distribute the partitions across multiple workers.
+//  * @param num_workers The number of workers to distribute the partitions across.
+//  */
+// void distribute_partitions(int num_workers);
+
 int64_t PartitionManager::ntotal() const {
     if (!partitions_) {
         return 0;
@@ -340,7 +401,7 @@ int PartitionManager::d() const {
     if (!partitions_) {
         return 0;
     }
-    return partitions_->d_;
+    return partitions_->d_ / sizeof(float);
 }
 
 Tensor PartitionManager::get_partition_ids() {

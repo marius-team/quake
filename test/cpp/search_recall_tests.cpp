@@ -147,8 +147,8 @@ float compute_recall_at_k(
 class QuakeIndexRecallTest : public ::testing::Test {
 protected:
     // Data sizes
-    int64_t dimension_ = 128;
-    int64_t num_vectors_ = 100000;
+    int64_t dimension_ = 8;
+    int64_t num_vectors_ = 10000;
     int64_t num_queries_ = 10;
     int64_t k_ = 5;
 

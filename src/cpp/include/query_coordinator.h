@@ -15,10 +15,13 @@ class QuakeIndex;
 class PartitionManager;
 
 struct ScanJob {
-    int64_t query_id;
     int64_t partition_id;
     int k;
     const float* query_vector; // Pointer to the query vector
+    vector<int64_t> query_ids;
+
+    bool is_batched = false;   // false = single-query job, true = multi-query job
+    int64_t num_queries = 0;   // number of queries in batched mode
 };
 
 class QueryCoordinator {
@@ -30,7 +33,8 @@ public:
     vector<std::thread> worker_threads_;
     int num_workers_;
     bool workers_initialized_ = false;
-    std::vector<moodycamel::BlockingConcurrentQueue<int>> jobs_queue_;
+    vector<moodycamel::BlockingConcurrentQueue<int>> jobs_queue_;
+    std::unordered_map<int, ScanJob> jobs_;;
 
     // Top-K Buffers
     vector<shared_ptr<TopkBuffer>> query_topk_buffers_;
@@ -58,7 +62,6 @@ public:
     void partition_scan_worker_fn(int worker_id);
 
     shared_ptr<SearchResult> worker_scan(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
-
 
     };
 

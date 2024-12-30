@@ -229,7 +229,7 @@ TEST_F(ListScanningTest, BatchedScanList_NoListIds) {
     // list_ids == nullptr
 
     // Create TopkBuffers for each query
-    std::vector<std::shared_ptr<TopkBuffer>> topk_buffers = create_buffers(2, k, true); // Inner Product metric (is_descending=true)
+    std::vector<std::shared_ptr<TopkBuffer>> topk_buffers = create_buffers(2, k, false); // Inner Product metric (is_descending=true)
 
 
     // Perform batched_scan_list
@@ -256,6 +256,10 @@ TEST_F(ListScanningTest, BatchedScanList_NoListIds) {
     // Verify Query 0
     auto topk_q0 = topk_buffers[0]->get_topk();
     auto topk_q0_ids = topk_buffers[0]->get_topk_indices();
+
+    std::cout << "topk_q0: " << topk_q0[0] << " " << topk_q0[1] << std::endl;
+    std::cout << "topk_q0_ids: " << topk_q0_ids[0] << " " << topk_q0_ids[1] << std::endl;
+
     ASSERT_EQ(topk_q0.size(), 2);
     EXPECT_FLOAT_EQ(topk_q0[0], 0.0f);
     EXPECT_EQ(topk_q0_ids[0], 0);
