@@ -478,7 +478,6 @@ inline Tensor estimate_overlap(const Tensor &new_centroid, const Tensor &old_cen
 
     // for each neighbor, compute the hyperspherical cap volume, where the radius of the sphere is the distance to new boundary
     // and the old boundary distance gives the height of the cap
-
     float mean_new_boundary_distance = 0.0f;
     float mean_old_boundary_distance = 0.0f;
     for (int j = 0; j < nbr_centroids.size(0); j++) {

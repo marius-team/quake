@@ -74,8 +74,6 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         partition_manager_->init_partitions(parent_, clustering);
     }
 
-
-
     // create query coordinator
     query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, metric_, build_params_->num_workers);
 
@@ -131,6 +129,19 @@ shared_ptr<ModifyTimingInfo> QuakeIndex::remove(Tensor ids) {
     modify_info->modify_time_us =
         std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
     return modify_info;
+}
+
+void QuakeIndex::initialize_maintenance_policy(shared_ptr<MaintenancePolicyParams> maintenance_policy_params) {
+    maintenance_policy_params_ = maintenance_policy_params;
+    maintenance_policy_ = make_shared<QueryCostMaintenance>(partition_manager_, maintenance_policy_params);
+}
+
+shared_ptr<MaintenanceTimingInfo> QuakeIndex::maintenance() {
+    if (!maintenance_policy_) {
+        throw std::runtime_error("[QuakeIndex::maintenance()] No maintenance policy set.");
+    }
+
+    return maintenance_policy_->maintenance();
 }
 
 

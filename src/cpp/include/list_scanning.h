@@ -9,7 +9,8 @@
 
 #include <common.h>
 #include "simsimd/simsimd.h"
-#include "cblas.h"
+#include "faiss/utils/Heap.h"
+#include "faiss/utils/distances.h"
 
 inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     Tensor num_correct = torch::zeros(ids.size(0), torch::kInt64);
@@ -319,7 +320,7 @@ inline void batched_scan_list(const float *query_vecs,
                               int dim,
                               vector<shared_ptr<TopkBuffer>> &topk_buffers,
                               MetricType metric = faiss::METRIC_L2,
-                              int batch_size = 1024) {
+                              int batch_size = 1024 * 32) {
     // Determine if larger values are better based on the metric
     bool largest = (metric == faiss::METRIC_INNER_PRODUCT);
 
@@ -334,8 +335,8 @@ inline void batched_scan_list(const float *query_vecs,
     int k_max = std::min(k, list_size);
 
     // Create tensors from raw pointers
-    Tensor query_tensor = torch::from_blob((void *) query_vecs, {num_queries, dim}, torch::kFloat32); // Clone to ensure memory safety
-    Tensor list_tensor = torch::from_blob((void *) list_vecs, {list_size, dim}, torch::kFloat32);// Clone to ensure memory safety
+    Tensor query_tensor = torch::from_blob((void *) query_vecs, {num_queries, dim}, torch::kFloat32);
+    Tensor list_tensor = torch::from_blob((void *) list_vecs, {list_size, dim}, torch::kFloat32);
 
     // Determine batching strategy
     if (num_queries >= list_size && list_size > 0) {

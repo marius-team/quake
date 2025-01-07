@@ -19,7 +19,7 @@ class QuakeIndex;
  *  - Initialize partition structures (e.g., create nlist partitions).
  *  - Add vectors into appropriate partitions (assign & add).
  *  - Remove or reassign vectors from partitions.
- *  - Handle merges/splits if needed.
+ *  - Handle merges/splits.
  */
 class PartitionManager {
 public:

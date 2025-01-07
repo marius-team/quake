@@ -90,6 +90,9 @@ void QueryCoordinator::shutdown_workers() {
 
 // Worker Thread Function
 void QueryCoordinator::partition_scan_worker_fn(int worker_id) {
+
+    shared_ptr<TopkBuffer> local_topk_buffer;
+
     while (true) {
         int job_id;
         jobs_queue_[worker_id].wait_dequeue(job_id);
@@ -122,8 +125,12 @@ void QueryCoordinator::partition_scan_worker_fn(int worker_id) {
                 throw std::runtime_error("[QueryCoordinator::partition_scan_worker_fn] query_vector is null.");
             }
 
-            // local top-K for single query
-            auto local_topk_buffer = std::make_shared<TopkBuffer>(job.k, metric_ == faiss::METRIC_INNER_PRODUCT);
+            if (local_topk_buffer == nullptr) {
+                local_topk_buffer = std::make_shared<TopkBuffer>(job.k, metric_ == faiss::METRIC_INNER_PRODUCT);
+            } else {
+                local_topk_buffer->set_k(job.k);
+                local_topk_buffer->reset();
+            }
 
             // Perform the usual scan
             scan_list(query_vector,
@@ -169,18 +176,15 @@ void QueryCoordinator::partition_scan_worker_fn(int worker_id) {
                 metric_
             );
 
-            // Merge local buffers into the global “batched” topk
-            // in this example, we reuse the same query_topk_buffers_
-            // but interpret the “query_id” to be each query index
             {
                 std::lock_guard<std::mutex> lock(result_mutex_);
                 for (int64_t q = 0; q < job.num_queries; q++) {
                     int64_t query_id = job.query_ids[q];
                     if (query_topk_buffers_[query_id]) {
                         query_topk_buffers_[query_id]->batch_add(
-                            local_buffers[query_id]->get_topk().data(),
-                            local_buffers[query_id]->get_topk_indices().data(),
-                            local_buffers[query_id]->curr_offset_
+                            local_buffers[q]->get_topk().data(),
+                            local_buffers[q]->get_topk_indices().data(),
+                            local_buffers[q]->curr_offset_
                         );
                     }
                 }
@@ -344,7 +348,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 break; // all jobs done
             }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
 
     // ============================

@@ -13,6 +13,14 @@
 
 class PartitionManager;
 
+struct PartitionState {
+    vector<int64_t> partition_ids;
+    vector<int64_t> partition_sizes;
+    vector<float> partition_hit_rate;
+    float current_scan_fraction;
+    float alpha_estimate;
+};
+
 class MaintenancePolicy {
 public:
     int curr_query_id_;
@@ -28,6 +36,8 @@ public:
     std::unordered_map<int64_t, std::pair<int64_t, int64_t>> split_records_;
 
     std::unordered_map<int64_t, float> deleted_partition_hit_rate_;
+
+    std::unordered_set<int64_t> modified_partitions_;
 
     // parameters
     int window_size_ = 2500;
@@ -50,17 +60,23 @@ public:
 
     vector<std::tuple<int64_t, int64_t, int64_t, int64_t, int64_t, int64_t>> get_split_history();
 
-    void set_params(MaintenancePolicyParams params);
+    shared_ptr<PartitionState> get_partition_state(bool only_modified = true);
+
+    void set_partition_modified(int64_t partition_id);
+
+    void set_partition_unmodified(int64_t partition_id);
+
+    vector<float> estimate_split_delta(shared_ptr<PartitionState> state);
+
+    vector<float> estimate_delete_delta(shared_ptr<PartitionState> state);
+
+    float estimate_add_level_delta();
+
+    float estimate_remove_level_delta();
 
     void decrement_hit_count(int64_t partition_id);
 
-    void update_hits(vector<int64_t> hits);
-
-    void add_split(int64_t old_partition_id, int64_t left_partition_id, int64_t right_partition_id);
-
-    void add_partition(int64_t partition_id, int64_t hits=0);
-
-    void remove_partition(int64_t partition_id);
+    void increment_hit_count(vector<int64_t> hit_partition_ids);
 
     void refine_partitions(Tensor partition_ids, int refinement_iterations);
 
@@ -72,12 +88,18 @@ public:
 
     virtual std::tuple<Tensor, Tensor, Tensor> check_and_split_partitions() { return {}; }
 
-    virtual MaintenanceTimingInfo maintenance();
+    virtual shared_ptr<MaintenanceTimingInfo> maintenance();
+
+    void add_split(int64_t old_partition_id, int64_t left_partition_id, int64_t right_partition_id);
+
+    void add_partition(int64_t partition_id, int64_t hits);
+
+    void remove_partition(int64_t partition_id);
 };
 
 class QueryCostMaintenance : public MaintenancePolicy {
 public:
-    QueryCostMaintenance(std::shared_ptr<PartitionManager> partition_manager, MaintenancePolicyParams params = MaintenancePolicyParams());
+    QueryCostMaintenance(std::shared_ptr<PartitionManager> partition_manager, shared_ptr<MaintenancePolicyParams> params = nullptr);
 
     float compute_alpha_for_window();
 
@@ -121,7 +143,7 @@ public:
         partition_manager_ = partition_manager;
     }
 
-    MaintenanceTimingInfo maintenance() override;
+    shared_ptr<MaintenanceTimingInfo> maintenance() override;
 };
 
 

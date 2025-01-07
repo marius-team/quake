@@ -164,9 +164,6 @@ void PartitionManager::add(
 }
 
 void PartitionManager::remove(const Tensor &ids) {
-    if (!parent_) {
-        throw runtime_error("[PartitionManager] remove: parent_ is null.");
-    }
     if (!partitions_) {
         throw runtime_error("[PartitionManager] remove: partitions_ is null.");
     }
@@ -193,7 +190,6 @@ Tensor PartitionManager::get(const Tensor &ids) {
 
     return vectors;
 }
-
 
 shared_ptr<Clustering> PartitionManager::select_partitions(const Tensor &select_ids, bool copy) {
     Tensor centroids = parent_->get(select_ids);

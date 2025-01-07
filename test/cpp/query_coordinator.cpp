@@ -11,6 +11,7 @@
 #include "query_coordinator.h"
 #include "partition_manager.h"
 #include "quake_index.h"
+#include "faiss/IndexFlat.h"
 
 // Test fixture
 class QueryCoordinatorTest : public ::testing::Test {
@@ -480,6 +481,117 @@ TEST_F(QueryCoordinatorTest, WorkerScanZeroPartitionsTest) {
             } else {
                 ASSERT_EQ(dist, std::numeric_limits<float>::infinity()) << "Expected infinity distance for query " << q << ", rank " << i;
             }
+        }
+    }
+}
+
+class WorkerTest : public ::testing::Test {
+protected:
+    int64_t dimension_ = 128;
+    int64_t total_vectors_ = 1000 * 1000;
+    int64_t num_queries_ = 100;
+    Tensor queries_;
+    Tensor vectors_;
+    Tensor ids_;
+
+    void SetUp() override {
+
+        // Create dummy vectors and IDs
+        vectors_ = torch::randn({total_vectors_, dimension_}, torch::kFloat32);
+        ids_ = torch::arange(0, total_vectors_, torch::kInt64);
+        queries_ = torch::randn({num_queries_, dimension_}, torch::kCPU);
+    }
+};
+
+TEST_F(WorkerTest, FlatWorkerScan) {
+    // create flat index
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = 1;
+    build_params->metric = faiss::METRIC_L2;
+
+    auto search_params = std::make_shared<SearchParams>();
+    search_params->k = 10;
+
+    // set number of omp threads to 1
+    omp_set_num_threads(1);
+
+    vector<int64_t> num_workers = {0};
+    // vector<int64_t> num_workers = {0};
+    for (int64_t num_worker : num_workers) {
+        auto flat_index = std::make_shared<QuakeIndex>();
+        flat_index->build(vectors_, ids_, build_params);
+        // create coordinator with workers
+        auto coordinator = std::make_shared<QueryCoordinator>(
+            flat_index->parent_,
+            flat_index->partition_manager_,
+            faiss::METRIC_L2,
+            num_worker
+        );
+
+        auto start = std::chrono::high_resolution_clock::now();
+        auto result_worker = coordinator->search(queries_, search_params);
+        auto end = std::chrono::high_resolution_clock::now();
+
+        std::chrono::duration<double> elapsed_seconds = end - start;
+        std::cout << "Elapsed time with " << num_worker << " workers: " << elapsed_seconds.count() << "s" << std::endl;
+
+        ASSERT_TRUE(result_worker != nullptr);
+        ASSERT_EQ(result_worker->ids.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
+        ASSERT_EQ(result_worker->distances.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
+    }
+
+    auto faiss_flat_index = std::make_shared<faiss::IndexFlatL2>(dimension_);
+    faiss_flat_index->add(total_vectors_, vectors_.data_ptr<float>());
+
+    // search with faiss
+    auto start = std::chrono::high_resolution_clock::now();
+    Tensor distances = 10000000 * torch::ones({num_queries_, search_params->k}, torch::kFloat32);
+    Tensor indices = -torch::ones({num_queries_, search_params->k}, torch::kInt64);
+    faiss_flat_index->search(num_queries_, queries_.data_ptr<float>(), search_params->k, distances.data_ptr<float>(), indices.data_ptr<int64_t>());
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end - start;
+    std::cout << "Elapsed time with faiss: " << elapsed_seconds.count() << "s" << std::endl;
+}
+
+TEST_F(WorkerTest, IVFWorkerScan) {
+    // create flat index
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = 1000;
+    build_params->metric = faiss::METRIC_L2;
+
+    auto search_params = std::make_shared<SearchParams>();
+    search_params->k = 10;
+    search_params->nprobe = 10;
+
+    auto ivf_index = std::make_shared<QuakeIndex>();
+    ivf_index->build(vectors_, ids_, build_params);
+
+    vector<int64_t> num_workers = {0, 1, 2, 4, 8, 16, 32};
+    vector<bool> batched_scan = {true, false};
+    // vector<int64_t> num_workers = {0};
+    for (bool batch : batched_scan) {
+        for (int64_t num_worker : num_workers) {
+            // create coordinator with workers
+            auto coordinator = std::make_shared<QueryCoordinator>(
+                ivf_index->parent_,
+                ivf_index->partition_manager_,
+                faiss::METRIC_L2,
+                num_worker
+            );
+
+            search_params->batched_scan = batch;
+
+            auto start = std::chrono::high_resolution_clock::now();
+            auto result_worker = coordinator->search(queries_, search_params);
+            auto end = std::chrono::high_resolution_clock::now();
+
+            std::chrono::duration<double> elapsed_seconds = end - start;
+            // std::cout << "Elapsed time with " << num_worker << " workers: " << elapsed_seconds.count() << "s" << std::endl;
+            std::cout << "Elapsed time with " << num_worker << " workers and batched_scan = " << batch << ": " << elapsed_seconds.count() << "s" << std::endl;
+
+            ASSERT_TRUE(result_worker != nullptr);
+            ASSERT_EQ(result_worker->ids.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
+            ASSERT_EQ(result_worker->distances.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
         }
     }
 }

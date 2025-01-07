@@ -18,6 +18,7 @@ public:
     shared_ptr<QuakeIndex> parent_;
     shared_ptr<PartitionManager> partition_manager_;
     shared_ptr<QueryCoordinator> query_coordinator_;
+    shared_ptr<MaintenancePolicy> maintenance_policy_;
 
     MetricType metric_;
     shared_ptr<IndexBuildParams> build_params_;
@@ -37,6 +38,10 @@ public:
     shared_ptr<ModifyTimingInfo> add(Tensor x, Tensor ids);
 
     shared_ptr<ModifyTimingInfo> remove(Tensor ids);
+
+    void initialize_maintenance_policy(shared_ptr<MaintenancePolicyParams> maintenance_policy_params);
+
+    shared_ptr<MaintenanceTimingInfo> maintenance();
 
     void save(const std::string &path);
 

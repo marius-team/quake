@@ -150,7 +150,6 @@ TEST_F(ListScanningTest, BatchedScanList_MultipleQueries_L2) {
 }
 
 // Test batched_scan_list with multiple queries and Inner Product metric
-// Test batched_scan_list with multiple queries and Inner Product metric
 TEST_F(ListScanningTest, BatchedScanList_MultipleQueries_InnerProduct) {
     int k = 2;
     MetricType metric = faiss::METRIC_INNER_PRODUCT;
@@ -276,7 +275,6 @@ TEST_F(ListScanningTest, BatchedScanList_NoListIds) {
     EXPECT_EQ(topk_q1_ids[1], 2);
 }
 
-// Test batched_scan_list with batch_size parameter
 // Test batched_scan_list with batch_size parameter
 TEST_F(ListScanningTest, BatchedScanList_WithBatchSize) {
     int k = 1;
@@ -426,7 +424,7 @@ TEST_F(ListScanningTest, BatchedScanList_LessThanKElements) {
     ASSERT_EQ(topk_q0.size(), 2); // Only 2 elements were inserted
     EXPECT_FLOAT_EQ(topk_q0[0], 0.0f);
     EXPECT_EQ(topk_q0_ids[0], 100);
-    EXPECT_FLOAT_EQ(topk_q0[1], sqrt(3.0f));
+    EXPECT_FLOAT_EQ(topk_q0[1], sqrt(3.0));
     EXPECT_EQ(topk_q0_ids[1], 200);
 }
 
@@ -562,4 +560,41 @@ TEST_F(ListScanningTest, LargeListCorrectnessL2) {
             EXPECT_EQ(topk_ids[j], gt_ids_accessor[i][j]);
         }
     }
+}
+
+TEST_F(ListScanningTest, BatchedScanBatchSize) {
+
+    int num_queries = 1000;
+    Tensor query_vectors = torch::randn({num_queries, 128}, torch::kFloat32);
+    Tensor list_vectors = torch::randn({1000000, 128}, torch::kFloat32);
+    Tensor list_ids = torch::arange(0, 1000000, torch::kInt64);
+
+    vector<int64_t> batch_sizes = {1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576};
+
+    for (auto batch_size : batch_sizes) {
+        auto start = std::chrono::high_resolution_clock::now();
+        auto buffers = create_buffers(num_queries, 10, false);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto buffer_creation_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+        start = std::chrono::high_resolution_clock::now();
+        batched_scan_list(
+            query_vectors.data_ptr<float>(),
+            list_vectors.data_ptr<float>(),
+            list_ids.data_ptr<int64_t>(),
+            num_queries,
+            1000000,
+            128,
+            buffers,
+            faiss::METRIC_L2,
+            batch_size
+        );
+        end = std::chrono::high_resolution_clock::now();
+
+        auto batched_scan_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+        std::cout << "Batch size: " << batch_size << " Buffer creation time: " << buffer_creation_time << " Batched scan time: " << batched_scan_time << std::endl;
+
+    }
+
 }

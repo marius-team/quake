@@ -52,7 +52,7 @@ public:
     // Clear all memory and reset
     void clear();
 
-    // Optional: find the index of a given ID (linear search)
+    // Find the index of a given ID (linear search)
     int64_t find_id(idx_t id) const;
 
 #ifdef QUAKE_USE_NUMA
