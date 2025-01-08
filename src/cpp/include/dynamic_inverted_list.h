@@ -25,6 +25,7 @@ namespace faiss {
         int next_numa_node_ = 0;
         std::unordered_map<size_t, IndexPartition> partitions_;
         int d_;
+        int code_size_;
 
         /**
          * @brief Constructor for DynamicInvertedLists.
@@ -49,7 +50,7 @@ namespace faiss {
 
         void remove_entry(size_t list_no, idx_t id);
 
-        void remove_entries_from_partition(size_t list_no, std::set<idx_t> vectors_to_remove);
+        void remove_entries_from_partition(size_t list_no, vector<idx_t> vectors_to_remove);
 
         void remove_vectors(std::set<idx_t> vectors_to_remove);
 

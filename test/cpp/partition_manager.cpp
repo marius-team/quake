@@ -7,7 +7,7 @@ class PartitionManagerTest : public ::testing::Test {
  protected:
   std::shared_ptr<QuakeIndex> parent_;
   std::unique_ptr<PartitionManager> partition_manager_;
-  int dim_ = 4;
+  int dim_ = 16;
 
   void SetUp() override {
     parent_ = std::make_shared<QuakeIndex>();
@@ -116,4 +116,52 @@ TEST_F(PartitionManagerTest, ThrowsIfPartitionsNotInitted) {
 
   auto remove_ids = torch::tensor({100, 101}, torch::kInt64);
   EXPECT_THROW(partition_manager_->remove(remove_ids), std::runtime_error);
+}
+
+TEST_F(PartitionManagerTest, RefinePartitions) {
+
+  int64_t n_total = 1000;
+  int64_t n_list = 5;
+
+  Tensor vectors = torch::randn({n_total, dim_}, torch::kFloat32);
+  Tensor vector_ids = torch::arange(n_total, torch::kInt64);
+  Tensor initial_centroids = vectors.index_select(0, torch::randperm(n_total).slice(0, 0, n_list));
+
+  // get the assignments
+  Tensor dists = torch::cdist(vectors, initial_centroids, 2);
+  Tensor assignments = torch::argmin(dists, 1);
+
+  // init the clustering
+  auto clustering = std::make_shared<Clustering>();
+  clustering->centroids = initial_centroids;
+  clustering->partition_ids = torch::arange(n_list, torch::kInt64);
+  clustering->vectors = {};
+  clustering->vector_ids = {};
+
+  for (int i = 0; i < n_list; i++) {
+    Tensor mask = assignments == i;
+    Tensor ids = vector_ids.masked_select(mask);
+    Tensor vecs = vectors.index_select(0, mask.nonzero().squeeze(1));
+    clustering->vectors.push_back(vecs);
+    clustering->vector_ids.push_back(ids);
+  }
+
+  parent_->build(clustering->centroids, clustering->partition_ids, std::make_shared<IndexBuildParams>());
+  partition_manager_->init_partitions(parent_, clustering);
+
+  // run refinement and make sure the number of vectors and partitions have not changed
+  Tensor p_sizes_before = partition_manager_->get_partition_sizes(torch::arange(n_list, torch::kInt64));
+  partition_manager_->refine_partitions({}, 0); // reassign all vectors
+  ASSERT_EQ(partition_manager_->ntotal(), n_total);
+  ASSERT_EQ(partition_manager_->nlist(), n_list);
+  Tensor p_sizes_after = partition_manager_->get_partition_sizes(torch::arange(n_list, torch::kInt64));
+  ASSERT_TRUE(torch::allclose(p_sizes_before, p_sizes_after));
+
+  partition_manager_->refine_partitions(torch::tensor({0, 1, 2}, torch::kInt64), 0); // reassign partitions 0, 1, 2
+  ASSERT_EQ(partition_manager_->ntotal(), n_total);
+  ASSERT_EQ(partition_manager_->nlist(), n_list);
+
+  partition_manager_->refine_partitions(torch::tensor({0, 1, 2}, torch::kInt64), 3); // run 3 iterations of refinement on partitions 0, 1, 2
+  ASSERT_EQ(partition_manager_->ntotal(), n_total);
+  ASSERT_EQ(partition_manager_->nlist(), n_list);
 }

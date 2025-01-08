@@ -69,6 +69,13 @@ public:
     shared_ptr<Clustering> split_partitions(const Tensor &partition_ids);
 
     /**
+    * @brief Refine selected partitions using k-means
+    * @param partition_ids Tensor of shape [num_partitions] containing partition IDs. If empty, refines all partitions.
+    * @param refinement_iterations Number of refinement iterations. If 0, then only reassigns vectors.
+    */
+    void refine_partitions(const Tensor &partition_ids = Tensor(), int refinement_iterations = 0);
+
+    /**
      * @brief Delete multiple partitions and reassign vectors
      * @param partition_ids Vector of partition IDs to merge.
      * @param reassign If true, reassign vectors to other partitions.
@@ -110,14 +117,32 @@ public:
      */
     int64_t nlist() const;
 
+    /**
+     * @brief Return the dimensionality of the vectors in the partitions.
+     */
     int d() const;
 
-    Tensor get_partition_sizes(Tensor partition_ids);
+    /**
+     * @brief Get the sizes of the partitions.
+     * @param partition_ids Tensor of shape [num_partitions] containing partition IDs.
+     */
+    Tensor get_partition_sizes(Tensor partition_ids = Tensor());
 
+    /**
+     * @brief Get the partition IDs.
+     */
     Tensor get_partition_ids();
 
+    /**
+     * @brief Save the partition manager to a file.
+     * @param path Path to save the partition manager.
+     */
     void save(const string &path);
 
+    /**
+     * @brief Load the partition manager from a file.
+     * @param path Path to load the partition manager.
+     */
     void load(const string &path);
 };
 

@@ -41,7 +41,8 @@ DynamicInvertedLists *convert_from_array_invlists(ArrayInvertedLists *invlists) 
 
 DynamicInvertedLists::DynamicInvertedLists(size_t nlist, size_t code_size, bool use_map_for_ids)
     : InvertedLists(nlist, code_size) {
-    d_ = code_size;
+    d_ = code_size / sizeof(float);
+    code_size_ = code_size;
     // Initialize empty partitions
     for (size_t i = 0; i < nlist; i++) {
         IndexPartition ip;
@@ -103,17 +104,20 @@ void DynamicInvertedLists::remove_entry(size_t list_no, idx_t id) {
     }
 }
 
-void DynamicInvertedLists::remove_entries_from_partition(size_t list_no, std::set<idx_t> vectors_to_remove) {
+void DynamicInvertedLists::remove_entries_from_partition(size_t list_no, vector<idx_t> vectors_to_remove) {
     auto it = partitions_.find(list_no);
     if (it == partitions_.end()) {
         throw std::runtime_error("List does not exist in remove_entries_from_partition");
     }
     IndexPartition &part = it->second;
 
+    // create set from vector for faster lookup
+    std::set<idx_t> vectors_to_remove_set(vectors_to_remove.begin(), vectors_to_remove.end());
+
     // We'll perform removals by scanning and removing matches.
     // Because remove() swaps last element in, we must be careful with iteration.
     for (int64_t i = 0; i < part.num_vectors_;) {
-        if (vectors_to_remove.find(part.ids_[i]) != vectors_to_remove.end()) {
+        if (vectors_to_remove_set.find(part.ids_[i]) != vectors_to_remove_set.end()) {
             part.remove(i);
             // don't increment i, because we just swapped a new element into i
         } else {
