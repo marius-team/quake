@@ -25,6 +25,7 @@ class PartitionManager {
 public:
     shared_ptr<QuakeIndex> parent_ = nullptr; ///< Pointer to a higher-level parent index.
     std::shared_ptr<faiss::DynamicInvertedLists> partitions_ = nullptr; ///< Pointer to the inverted lists.
+    int64_t curr_partition_id_ = 0; ///< Current partition ID.
 
     /**
      * @brief Constructor for PartitionManager.

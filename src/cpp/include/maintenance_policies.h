@@ -80,9 +80,7 @@ public:
 
     void refine_partitions(Tensor partition_ids, int refinement_iterations);
 
-    virtual void refine_delete(Tensor old_centroids) {}
-
-    virtual void refine_split(Tensor partition_ids, Tensor old_centroids) {}
+    virtual void local_refinement(Tensor partition_ids, int refinement_radius) {}
 
     virtual Tensor check_and_delete_partitions() { return {}; }
 
@@ -103,9 +101,7 @@ public:
 
     float compute_alpha_for_window();
 
-    void refine_delete(Tensor old_centroids) override;
-
-    void refine_split(Tensor partition_ids, Tensor old_centroids) override;
+    void local_refinement(Tensor partition_ids, int refinement_radius) override;
 
     Tensor check_and_delete_partitions() override;
 
@@ -123,8 +119,6 @@ public:
         partition_manager_ = partition_manager;
         refinement_iterations_ = 0;
     }
-
-    void refine_split(Tensor partition_ids, Tensor old_centroids) override;
 
     Tensor check_and_delete_partitions() override;
 

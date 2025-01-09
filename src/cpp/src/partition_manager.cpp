@@ -56,6 +56,10 @@ void PartitionManager::init_partitions(
         code_size_bytes
     );
 
+    // partition ids are [0, 1, 2, ..., nlist-1]
+    clustering->partition_ids = torch::arange(nlist, torch::kInt64);
+    curr_partition_id_ = nlist;
+
     // Add an empty list for each partition ID
     auto partition_ids_accessor = clustering->partition_ids.accessor<int64_t, 1>();
     for (int64_t i = 0; i < nlist; i++) {
@@ -408,6 +412,10 @@ void PartitionManager::refine_partitions(const Tensor &partition_ids, int iterat
 
 void PartitionManager::add_partitions(shared_ptr<Clustering> partitions) {
     int64_t nlist = partitions->nlist();
+
+    // generate new partition ids
+    partitions->partition_ids = torch::arange(curr_partition_id_, curr_partition_id_ + nlist, torch::kInt64);
+    curr_partition_id_ += nlist;
 
     auto p_ids_accessor = partitions->partition_ids.accessor<int64_t, 1>();
     for (int64_t i = 0; i < nlist; i++) {

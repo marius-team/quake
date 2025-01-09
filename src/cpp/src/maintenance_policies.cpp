@@ -121,6 +121,7 @@ void MaintenancePolicy::increment_hit_count(vector<int64_t> hit_partition_ids) {
     for (const auto &hit: hit_partition_ids) {
         per_partition_hits_[hit]++;
         vectors_scanned_new += partition_manager_->partitions_->list_size(hit);
+        modified_partitions_.insert(hit);
     }
     float new_scan_fraction = static_cast<float>(vectors_scanned_new) / total_vectors;
 
@@ -213,9 +214,13 @@ vector<float> MaintenancePolicy::estimate_delete_delta(shared_ptr<PartitionState
         int64_t partition_id = state->partition_ids[i];
         int64_t partition_size = state->partition_sizes[i];
         float hit_rate = state->partition_hit_rate[i];
-        float old_cost = latency_estimator_->estimate_scan_latency(partition_size, k) * hit_rate;
+        // float old_cost = latency_estimator_->estimate_scan_latency(partition_size, k) * hit_rate;
+
+        // increase in cost due to reassigning vectors to neighboring
         float delta_reassign = current_scan_fraction_ * latency_estimator_->estimate_scan_latency(partition_size, k);
-        float delta = delta_overhead + delta_reassign - old_cost;
+
+        // increase in cost due to increase in number of partiti
+        float delta = delta_overhead + delta_reassign;
         deltas.push_back(delta);
     }
 
@@ -257,11 +262,11 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::maintenance() {
     end = std::chrono::high_resolution_clock::now();
     timing_info->split_time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
-    timing_info->n_splits = split_ids.size(0);
+    timing_info->n_splits = old_ids.size(0);
 
     start = std::chrono::high_resolution_clock::now();
     if (split_ids.size(0) > 0) {
-        refine_split(split_ids, old_centroids);
+        local_refinement(split_ids, refinement_radius_);
     }
     end = std::chrono::high_resolution_clock::now();
     timing_info->split_refine_time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -277,7 +282,7 @@ void MaintenancePolicy::add_split(int64_t old_partition_id, int64_t left_partiti
     per_partition_hits_[left_partition_id] = per_partition_hits_[old_partition_id];
     per_partition_hits_[right_partition_id] = per_partition_hits_[old_partition_id];
     ancestor_partition_hits_[old_partition_id] = per_partition_hits_[old_partition_id];
-    deleted_partition_hit_rate_[old_partition_id] = (float) per_partition_hits_[old_partition_id] / num_queries;
+    deleted_partition_hit_rate_[old_partition_id] = (float) per_partition_hits_[old_partition_id] / num_queries; // TODO is this needed?
     per_partition_hits_.erase(old_partition_id);
 }
 
@@ -286,7 +291,7 @@ void MaintenancePolicy::add_partition(int64_t partition_id, int64_t hits) {
 }
 
 void MaintenancePolicy::remove_partition(int64_t partition_id) {
-    int64_t num_queries = std::min(curr_query_id_, window_size_);
+    int64_t num_queries = std::max(std::min(curr_query_id_, window_size_), 1);
     ancestor_partition_hits_[partition_id] = per_partition_hits_[partition_id];
     deleted_partition_hit_rate_[partition_id] = per_partition_hits_[partition_id] / num_queries;
     per_partition_hits_.erase(partition_id);
@@ -399,6 +404,8 @@ Tensor QueryCostMaintenance::check_and_delete_partitions() {
 
     shared_ptr<Clustering> clustering = partition_manager_->select_partitions(partition_ids_tensor, true);
 
+    std::cout << "Deleted " << partitions_to_delete.size() << " partitions." << std::endl;
+
     partition_manager_->delete_partitions(partition_ids_tensor, true);
 
     return partition_ids_tensor;
@@ -459,7 +466,7 @@ std::tuple<Tensor, Tensor, Tensor> QueryCostMaintenance::check_and_split_partiti
     Tensor kept_splits_tensor = torch::from_blob(kept_splits.data(), {(int64_t) kept_splits.size()}, torch::kInt64);
     Tensor split_centroids = split_partitions->centroids.index_select(0, kept_splits_tensor);
 
-    shared_ptr<Clustering> new_partitions;
+    shared_ptr<Clustering> new_partitions = make_shared<Clustering>();
     new_partitions->centroids = split_centroids;
     new_partitions->partition_ids = torch::arange(n_partitions + kept_splits.size()); // TODO
     for (int i = 0; i < kept_splits.size(); i++) {
@@ -495,104 +502,19 @@ std::tuple<Tensor, Tensor, Tensor> QueryCostMaintenance::check_and_split_partiti
     return {new_partitions->partition_ids, old_centroids, removed_partitions_tensor};
 }
 
-void QueryCostMaintenance::refine_delete(Tensor old_centroids) {
-    vector<Tensor> refine_ids_list;
-    for (int i = 0; i < old_centroids.size(0); i++) {
-        Tensor old_centroid = old_centroids[i];
-        shared_ptr<SearchParams> search_params = std::make_shared<SearchParams>();
-        search_params->nprobe = 1000;
-        search_params->k = refinement_radius_;
-        auto result = partition_manager_->parent_->search(old_centroid, search_params);
-        Tensor curr_neighbors = result->ids;
-        curr_neighbors = curr_neighbors.masked_select(curr_neighbors != -1);
-        refine_ids_list.emplace_back(curr_neighbors);
-    }
-
-    Tensor refine_ids = std::get<0>(torch::_unique(torch::cat(refine_ids_list, 0)));
-    refine_ids = refine_ids.masked_select(refine_ids != -1);
-    refine_partitions(refine_ids, refinement_iterations_);
-}
-
-void QueryCostMaintenance::refine_split(Tensor partition_ids, Tensor old_centroids) {
-    // refinement
+void QueryCostMaintenance::local_refinement(Tensor partition_ids, int refinement_radius) {
     Tensor split_centroids = partition_manager_->parent_->get(partition_ids);
-    int d = split_centroids.size(1);
 
+    auto search_params = std::make_shared<SearchParams>();
+    search_params->nprobe = 1000;
+    search_params->k = refinement_radius;
 
-    // for each split get the neighboring partitions
-    // first get top n neighbors by distance
-    // then filter using a geometric test for overlap
-
-    vector<Tensor> refine_ids_list;
-    for (int i = 0; i < split_centroids.size(0); i++) {
-        Tensor curr_centroid = split_centroids[i];
-        Tensor old_centroid = old_centroids[i / 2];
-
-        shared_ptr<SearchParams> search_params = std::make_shared<SearchParams>();
-        search_params->nprobe = 1000;
-        search_params->k = refinement_radius_;
-        auto result = partition_manager_->parent_->search(old_centroid, search_params);
-        Tensor curr_neighbors = result->ids;
-        curr_neighbors = curr_neighbors.masked_select(curr_neighbors != -1);
-        Tensor neighbor_centroids = partition_manager_->parent_->get(curr_neighbors);
-
-        // Tensor overlap_ratio = estimate_overlap(curr_centroid, old_centroid, neighbor_centroids);
-        // Tensor filter_mask = overlap_ratio > .15;
-        // print count nonzero for debugging
-
-        refine_ids_list.emplace_back(curr_neighbors);
-    }
-    refine_ids_list.emplace_back(partition_ids);
-
-
-    // kNN search to get neighboring partitions
-    Tensor refine_ids = std::get<0>(torch::_unique(torch::cat(refine_ids_list, 0)));
+    auto result = partition_manager_->parent_->search(split_centroids, search_params);
+    Tensor refine_ids = std::get<0>(torch::_unique(result->ids));
 
     // remove any -1
     refine_ids = refine_ids.masked_select(refine_ids != -1);
-
     refine_partitions(refine_ids, refinement_iterations_);
-}
-
-void LireMaintenance::refine_split(Tensor partition_ids, Tensor old_centroids) {
-    // refinement
-    Tensor split_centroids = partition_manager_->parent_->get(partition_ids);
-    int d = split_centroids.size(1);
-
-
-    // for each split get the neighboring partitions
-    // first get top n neighbors by distance
-    // then filter using a geometric test for overlap
-
-    vector<Tensor> refine_ids_list;
-    for (int i = 0; i < split_centroids.size(0); i++) {
-        Tensor curr_centroid = split_centroids[i];
-        Tensor old_centroid = old_centroids[i / 2];
-
-        shared_ptr<SearchParams> search_params = std::make_shared<SearchParams>();
-        search_params->nprobe = 1000;
-        search_params->k = refinement_radius_;
-        auto result = partition_manager_->parent_->search(old_centroid, search_params);
-        Tensor curr_neighbors = result->ids;
-        curr_neighbors = curr_neighbors.masked_select(curr_neighbors != -1);
-        Tensor neighbor_centroids = partition_manager_->parent_->get(curr_neighbors);
-
-        // Tensor overlap_ratio = estimate_overlap(curr_centroid, old_centroid, neighbor_centroids);
-        // Tensor filter_mask = overlap_ratio > .15;
-        // print count nonzero for debugging
-
-        refine_ids_list.emplace_back(curr_neighbors);
-    }
-    refine_ids_list.emplace_back(partition_ids);
-
-
-    // kNN search to get neighboring partitions
-    Tensor refine_ids = std::get<0>(torch::_unique(torch::cat(refine_ids_list, 0)));
-
-    // remove any -1
-    refine_ids = refine_ids.masked_select(refine_ids != -1);
-
-    refine_partitions(refine_ids, 0);
 }
 
 Tensor LireMaintenance::check_and_delete_partitions() {

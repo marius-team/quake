@@ -59,7 +59,6 @@ DynamicInvertedLists::~DynamicInvertedLists() {
 size_t DynamicInvertedLists::list_size(size_t list_no) const {
     auto it = partitions_.find(list_no);
     if (it == partitions_.end()) {
-        std::cerr << "List Size: " << list_no << std::endl;
         throw std::runtime_error("List does not exist in list_size");
     }
     return static_cast<size_t>(it->second.num_vectors_);

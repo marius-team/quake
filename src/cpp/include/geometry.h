@@ -372,10 +372,10 @@ inline Tensor compute_recall_profile(const Tensor &boundary_distances, float que
     //     }
     // }
 
+    // TODO: Implement a better way to compute the probabilities for the first partition
     partition_probabilities[0] = 2.0 * partition_probabilities[1];
-
     // partition_probabilities[0] = 1 - partition_probabilities[1];
-    // partition_probabilities[0] = 0.0;
+
     Tensor probabilities_tensor = torch::from_blob(partition_probabilities.data(), {num_partitions}, torch::kDouble).
             clone();
 
@@ -403,40 +403,6 @@ inline float compute_intersection_volume_one(float boundary_distance, float quer
 
     return volume_ratio;
 }
-
-// inline Tensor estimate_overlap(const Tensor &new_centroid, const Tensor &old_centroid, const Tensor &nbr_centroids) {
-//     int dimension = new_centroid.size(0);
-//     Tensor old_boundary_distance = torch::empty({nbr_centroids.size(0)}, torch::kFloat32);
-//     Tensor new_boundary_distance = torch::empty({nbr_centroids.size(0)}, torch::kFloat32);
-//
-//     for (int j = 0; j < nbr_centroids.size(0); j++) {
-//         Tensor nbr_centroid = nbr_centroids[j];
-//
-//         // Old boundary computations
-//         Tensor n_old = nbr_centroid - old_centroid;
-//         float norm_old = n_old.norm().item<float>();
-//         n_old /= norm_old;
-//         Tensor mid_old = (old_centroid + nbr_centroid) / 2;
-//         float distance_old = std::abs((new_centroid - mid_old).dot(n_old).item<float>());
-//         old_boundary_distance[j] = distance_old;
-//
-//         // New boundary computations
-//         Tensor n_new = nbr_centroid - new_centroid;
-//         float norm_new = n_new.norm().item<float>();
-//         n_new /= norm_new;
-//         Tensor mid_new = (new_centroid + nbr_centroid) / 2;
-//         float distance_new = std::abs((old_centroid - mid_new).dot(n_new).item<float>());
-//         new_boundary_distance[j] = distance_new;
-//     }
-//
-//     Tensor overlap_ratio = torch::empty({nbr_centroids.size(0)}, torch::kFloat32);
-//
-//     for (int j = 0; j < nbr_centroids.size(0); j++) {
-//         overlap_ratio[j] = compute_intersection_volume_one(old_boundary_distance[j].item<float>(), new_boundary_distance[j].item<float>(), dimension);
-//     }
-//
-//     return overlap_ratio;
-// }
 
 inline Tensor estimate_overlap(const Tensor &new_centroid, const Tensor &old_centroid, const Tensor &nbr_centroids) {
     Tensor residual = new_centroid - old_centroid;
@@ -489,11 +455,6 @@ inline Tensor estimate_overlap(const Tensor &new_centroid, const Tensor &old_cen
 
     for (int j = 0; j < nbr_centroids.size(0); j++) {
         overlap_ratio[j] = abs(new_boundary_distance[j] - old_boundary_distance[j]) / mean_old_boundary_distance;
-        // if (new_boundary_distance[j] < old_boundary_distance[j]) {
-        //
-        // } else {
-        //     overlap_ratio[j] = -1000000000;
-        // }
     }
 
     return overlap_ratio;

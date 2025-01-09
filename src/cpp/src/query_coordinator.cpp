@@ -29,7 +29,6 @@ QueryCoordinator::~QueryCoordinator() {
     shutdown_workers();
 }
 
-
 // Initialize Worker Threads
 void QueryCoordinator::initialize_workers(int num_workers) {
     if (workers_initialized_) {
@@ -411,7 +410,6 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    // Basic info
     int64_t num_queries = x.size(0);
     int64_t dimension = x.size(1);
     int k = (search_params && search_params->k > 0) ? search_params->k : 1;

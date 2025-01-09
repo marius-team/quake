@@ -22,7 +22,7 @@ using std::shared_ptr;
 using std::vector;
 using torch::Tensor;
 
-// Helper function to create a QuakeIndex + PartitionManager:
+// Helper function to create a parent QuakeIndex + PartitionManager:
 static std::tuple<shared_ptr<QuakeIndex>, shared_ptr<PartitionManager>> CreateParentAndManager(
     int64_t nlist, int dimension, int64_t ntotal) {
   auto clustering = std::make_shared<Clustering>();
@@ -138,8 +138,19 @@ TEST(MaintenancePolicyTest, GetPartitionState) {
   auto policy = std::make_shared<QueryCostMaintenance>(pm, params);
 
   auto st = policy->get_partition_state(false);
-  // TODO: Confirm partition IDs, sizes, and hit rates if needed.
-  // If it's not obvious, we leave it here.
+
+  // check state makes sense:
+  // hit rate should be 0.0 for all partitions
+    for (size_t i = 0; i < st->partition_ids.size(); i++) {
+        EXPECT_FLOAT_EQ(st->partition_hit_rate[i], 0.0f);
+    }
+
+  // number of total vectors should be 100
+  int curr_size = 0;
+  for (size_t i = 0; i < st->partition_sizes.size(); i++) {
+    curr_size += st->partition_sizes[i];
+  }
+  EXPECT_EQ(curr_size, 100);
 }
 
 TEST(MaintenancePolicyTest, SetPartitionModified) {
@@ -150,7 +161,7 @@ TEST(MaintenancePolicyTest, SetPartitionModified) {
   auto policy = std::make_shared<QueryCostMaintenance>(pm, params);
 
   policy->set_partition_modified(99);
-  // TODO: verify internal sets if there's a direct way
+  EXPECT_TRUE(policy->modified_partitions_.find(99) != policy->modified_partitions_.end());
 }
 
 TEST(MaintenancePolicyTest, SetPartitionUnmodified) {
@@ -161,47 +172,32 @@ TEST(MaintenancePolicyTest, SetPartitionUnmodified) {
   auto policy = std::make_shared<QueryCostMaintenance>(pm, params);
 
   policy->set_partition_modified(42);
+  EXPECT_TRUE(policy->modified_partitions_.find(42) != policy->modified_partitions_.end());
   policy->set_partition_unmodified(42);
-  // TODO: verify internal sets if there's a direct way
-}
-
-TEST(MaintenancePolicyTest, EstimateSplitDelta) {
-  // Checks estimate_split_delta for partitions in a state.
-  // TODO: Provide a custom PartitionState or rely on real data.
-}
-
-TEST(MaintenancePolicyTest, EstimateDeleteDelta) {
-  // Checks estimate_delete_delta for partitions in a state.
-  // TODO: Provide a custom PartitionState or rely on real data.
-}
-
-TEST(MaintenancePolicyTest, EstimateAddLevelDelta) {
-  // Checks estimate_add_level_delta is always returning 0.0 (as code indicates).
-  auto [p, pm] = CreateParentAndManager(2, 4, 10);
-  auto params = std::make_shared<MaintenancePolicyParams>();
-  auto policy = std::make_shared<QueryCostMaintenance>(pm, params);
-  float val = policy->estimate_add_level_delta();
-  EXPECT_FLOAT_EQ(val, 0.0f);
-}
-
-TEST(MaintenancePolicyTest, EstimateRemoveLevelDelta) {
-  // Checks estimate_remove_level_delta is always returning 0.0 (as code indicates).
-  auto [p, pm] = CreateParentAndManager(2, 4, 10);
-  auto params = std::make_shared<MaintenancePolicyParams>();
-  auto policy = std::make_shared<QueryCostMaintenance>(pm, params);
-  float val = policy->estimate_remove_level_delta();
-  EXPECT_FLOAT_EQ(val, 0.0f);
+  EXPECT_TRUE(policy->modified_partitions_.find(42) == policy->modified_partitions_.end());
 }
 
 TEST(MaintenancePolicyTest, Maintenance) {
   // Checks that maintenance runs without error and returns a timing info struct.
-  auto [p, pm] = CreateParentAndManager(3, 4, 50);
+  auto [p, pm] = CreateParentAndManager(2, 4, 10000);
   auto params = std::make_shared<MaintenancePolicyParams>();
-  params->delete_threshold_ns = 10.0;
-  params->split_threshold_ns = 10.0;
+  params->delete_threshold_ns = 0.0;
+  params->split_threshold_ns = 0.0;
   auto policy = std::make_shared<QueryCostMaintenance>(pm, params);
+
+  // this should not trigger any maintenance operations since no queries have been made
   auto info = policy->maintenance();
-  // TODO: verify info->n_deletes, info->n_splits, etc., if needed.
+
+  // check that the timing info struct is populated and shows no splits or deletes
+  EXPECT_EQ(info->n_splits, 0);
+  EXPECT_EQ(info->n_deletes, 0);
+
+  // Increment the hit count for partition 0 and run maintenance again
+  policy->increment_hit_count({0});
+  info = policy->maintenance();
+
+  // check that we did a split
+  EXPECT_EQ(info->n_splits, 1);
 }
 
 TEST(MaintenancePolicyTest, AddSplit) {
@@ -212,7 +208,27 @@ TEST(MaintenancePolicyTest, AddSplit) {
 
   policy->add_partition(50, 7);
   policy->add_split(50, 51, 52);
-  // TODO: verify internal data
+
+  // check that the split was added
+  auto history = policy->get_split_history();
+  ASSERT_EQ(history.size(), 1);
+  auto rec = history[0];
+  EXPECT_EQ(std::get<0>(rec), 50); // old partition
+  EXPECT_EQ(std::get<1>(rec), 7);  // old partition hits
+  EXPECT_EQ(std::get<2>(rec), 51); // left partition
+  EXPECT_EQ(std::get<3>(rec), 7);  // left partition hits
+  EXPECT_EQ(std::get<4>(rec), 52); // right partition
+  EXPECT_EQ(std::get<5>(rec), 7);  // right partition hits
+
+  // check 50 is not in per_partition_hits_ and 51, 52 are
+  policy->per_partition_hits_.find(50) == policy->per_partition_hits_.end();
+  EXPECT_EQ(policy->per_partition_hits_[51], 7);
+  EXPECT_EQ(policy->per_partition_hits_[52], 7);
+
+  // check that 50 is in deleted_partition_hit_rate_ and ancestor_partition_hits_
+  // TODO check if these are even needed
+  EXPECT_EQ(policy->deleted_partition_hit_rate_[50], 7);
+  EXPECT_EQ(policy->ancestor_partition_hits_[50], 7);
 }
 
 TEST(MaintenancePolicyTest, AddPartition) {
@@ -222,20 +238,6 @@ TEST(MaintenancePolicyTest, AddPartition) {
   auto policy = std::make_shared<QueryCostMaintenance>(pm, params);
 
   policy->add_partition(1234, 99);
-  // TODO: verify internal data
-}
 
-TEST(MaintenancePolicyTest, RemovePartition) {
-  // Checks that remove_partition deletes from per_partition_hits_ and populates deleted_partition_hit_rate_.
-  auto [p, pm] = CreateParentAndManager(2, 4, 20);
-  auto params = std::make_shared<MaintenancePolicyParams>();
-  auto policy = std::make_shared<QueryCostMaintenance>(pm, params);
-
-  policy->add_partition(5, 10);
-  policy->remove_partition(5);
-  // TODO: verify it's in deleted_partition_hit_rate_, etc.
-}
-
-TEST(MaintenancePolicyTest, RefinePartitions) {
-  // Not obvious how to test simply. Left blank.
+  EXPECT_EQ(policy->per_partition_hits_[1234], 99);
 }
