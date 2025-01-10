@@ -150,35 +150,37 @@ public:
         topk_[curr_offset_++] = {distance, index};
     }
 
-    void batch_add(DistanceType *distances, const IdType *indicies, int num_values) {
+    void batch_add(DistanceType *distances, const IdType *indices, int num_values) {
         if (num_values == 0) {
             jobs_left_.fetch_sub(1, std::memory_order_relaxed);
             return;
         }
 
-        // See if we can currently process queries
         if (!currently_processing_query()) {
+            // If not processing, still decrement job count to avoid deadlock
+            jobs_left_.fetch_sub(1, std::memory_order_relaxed);
             return;
         }
 
-        // Get the offset to write the result to
-        int write_offset; {
-            std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
+        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
 
-            if (curr_offset_ + num_values >= topk_.size()) {
-                flush(); // Flush the buffer if it is full
+        // Ensure buffer has enough capacity
+        if (curr_offset_ + num_values > static_cast<int>(topk_.size())) {
+            flush();
+            // After flushing, if still not enough room, handle error or perform additional flushing/expansion
+            if (curr_offset_ + num_values > static_cast<int>(topk_.size())) {
+                throw std::runtime_error("Insufficient buffer capacity even after flush");
             }
-
-            write_offset = curr_offset_;
-            curr_offset_ += num_values;
         }
 
+        int write_offset = curr_offset_;
+        curr_offset_ += num_values;
+
+        // Write new entries under the lock to maintain thread safety
         for (int i = 0; i < num_values; i++) {
-            if (write_offset + i >= topk_.size()) {
-                flush(); // Flush the buffer if it is full
-            }
-            topk_[write_offset + i] = {distances[i], indicies[i]};
+            topk_[write_offset + i] = {distances[i], indices[i]};
         }
+
         jobs_left_.fetch_sub(1, std::memory_order_relaxed);
     }
 
