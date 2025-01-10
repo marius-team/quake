@@ -151,7 +151,7 @@ elseif(UNIX)
     endif()
 
     # Add openmp flags
-    list(APPEND LINK_LIBS -fopenmp)
+    list(APPEND LINK_LIBS -liomp5)
 else()
     # unsupported platform
     message(FATAL_ERROR "Unsupported platform")
