@@ -468,7 +468,6 @@ std::tuple<Tensor, Tensor, Tensor> QueryCostMaintenance::check_and_split_partiti
 
     shared_ptr<Clustering> new_partitions = make_shared<Clustering>();
     new_partitions->centroids = split_centroids;
-    new_partitions->partition_ids = torch::arange(n_partitions + kept_splits.size()); // TODO
     for (int i = 0; i < kept_splits.size(); i++) {
         new_partitions->vectors.push_back(split_vectors[i]);
         new_partitions->vector_ids.push_back(split_ids[i]);
