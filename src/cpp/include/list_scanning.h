@@ -250,7 +250,9 @@ inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer
         vector<float> distances = buffers[i]->get_topk();
         vector<int64_t> indices = buffers[i]->get_topk_indices();
 
-        for (int j = 0; j < k; j++) {
+        int curr_k = std::min(k, (int) distances.size());
+
+        for (int j = 0; j < curr_k; j++) {
             topk_distances_accessor[i][j] = distances[j];
             topk_indices_accessor[i][j] = indices[j];
         }

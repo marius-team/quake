@@ -149,6 +149,9 @@ elseif(UNIX)
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()
+
+    # Add openmp flags
+    list(APPEND LINK_LIBS -fopenmp)
 else()
     # unsupported platform
     message(FATAL_ERROR "Unsupported platform")
