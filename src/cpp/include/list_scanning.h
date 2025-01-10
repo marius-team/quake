@@ -174,6 +174,9 @@ public:
         }
 
         for (int i = 0; i < num_values; i++) {
+            if (write_offset + i >= topk_.size()) {
+                flush(); // Flush the buffer if it is full
+            }
             topk_[write_offset + i] = {distances[i], indicies[i]};
         }
         jobs_left_.fetch_sub(1, std::memory_order_relaxed);
