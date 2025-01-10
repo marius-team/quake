@@ -55,6 +55,8 @@ public:
     // Find the index of a given ID (linear search)
     int64_t find_id(idx_t id) const;
 
+    void reallocate_memory(int64_t new_capacity);
+
 #ifdef QUAKE_USE_NUMA
     // Set the NUMA node and move data there if necessary
     void set_numa_node(int new_numa_node);
@@ -63,7 +65,6 @@ public:
 private:
     void move_from(IndexPartition&& other);
     void free_memory();
-    void reallocate_memory(int64_t new_capacity);
     void ensure_capacity(int64_t required);
 
     template <typename T>

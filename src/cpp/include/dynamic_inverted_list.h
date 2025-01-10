@@ -23,7 +23,7 @@ namespace faiss {
         int curr_list_id_ = 0;
         int total_numa_nodes_ = 0;
         int next_numa_node_ = 0;
-        std::unordered_map<size_t, IndexPartition> partitions_;
+        std::unordered_map<size_t, shared_ptr<IndexPartition>> partitions_;
         int d_;
         int code_size_;
 

@@ -7,7 +7,7 @@ class PartitionManagerTest : public ::testing::Test {
  protected:
   std::shared_ptr<QuakeIndex> parent_;
   std::unique_ptr<PartitionManager> partition_manager_;
-  int dim_ = 16;
+  int dim_ = 4;
 
   void SetUp() override {
     parent_ = std::make_shared<QuakeIndex>();
