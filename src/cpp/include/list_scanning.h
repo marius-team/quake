@@ -133,7 +133,6 @@ public:
         // Ensure buffer has enough capacity
         if (curr_offset_ + num_values > static_cast<int>(topk_.size())) {
             flush();
-            // After flushing, if still not enough room, handle error or perform additional flushing/expansion
             if (curr_offset_ + num_values > static_cast<int>(topk_.size())) {
                 throw std::runtime_error("Insufficient buffer capacity even after flush");
             }

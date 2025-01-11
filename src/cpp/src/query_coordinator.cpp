@@ -8,6 +8,7 @@
 #include <cmath>
 #include <partition_manager.h>
 #include <quake_index.h>
+#include <geometry.h>
 
 // Constructor
 QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
@@ -434,6 +435,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
     timing_info->k = k;
 
     bool is_descending = (metric_ == faiss::METRIC_INNER_PRODUCT);
+    bool use_aps = (search_params->recall_target > 0.0 && parent_);
 
     if (partition_ids_to_scan.dim() == 1) {
         // All queries need to scan the same partitions
@@ -449,6 +451,14 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
     for (int64_t q = 0; q < num_queries; q++) {
         auto topk_buf = make_shared<TopkBuffer>(k, is_descending);
         const float *query_vec = x_ptr + q * dimension;
+
+        Tensor boundary_distances;
+        Tensor partition_probabilities;
+        float query_radius = 1000.0;
+        if (use_aps) {
+            Tensor cluster_centroids = parent_->get(partition_ids_to_scan[q]);
+            boundary_distances = compute_boundary_distances(x[q], cluster_centroids, metric_);
+        }
 
         // For each partition in clustering
         for (size_t j = 0; j < partition_ids_to_scan.size(1); j++) {
@@ -469,6 +479,23 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                       dimension,
                       topk_buf,
                       metric_);
+
+            float curr_radius = sqrt(topk_buf->get_kth_distance());
+            float percent_change = abs(curr_radius - query_radius) / query_radius;
+
+            if (use_aps && percent_change > search_params->recompute_threshold) {
+                partition_probabilities = compute_recall_profile(boundary_distances,
+                    query_radius,
+                    dimension,
+                    {},
+                    search_params->use_precomputed,
+                    metric_ == faiss::METRIC_L2);
+
+                Tensor recall_profile = torch::cumsum(partition_probabilities, 0);
+                if (recall_profile[pi].item<float>() > search_params->recall_target) {
+                    break;
+                }
+            }
         }
 
         std::vector<float> best_dists = topk_buf->get_topk();

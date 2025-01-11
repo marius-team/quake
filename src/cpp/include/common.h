@@ -124,6 +124,7 @@ struct SearchParams {
     float k_factor = 1.0f;
     bool use_precomputed = false;
     bool batched_scan = false;
+    float recompute_threshold = 0.1f;
 
     SearchParams() = default;
 };
