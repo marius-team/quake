@@ -179,14 +179,13 @@ void QueryCoordinator::partition_scan_worker_fn(int worker_id) {
                 metric_
             );
 
-            vector<float> topk = local_topk_buffer->get_topk();
-            vector<int64_t> topk_indices = local_topk_buffer->get_topk_indices();
-            int64_t n_results = topk_indices.size();
-
             {
                 std::lock_guard<std::mutex> lock(result_mutex_);
                 for (int64_t q = 0; q < job.num_queries; q++) {
                     int64_t query_id = job.query_ids[q];
+                    vector<float> topk = local_buffers[q]->get_topk();
+                    vector<int64_t> topk_indices = local_buffers[q]->get_topk_indices();
+                    int64_t n_results = topk_indices.size();
                     if (query_topk_buffers_[query_id]) {
                         query_topk_buffers_[query_id]->batch_add(
                         topk.data(),

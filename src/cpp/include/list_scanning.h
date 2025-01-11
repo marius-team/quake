@@ -65,40 +65,6 @@ public:
 
     ~TypedTopKBuffer() = default;
 
-    // Copy constructor
-    TypedTopKBuffer(const TypedTopKBuffer &other)
-        : k_(other.k_), curr_offset_(other.curr_offset_),
-          topk_(other.topk_), is_descending_(other.is_descending_), processing_query_(true) {
-    }
-
-    // Move constructor
-    TypedTopKBuffer(TypedTopKBuffer &&other) noexcept
-        : k_(other.k_), curr_offset_(other.curr_offset_),
-          topk_(std::move(other.topk_)), is_descending_(other.is_descending_), processing_query_(true) {
-    }
-
-    // Copy assignment operator
-    TypedTopKBuffer &operator=(const TypedTopKBuffer &other) {
-        if (this != &other) {
-            k_ = other.k_;
-            curr_offset_ = other.curr_offset_;
-            topk_ = other.topk_;
-            is_descending_ = other.is_descending_;
-        }
-        return *this;
-    }
-
-    // Move assignment operator
-    TypedTopKBuffer &operator=(TypedTopKBuffer &&other) noexcept {
-        if (this != &other) {
-            k_ = other.k_;
-            curr_offset_ = other.curr_offset_;
-            topk_ = std::move(other.topk_);
-            is_descending_ = other.is_descending_;
-        }
-        return *this;
-    }
-
     void set_k(int new_k) {
         std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
         assert(new_k <= topk_.size());
