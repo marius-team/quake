@@ -482,6 +482,10 @@ namespace faiss {
             // IndexPartition part = IndexPartition(nv64, codes, ids, code_size);
             shared_ptr<IndexPartition> part = std::make_shared<IndexPartition>(nv64, codes, ids, code_size);
             partitions_[pid] = part;
+
+            // save to free codes and ids since IndexPartition makes its own copies
+            delete[] codes;
+            delete[] ids;
         }
 
         // Update curr_list_id_
