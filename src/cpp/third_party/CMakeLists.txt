@@ -25,3 +25,6 @@ add_subdirectory(faiss)
 
 initialize_submodule(SimSIMD)
 add_subdirectory(SimSIMD EXCLUDE_FROM_ALL)
+
+initialize_submodule(concurrentqueue)
+add_subdirectory(concurrentqueue EXCLUDE_FROM_ALL)

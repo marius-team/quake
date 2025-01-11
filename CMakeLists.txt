@@ -117,6 +117,7 @@ target_include_directories(${PROJECT_NAME}
         ${TORCH_INCLUDE_DIRS}
         ${project_INCLUDE_DIR}
         ${project_THIRD_PARTY_DIR}/SimSIMD/include/
+        ${project_THIRD_PARTY_DIR}/concurrentqueue/
         faiss
 )
 
@@ -148,6 +149,9 @@ elseif(UNIX)
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()
+
+    # Add openmp flags
+    list(APPEND LINK_LIBS -liomp5)
 else()
     # unsupported platform
     message(FATAL_ERROR "Unsupported platform")
@@ -159,12 +163,12 @@ IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
     message("Using thread sanitizer")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
     set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=thread")
-ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
+ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
 
 IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
     message("Using address sanitizer")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=leak")
-    set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=address -fsanitize=leak")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize-recover=address")
+    set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=address")
 ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
 
 # ---------------------------------------------------------------

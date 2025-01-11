@@ -9,14 +9,14 @@
 IndexPartition::IndexPartition(int64_t num_vectors,
                                uint8_t* codes,
                                idx_t* ids,
-                               int64_t code_size)
-    : buffer_size_(0),
-      num_vectors_(0),
-      code_size_(code_size),
-      codes_(nullptr),
-      ids_(nullptr),
-      numa_node_(-1),
-      thread_id_(-1) {
+                               int64_t code_size) {
+    buffer_size_ = 0;
+    num_vectors_ = 0;
+    code_size_ = code_size;
+    codes_ = nullptr;
+    ids_ = nullptr;
+    numa_node_ = -1;
+    thread_id_ = -1;
     ensure_capacity(num_vectors);
     append(num_vectors, ids, codes);
 }

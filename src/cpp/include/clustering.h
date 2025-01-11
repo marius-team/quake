@@ -9,11 +9,11 @@
 
 #include <common.h>
 
-std::tuple<Tensor, vector<Tensor>, vector<Tensor>> kmeans(Tensor vectors,
-                                                           Tensor ids,
-                                                           int n_clusters,
-                                                           MetricType metric_type,
-                                                           int niter=5,
-                                                           Tensor initial_centroids = Tensor());
+shared_ptr<Clustering> kmeans(Tensor vectors,
+                              Tensor ids,
+                              int n_clusters,
+                              MetricType metric_type,
+                              int niter = 5,
+                              Tensor initial_centroids = Tensor());
 
 #endif //CLUSTERING_H

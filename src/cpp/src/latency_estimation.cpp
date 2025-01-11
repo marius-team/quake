@@ -10,7 +10,7 @@
 
 // A simple helper to split a string by delimiter.
 // You can replace this with any library function if you wish.
-static std::vector<std::string> SplitString(const std::string &str,
+static std::vector<std::string> split_string(const std::string &str,
                                             char delim) {
     std::vector<std::string> tokens;
     std::stringstream ss(str);
@@ -74,7 +74,7 @@ void ListScanLatencyEstimator::profile_scan_latency() {
 
             torch::Tensor curr_vectors = vectors.narrow(0, 0, n);
             torch::Tensor curr_ids = ids.narrow(0, 0, n);
-            TopkBuffer topk_buffer(k, false);
+            auto topk_buffer = make_shared<TopkBuffer>(k, false);
 
             const float *query_ptr = query.data_ptr<float>();
             const float *curr_vectors_ptr = curr_vectors.data_ptr<float>();
@@ -319,7 +319,7 @@ bool ListScanLatencyEstimator::load_latency_profile(const std::string &filename)
     std::string line;
     // 1) Read size info
     if (!std::getline(ifs, line)) return false;
-    auto tokens = SplitString(line, ',');
+    auto tokens = split_string(line, ',');
     if (tokens.size() != 2) return false;
 
     int n_size = std::stoi(tokens[0]);
@@ -327,7 +327,7 @@ bool ListScanLatencyEstimator::load_latency_profile(const std::string &filename)
 
     // 2) Read n_values_
     if (!std::getline(ifs, line)) return false;
-    tokens = SplitString(line, ',');
+    tokens = split_string(line, ',');
     if (static_cast<int>(tokens.size()) != n_size) return false;
     std::vector<int> file_n_values(n_size);
     for (int i = 0; i < n_size; i++) {
@@ -336,7 +336,7 @@ bool ListScanLatencyEstimator::load_latency_profile(const std::string &filename)
 
     // 3) Read k_values_
     if (!std::getline(ifs, line)) return false;
-    tokens = SplitString(line, ',');
+    tokens = split_string(line, ',');
     if (static_cast<int>(tokens.size()) != k_size) return false;
     std::vector<int> file_k_values(k_size);
     for (int j = 0; j < k_size; j++) {
@@ -354,7 +354,7 @@ bool ListScanLatencyEstimator::load_latency_profile(const std::string &filename)
 
     for (int i = 0; i < n_size; i++) {
         if (!std::getline(ifs, line)) return false;
-        tokens = SplitString(line, ',');
+        tokens = split_string(line, ',');
         if (static_cast<int>(tokens.size()) != k_size) return false;
         for (int j = 0; j < k_size; j++) {
             file_latency_model[i][j] = std::stof(tokens[j]);

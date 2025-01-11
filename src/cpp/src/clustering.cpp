@@ -6,13 +6,12 @@
 
 #include "clustering.h"
 
-std::tuple<Tensor, vector<Tensor>, vector<Tensor> > kmeans(Tensor vectors,
-                                                           Tensor ids,
-                                                           int n_clusters,
-                                                           faiss::MetricType metric_type,
-                                                           int niter,
-                                                           Tensor initial_centroids) {
-
+shared_ptr<Clustering> kmeans(Tensor vectors,
+                              Tensor ids,
+                              int n_clusters,
+                              faiss::MetricType metric_type,
+                              int niter,
+                              Tensor initial_centroids) {
     assert(vectors.size(0) >= n_clusters * 2);
     assert(vectors.size(0) == ids.size(0));
 
@@ -79,5 +78,11 @@ std::tuple<Tensor, vector<Tensor>, vector<Tensor> > kmeans(Tensor vectors,
         cluster_ids[i] = ids.index({assignments == i});
     }
 
-    return std::make_tuple(centroids, cluster_vectors, cluster_ids);
+    shared_ptr<Clustering> clustering = std::make_shared<Clustering>();
+    clustering->centroids = centroids;
+    clustering->partition_ids = torch::arange(n_clusters, torch::kInt64);
+    clustering->vectors = cluster_vectors;
+    clustering->vector_ids = cluster_ids;
+
+    return clustering;
 }

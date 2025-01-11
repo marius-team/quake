@@ -41,7 +41,4 @@ jobs:
       - name: Run tests
         run: |
             cd build
-            test/cpp/quake_tests --gtest_filter=IndexPartitionTest.* 
-            test/cpp/quake_tests --gtest_filter=DynamicInvertedListTest.*
-            test/cpp/quake_tests --gtest_filter=ListScanLatencyEstimatorTest.*
-            test/cpp/quake_tests --gtest_filter=DynamicIVFTest.*
+            test/cpp/quake_tests
