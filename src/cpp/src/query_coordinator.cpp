@@ -140,14 +140,18 @@ void QueryCoordinator::partition_scan_worker_fn(int worker_id) {
                       local_topk_buffer,
                       metric_);
 
+            vector<float> topk = local_topk_buffer->get_topk();
+            vector<int64_t> topk_indices = local_topk_buffer->get_topk_indices();
+            int64_t n_results = topk_indices.size();
+
             // Merge into global buffer for this query
             {
                 std::lock_guard<std::mutex> lock(result_mutex_);
                 if (query_topk_buffers_[job.query_ids[0]]) {
                     query_topk_buffers_[job.query_ids[0]]->batch_add(
-                        local_topk_buffer->get_topk().data(),
-                        local_topk_buffer->get_topk_indices().data(),
-                        local_topk_buffer->curr_offset_
+                        topk.data(),
+                        topk_indices.data(),
+                        n_results
                     );
                 }
                 jobs_.erase(job_id);
@@ -175,15 +179,19 @@ void QueryCoordinator::partition_scan_worker_fn(int worker_id) {
                 metric_
             );
 
+            vector<float> topk = local_topk_buffer->get_topk();
+            vector<int64_t> topk_indices = local_topk_buffer->get_topk_indices();
+            int64_t n_results = topk_indices.size();
+
             {
                 std::lock_guard<std::mutex> lock(result_mutex_);
                 for (int64_t q = 0; q < job.num_queries; q++) {
                     int64_t query_id = job.query_ids[q];
                     if (query_topk_buffers_[query_id]) {
                         query_topk_buffers_[query_id]->batch_add(
-                            local_buffers[q]->get_topk().data(),
-                            local_buffers[q]->get_topk_indices().data(),
-                            local_buffers[q]->curr_offset_
+                        topk.data(),
+                        topk_indices.data(),
+                        n_results
                         );
                     }
                 }

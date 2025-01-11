@@ -37,7 +37,7 @@ inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     return recall;
 }
 
-#define TOP_K_BUFFER_CAPACITY (32 * 1024)
+#define TOP_K_BUFFER_CAPACITY (8 * 1024)
 
 template<typename DistanceType = float, typename IdType = int>
 class TypedTopKBuffer {
