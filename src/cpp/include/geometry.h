@@ -344,6 +344,12 @@ inline Tensor compute_variance_in_direction_of_query(Tensor query, Tensor centro
 inline Tensor compute_recall_profile(const Tensor &boundary_distances, float query_radius, int dimension,
                                      const Tensor &partition_sizes = {}, bool use_precomputed = true,
                                      bool euclidean = true) {
+
+    // boundary_distances shape is (num_partitions,) and num_partitions must be greater than 1
+    if (boundary_distances.size(0) < 2) {
+        throw std::runtime_error("Boundary distances must have at least 2 partitions to create an estimate.");
+    }
+
     auto boundary_distances_ptr = boundary_distances.data_ptr<float>();
     int num_partitions = boundary_distances.size(0);
     std::vector<double> partition_probabilities(num_partitions, 0.0f);
@@ -360,24 +366,27 @@ inline Tensor compute_recall_profile(const Tensor &boundary_distances, float que
         }
 
         double volume_ratio = std::exp(
-            log_hyperspherical_cap_volume(query_radius, boundary_distance, dimension, true, use_precomputed,
-                                          euclidean));
+            log_hyperspherical_cap_volume(query_radius,
+                boundary_distance,
+                dimension,
+                true,
+                use_precomputed,
+                euclidean));
         partition_probabilities[j] = (volume_ratio > 0.0) ? volume_ratio : 0.0;
     }
 
-    // if (weigh_using_partition_sizes) {
-    //     auto partition_sizes_accessor = partition_sizes.accessor<int64_t, 1>();
-    //     for (int j = 0; j < num_partitions; j++) {
-    //         partition_probabilities[j] *= partition_sizes_accessor[j];
-    //     }
-    // }
-
-    // TODO: Implement a better way to compute the probabilities for the first partition
+    // TODO: Implement a better way to compute the probabilities for the first partition. This heuristic works well on tested datasets.
     partition_probabilities[0] = 2.0 * partition_probabilities[1];
     // partition_probabilities[0] = 1 - partition_probabilities[1];
 
-    Tensor probabilities_tensor = torch::from_blob(partition_probabilities.data(), {num_partitions}, torch::kDouble).
+    Tensor probabilities_tensor = torch::from_blob(partition_probabilities.data(),
+        {num_partitions},
+        torch::kDouble).
             clone();
+
+    if (weigh_using_partition_sizes) {
+        probabilities_tensor *= partition_sizes;
+    }
 
     // Ensure the probabilities sum to 1
     double sum_probabilities = probabilities_tensor.sum().item<double>();

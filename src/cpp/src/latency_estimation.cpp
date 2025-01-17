@@ -84,7 +84,7 @@ void ListScanLatencyEstimator::profile_scan_latency() {
             for (int m = 0; m < n_trials_; ++m) {
                 auto start = std::chrono::high_resolution_clock::now();
                 scan_list(query_ptr, curr_vectors_ptr, curr_ids_ptr, n, d_,
-                          topk_buffer);
+                          *topk_buffer);
                 auto end = std::chrono::high_resolution_clock::now();
 
                 auto duration =

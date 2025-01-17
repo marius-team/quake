@@ -285,7 +285,6 @@ namespace faiss {
         // This assumes that the stored codes are actually floats or float-like data.
         // If codes_ are PQ codes or compressed, you'd need decompression.
         // If they are raw float vectors, this works.
-        // If code_size does not match sizeof(float)*dim, you need to adjust accordingly.
 
         for (auto &kv: partitions_) {
             shared_ptr<IndexPartition> part = kv.second;
@@ -438,6 +437,7 @@ namespace faiss {
 
         nlist = static_cast<size_t>(nlist_64);
         code_size = static_cast<size_t>(code_size_64);
+        d_ = code_size / sizeof(float);
 
         // Read offsets
         std::vector<uint64_t> offsets(num_partitions + 1);

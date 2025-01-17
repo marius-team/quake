@@ -27,6 +27,8 @@ public:
     shared_ptr<MaintenancePolicyParams> maintenance_policy_params_; ///< Parameters for the maintenance policy.
     int current_level_ = 0; ///< Current level of the index.
 
+    bool debug_ = false; ///< If true, print debug information.
+
     /**
      * @brief Constructor for QuakeIndex.
      * @param current_level The current level of the index.
@@ -105,8 +107,9 @@ public:
     /**
      * @brief Load the index from a file.
      * @param path Path to load the index.
+     * @param n_workers Number of workers to use for query processing.
      */
-    void load(const std::string &path);
+    void load(const std::string &path, int n_workers = 0);
 
     /**
      * @brief Get the total number of vectors in the index.
