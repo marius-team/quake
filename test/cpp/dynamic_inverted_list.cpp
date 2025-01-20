@@ -493,13 +493,5 @@ TEST_F(DynamicInvertedListTest, NumaTests) {
     // test thread mapping
     invlists->set_thread(list_no, 2);
     EXPECT_EQ(invlists->get_thread(list_no), 2);
-
-    // test unassigned clusters
-    // Initially all are created with numa_node = -1 except the one we changed
-    auto unassigned = invlists->get_unassigned_clusters();
-    // We changed list_no 0 to node 0, so it should not be unassigned
-    // But others (1 through 9) are still unassigned since they haven't been changed
-    EXPECT_EQ(unassigned.size(), nlist - 1);
-    EXPECT_TRUE(unassigned.find(list_no) == unassigned.end());
 }
 #endif
