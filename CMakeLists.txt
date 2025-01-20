@@ -20,6 +20,7 @@ if (USE_NUMA) # Enable NUMA support
     set(QUAKE_USE_NUMA ON)
 else()
     set(QUAKE_USE_NUMA OFF)
+endif()
 
 if(QUAKE_USE_AVX512)
     set(QUAKE_USE_AVX512 ON)
