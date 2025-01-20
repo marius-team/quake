@@ -496,11 +496,14 @@ void PartitionManager::distribute_flat(int n_partitions) {
 }
 
 void PartitionManager::distribute_partitions(int num_workers) {
+    std::cout << "Distributing partitions across " << num_workers << " workers." << std::endl;
     if (parent_ == nullptr) {
+        std::cout << "Index is flat." << std::endl;
         throw std::runtime_error("Index is not partitioned");
     } else {
         // TODO: Implement distribute_partitions
     }
+    std::cout << "Distributing partitions across " << num_workers << " workers." << std::endl;
 }
 
 

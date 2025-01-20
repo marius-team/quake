@@ -35,7 +35,7 @@ TEST_F(ListScanningTest, ScanList_SingleQuery_L2) {
     int64_t list_ids[4] = {10, 20, 30, 40};
 
     // Expected top-k: 0.0 (id=10), 1.0 (id=30 or 40)
-    scan_list(query_vec, list_vecs, list_ids, 4, 3, buffer, faiss::METRIC_L2);
+    scan_list(query_vec, list_vecs, list_ids, 4, 3, *buffer, faiss::METRIC_L2);
 
     std::vector<float> expected_dists = {0.0f, 1.0f};
     std::vector<int64_t> expected_ids = {10, 30}; // Could also be {10, 40} based on order
@@ -71,7 +71,7 @@ TEST_F(ListScanningTest, ScanList_SingleQuery_InnerProduct) {
     int64_t list_ids[4] = {10, 20, 30, 40};
 
     // Expected top-k: 2.0 (id=40), 1.0 (id=10 or 30)
-    scan_list(query_vec, list_vecs, list_ids, 4, 3, buffer, faiss::METRIC_INNER_PRODUCT);
+    scan_list(query_vec, list_vecs, list_ids, 4, 3, *buffer, faiss::METRIC_INNER_PRODUCT);
 
     std::vector<float> expected_dists = {2.0f, 1.0f};
     std::vector<int64_t> expected_ids = {40, 10}; // Could also be {40, 30}
@@ -455,7 +455,7 @@ TEST_F(ListScanningTest, LargeListCorrectnessInnerProduct) {
             list_ids.data_ptr<int64_t>(),
             list_size,
             d,
-            buffer,
+            *buffer,
             faiss::METRIC_INNER_PRODUCT
             );
 
@@ -522,7 +522,7 @@ TEST_F(ListScanningTest, LargeListCorrectnessL2) {
             list_ids.data_ptr<int64_t>(),
             list_size,
             d,
-            buffer,
+            *buffer,
             faiss::METRIC_L2
             );
 

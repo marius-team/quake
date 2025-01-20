@@ -49,9 +49,10 @@ public:
     std::recursive_mutex buffer_mutex_;
     std::atomic<bool> processing_query_;
     std::atomic<int> jobs_left_;
+    std::atomic<int> partitions_scanned_;
 
     TypedTopKBuffer(int k, bool is_descending, int buffer_capacity = TOP_K_BUFFER_CAPACITY)
-        : k_(k), is_descending_(is_descending), topk_(buffer_capacity), processing_query_(true) {
+        : k_(k), is_descending_(is_descending), topk_(buffer_capacity), processing_query_(true), partitions_scanned_(0) {
         assert(k <= buffer_capacity); // Ensure k is smaller than or equal to buffer size
 
         for (int i = 0; i < topk_.size(); i++) {
@@ -97,6 +98,10 @@ public:
         return jobs_left_.load(std::memory_order_relaxed) <= 0;
     }
 
+    inline int get_num_partitions_scanned() {
+        return partitions_scanned_.load(std::memory_order_relaxed);
+    }
+
     void reset() {
         std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
         curr_offset_ = 0;
@@ -133,7 +138,6 @@ public:
         // Ensure buffer has enough capacity
         if (curr_offset_ + num_values > static_cast<int>(topk_.size())) {
             flush();
-            // After flushing, if still not enough room, handle error or perform additional flushing/expansion
             if (curr_offset_ + num_values > static_cast<int>(topk_.size())) {
                 throw std::runtime_error("Insufficient buffer capacity even after flush");
             }
@@ -148,6 +152,7 @@ public:
         }
 
         jobs_left_.fetch_sub(1, std::memory_order_relaxed);
+        partitions_scanned_.fetch_add(1, std::memory_order_relaxed);
     }
 
     DistanceType flush() {
@@ -245,10 +250,11 @@ inline void scan_list(const float *query_vec,
                       const int64_t *list_ids,
                       int list_size,
                       int d,
-                      shared_ptr<TopkBuffer> buffer,
+                      TopkBuffer &buffer,
                       faiss::MetricType metric = faiss::METRIC_L2) {
     simsimd_distance_t dist;
     const float *vec;
+
 
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         if (list_ids == nullptr) {
@@ -256,14 +262,14 @@ inline void scan_list(const float *query_vec,
             for (int l = 0; l < list_size; l++) {
                 vec = list_vecs + l * d;
                 simsimd_dot_f32(query_vec, vec, d, &dist);
-                buffer->add(dist, l);
+                buffer.add(dist, l);
             }
         } else {
 #pragma unroll
             for (int l = 0; l < list_size; l++) {
                 vec = list_vecs + l * d;
                 simsimd_dot_f32(query_vec, vec, d, &dist);
-                buffer->add(dist, list_ids[l]);
+                buffer.add(dist, list_ids[l]);
             }
         }
     } else {
@@ -272,14 +278,14 @@ inline void scan_list(const float *query_vec,
             for (int l = 0; l < list_size; l++) {
                 vec = list_vecs + l * d;
                 simsimd_l2sq_f32(query_vec, vec, d, &dist);
-                buffer->add(sqrt(dist), l);
+                buffer.add(sqrt(dist), l);
             }
         } else {
 #pragma unroll
             for (int l = 0; l < list_size; l++) {
                 vec = list_vecs + l * d;
                 simsimd_l2sq_f32(query_vec, vec, d, &dist);
-                buffer->add(sqrt(dist), list_ids[l]);
+                buffer.add(sqrt(dist), list_ids[l]);
             }
         }
     }

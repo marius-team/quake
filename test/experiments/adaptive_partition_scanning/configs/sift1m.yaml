@@ -1,0 +1,25 @@
+# configs/experiment.yaml
+mode: run  # options: build, run, plot
+base_dir: data/aps
+dataset:
+  name: sift1m
+  path: data
+experiment:
+  nq: 100
+  k: 100
+  n_workers: 4
+  flush_gap_times_us: [50]
+  recall_targets: [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, .99]
+index:
+  metric: l2
+  nc: 1000
+overwrite:
+  index: false
+  results: true
+methods: ['Oracle', 'APS']
+#methods: ['APS']
+
+paths:
+  index_dir: data/sift/indexes
+  results_dir: data/sift/results
+  plot_dir: data/sift/plots

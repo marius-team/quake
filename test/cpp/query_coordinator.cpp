@@ -36,7 +36,7 @@ protected:
         index_ = std::make_shared<QuakeIndex>();
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = nlist_;
-        build_params->metric = faiss::METRIC_L2;
+        build_params->metric = "l2";
         index_->build(vectors, ids, build_params);
         partition_manager_ = index_->partition_manager_;
 
@@ -44,8 +44,6 @@ protected:
         queries_ = torch::randn({num_queries_, dimension_}, torch::kCPU);
     }
 };
-
-// Existing Tests
 
 TEST_F(QueryCoordinatorTest, NullParentBatchedScanTest) {
     // Parent is null => QueryCoordinator scans all partitions (flat index scenario)
@@ -60,13 +58,11 @@ TEST_F(QueryCoordinatorTest, NullParentBatchedScanTest) {
 
     auto result = coordinator->search(queries_, search_params);
 
-    // We do not do an exact recall test here, but let's do some basic sanity checks:
     ASSERT_TRUE(result != nullptr);
     ASSERT_EQ(result->ids.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
     ASSERT_EQ(result->distances.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
 
     // Ensure no -1s remain if data_size >= k
-    // (In your actual test, you might compare to brute force results.)
     for (int64_t i = 0; i < num_queries_; i++) {
         for (int64_t j = 0; j < k_; j++) {
             ASSERT_NE(result->ids[i][j].item<int64_t>(), -1);
@@ -107,7 +103,6 @@ TEST_F(QueryCoordinatorTest, NonNullParentTest) {
 
     // The parent's result says "scan partition #0 only", so the coordinator
     // should have results from partition #0 only, for all queries.
-    // Just do a basic check:
     ASSERT_EQ(result->ids.size(0), queries_.size(0));
     ASSERT_EQ(result->ids.size(1), 2); // k=2
 }
@@ -173,7 +168,7 @@ TEST_F(QueryCoordinatorTest, FlatWorkerScan) {
     auto flat_index = std::make_shared<QuakeIndex>();
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 1;
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
     flat_index->build(torch::randn({20, dimension_}), torch::arange(20), build_params);
 
     // create coordinator with workers
@@ -507,7 +502,7 @@ TEST_F(WorkerTest, FlatWorkerScan) {
     // create flat index
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 1;
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
 
     auto search_params = std::make_shared<SearchParams>();
     search_params->k = 10;
@@ -557,7 +552,7 @@ TEST_F(WorkerTest, IVFWorkerScan) {
     // create flat index
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 1000;
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
 
     auto search_params = std::make_shared<SearchParams>();
     search_params->k = 10;

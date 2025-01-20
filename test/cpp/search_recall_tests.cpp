@@ -7,9 +7,6 @@
 #include <cmath>
 #include "quake_index.h"
 
-// ---------------------------------------------------------------
-// Helper function: brute-force top-K search (L2 distance version)
-// ---------------------------------------------------------------
 /**
  * Performs a naive, brute-force search for each query vector over all data vectors.
  * Returns a pair of (ids, distances) shaped [num_queries, k].
@@ -39,10 +36,6 @@ std::pair<torch::Tensor, torch::Tensor> brute_force_topk_l2(
     int64_t N = data.size(0);
     int64_t Q = queries.size(0);
     int64_t D = data.size(1);
-
-    // We'll do a naive O(N * Q) approach: for each query, compute distance to all data, then pick top K
-    // Implementation in CPU if the dataset is small. If you want GPU, adapt accordingly.
-    // For demonstration, we do CPU approach even if data is on CUDA (by to(..., kCPU)).
 
     auto data_cpu = data.to(torch::kCPU);
     auto ids_cpu = data_ids.to(torch::kCPU);
@@ -93,9 +86,6 @@ std::pair<torch::Tensor, torch::Tensor> brute_force_topk_l2(
     return {out_ids, out_distances};
 }
 
-// ---------------------------------------------------------------
-// Helper function: compute recall at K
-// ---------------------------------------------------------------
 /**
  * Given the ground truth top-K IDs and the approximate top-K IDs for each query,
  * compute the recall, i.e., the fraction of true neighbors found in the approximate results.
@@ -147,10 +137,10 @@ float compute_recall_at_k(
 class QuakeIndexRecallTest : public ::testing::Test {
 protected:
     // Data sizes
-    int64_t dimension_ = 8;
-    int64_t num_vectors_ = 10000;
+    int64_t dimension_ = 32;
+    int64_t num_vectors_ = 100000;
     int64_t num_queries_ = 10;
-    int64_t k_ = 5;
+    int64_t k_ = 10;
 
     // Pre-generated data
     Tensor data_vectors_;
@@ -167,15 +157,12 @@ protected:
     }
 };
 
-// ---------------------------------------------------------------
-// SCENARIO 1: FLAT (nlist=1) with L2
-// ---------------------------------------------------------------
 TEST_F(QuakeIndexRecallTest, FlatIndexRecallTest) {
     // Build flat index (nlist=1 => no coarse quantization)
     QuakeIndex index;
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 1;  // Flat
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
     index.build(data_vectors_, data_ids_, build_params);
 
     // Perform approximate (actually exact for a flat index) search
@@ -197,25 +184,19 @@ TEST_F(QuakeIndexRecallTest, FlatIndexRecallTest) {
 
     std::cout << "FlatIndexRecallTest => Recall: " << recall << std::endl;
 
-    // We expect near-perfect (or perfect) recall for a flat L2 index,
-    // though some implementations might differ if there's internal reordering.
-    // Let's just require recall >= 0.99.
+    // We expect near-perfect (or perfect) recall for a flat L2 index.
     EXPECT_GE(recall, 0.99f);
 }
 
-// ---------------------------------------------------------------
-// SCENARIO 2: MULTI-PARTITION with varying nprobe
-// ---------------------------------------------------------------
 TEST_F(QuakeIndexRecallTest, MultiPartitionRecallTest) {
     // Build partitioned index
     QuakeIndex index;
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 8;      // Multi-partition
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
     build_params->niter = 5;      // small number of k-means iterations
     index.build(data_vectors_, data_ids_, build_params);
 
-    // We'll test different nprobe settings
     std::vector<int64_t> nprobe_values = {1, 2, 4, 8};
 
     // Ground truth once (brute force)
@@ -236,19 +217,11 @@ TEST_F(QuakeIndexRecallTest, MultiPartitionRecallTest) {
 
         std::cout << "MultiPartitionRecallTest (nprobe=" << nprobe
                   << ") => Recall: " << recall << std::endl;
-        // Typically recall increases with nprobe
-        // This is just an example threshold test
-        // For nprobe=1, you might see lower recall (~0.6-0.8).
-        // For nprobe=8, you might see higher recall (>0.9).
-        // Adjust expectations accordingly or simply log.
     }
 
     SUCCEED();
 }
 
-// ---------------------------------------------------------------
-// SCENARIO 3: INNER_PRODUCT metric with small dataset
-// ---------------------------------------------------------------
 TEST_F(QuakeIndexRecallTest, InnerProductRecallTest) {
     auto data_vectors_ip = data_vectors_;
     auto data_ids_ip = data_ids_;
@@ -258,7 +231,7 @@ TEST_F(QuakeIndexRecallTest, InnerProductRecallTest) {
     QuakeIndex index;
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 1; // "flat"
-    build_params->metric = faiss::METRIC_INNER_PRODUCT;
+    build_params->metric = "ip";
     index.build(data_vectors_ip, data_ids_ip, build_params);
 
     // Search
@@ -280,13 +253,7 @@ TEST_F(QuakeIndexRecallTest, InnerProductRecallTest) {
     EXPECT_GE(recall, 0.99f);
 }
 
-// ---------------------------------------------------------------
-// SCENARIO 4: Recall vs. nlist with multi-part index
-// ---------------------------------------------------------------
 TEST_F(QuakeIndexRecallTest, RecallVsNlistTest) {
-    // We'll try multiple nlist values to see how recall changes.
-    // For small data, you may not see big differences, but it’s illustrative.
-
     std::vector<int64_t> nlist_values = {1, 4, 16};
     auto ground_truth = brute_force_topk_l2(data_vectors_, data_ids_, query_vectors_, k_);
 
@@ -294,7 +261,7 @@ TEST_F(QuakeIndexRecallTest, RecallVsNlistTest) {
         QuakeIndex index;
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = nlist_val;
-        build_params->metric = faiss::METRIC_L2;
+        build_params->metric = "l2";
         build_params->niter = 5;
         index.build(data_vectors_, data_ids_, build_params);
 
@@ -312,4 +279,62 @@ TEST_F(QuakeIndexRecallTest, RecallVsNlistTest) {
     }
 
     SUCCEED();
+}
+
+TEST_F(QuakeIndexRecallTest, RecallVsRecallTargetL2) {
+    std::vector<float> recall_target_values = {.5, .6, .7, .8, .9, .95, .99, 1.0};
+    auto ground_truth = brute_force_topk_l2(data_vectors_, data_ids_, query_vectors_, k_);
+
+    QuakeIndex index;
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = 1000;
+    build_params->metric = "l2";
+    build_params->niter = 5;
+    index.build(data_vectors_, data_ids_, build_params);
+
+    for (auto recall_target : recall_target_values) {
+        // Search with a moderate nprobe
+        auto search_params = std::make_shared<SearchParams>();
+        search_params->k = k_;
+        search_params->recompute_threshold = 0.0;
+        search_params->recall_target = recall_target;
+        search_params->initial_search_fraction = .5;
+
+        auto approx_result = index.search(query_vectors_, search_params);
+        float recall = compute_recall_at_k(ground_truth.first, approx_result->ids);
+
+        std::cout << "RecallVsRecallTarget (recall_target=" << recall_target
+                  << ") => Recall: " << recall << std::endl;
+    }
+}
+
+TEST_F(QuakeIndexRecallTest, RecallVsRecallTargetL2UsingWorkers) {
+    std::vector<float> recall_target_values = {.5, .6, .7, .8, .9, .95, .99, 1.0};
+    // std::vector<float> recall_target_values = {.5};
+    auto ground_truth = brute_force_topk_l2(data_vectors_, data_ids_, query_vectors_, k_);
+
+    QuakeIndex index;
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = 1000;
+    build_params->metric = "l2";
+    build_params->niter = 5;
+    build_params->num_workers = 4;
+    index.build(data_vectors_, data_ids_, build_params);
+
+    for (auto recall_target : recall_target_values) {
+        // Search with a moderate nprobe
+        auto search_params = std::make_shared<SearchParams>();
+        search_params->k = k_;
+        search_params->nprobe = 1;
+        search_params->recompute_threshold = 0.0;
+        search_params->recall_target = recall_target;
+        search_params->initial_search_fraction = .1;
+        search_params->aps_flush_period_us = 1;
+
+        auto approx_result = index.search(query_vectors_, search_params);
+        float recall = compute_recall_at_k(ground_truth.first, approx_result->ids);
+
+        std::cout << "RecallVsRecallTarget (recall_target=" << recall_target
+                  << ") => Recall: " << recall << std::endl;
+    }
 }

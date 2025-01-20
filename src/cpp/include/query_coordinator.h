@@ -34,7 +34,7 @@ public:
     int num_workers_;
     bool workers_initialized_ = false;
     vector<moodycamel::BlockingConcurrentQueue<int>> jobs_queue_;
-    std::unordered_map<int, ScanJob> jobs_;;
+    std::unordered_map<int, ScanJob> jobs_;
 
     // Top-K Buffers
     vector<shared_ptr<TopkBuffer>> query_topk_buffers_;
@@ -42,6 +42,8 @@ public:
     // Synchronization
     std::mutex result_mutex_;
     std::atomic<bool> stop_workers_;
+
+    bool debug_ = false;
 
     QueryCoordinator(shared_ptr<QuakeIndex> parent, shared_ptr<PartitionManager> partition_manager, MetricType metric, int num_workers=0);
 

@@ -27,6 +27,8 @@ public:
     std::shared_ptr<faiss::DynamicInvertedLists> partitions_ = nullptr; ///< Pointer to the inverted lists.
     int64_t curr_partition_id_ = 0; ///< Current partition ID.
 
+    bool debug_ = false; ///< If true, print debug information.
+
     /**
      * @brief Constructor for PartitionManager.
      */

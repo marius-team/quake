@@ -61,7 +61,7 @@ TEST_F(QuakeIndexTest, BuildTest) {
     // create build_params
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = nlist_;       // Use multi-partition
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
     build_params->niter = 5;           // small kmeans iteration
 
     auto timing_info = index.build(data_vectors_, data_ids_, build_params);
@@ -85,7 +85,7 @@ TEST_F(QuakeIndexTest, BuildFlatTest) {
 
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 1;  // "Flat"
-    build_params->metric = faiss::METRIC_INNER_PRODUCT;
+    build_params->metric = "ip";
     build_params->niter = 3;
 
     auto timing_info = index.build(data_vectors_, data_ids_, build_params);
@@ -105,7 +105,7 @@ TEST_F(QuakeIndexTest, SearchPartitionedTest) {
     // Build
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = nlist_;
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
     index.build(data_vectors_, data_ids_, build_params);
 
     // Create a search_params object (if you need special fields, set them up)
@@ -132,7 +132,7 @@ TEST_F(QuakeIndexTest, SearchFlatTest) {
 
     // Build
     auto build_params = std::make_shared<IndexBuildParams>();
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
     index.build(data_vectors_, data_ids_, build_params);
 
     // Create a search_params object (if you need special fields, set them up)
@@ -264,7 +264,7 @@ TEST(QuakeIndexStressTest, LargeBuildTest) {
 
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 512;
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
     // Keep the iteration count modest to avoid overly long tests
     build_params->niter = 5;
 
@@ -302,7 +302,7 @@ TEST(QuakeIndexStressTest, RepeatedBuildSearchTest) {
         QuakeIndex index;
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = nlist;
-        build_params->metric = faiss::METRIC_L2;
+        build_params->metric = "l2";
         build_params->niter = 3;
 
         // Build index
@@ -424,7 +424,7 @@ TEST(QuakeIndexStressTest, HighDimensionTest) {
     auto build_params = std::make_shared<IndexBuildParams>();
     // For extremely large dimension, consider a small nlist to avoid enormous memory usage
     build_params->nlist = 2;
-    build_params->metric = faiss::METRIC_L2;
+    build_params->metric = "l2";
     build_params->niter = 3;
 
     // If your system doesn’t have enough memory for bigger tests, reduce num_vectors or dimension.

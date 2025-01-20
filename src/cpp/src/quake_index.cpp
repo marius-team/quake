@@ -27,7 +27,7 @@ QuakeIndex::~QuakeIndex() {
 
 shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params) {
     build_params_ = build_params;
-    metric_ = build_params_->metric;
+    metric_ = str_to_metric_type(build_params_->metric);
 
     x = x.contiguous().clone();
     ids = ids.contiguous();
@@ -43,7 +43,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
             x,
             ids,
             build_params_->nlist,
-            build_params_->metric,
+            metric_,
             build_params_->niter
         );
         auto train_end = std::chrono::high_resolution_clock::now();
@@ -53,7 +53,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         // create parent index over the centroids, assume is flat for now
         parent_ = make_shared<QuakeIndex>(current_level_ + 1);
         auto parent_build_params = make_shared<IndexBuildParams>();
-        parent_build_params->metric = metric_;
+        parent_build_params->metric = build_params_->metric;
         parent_->build(clustering->centroids, clustering->partition_ids, parent_build_params);
 
         // initialize the partition manager
@@ -93,6 +93,11 @@ Tensor QuakeIndex::get(Tensor ids) {
     if (!partition_manager_) {
         throw std::runtime_error("[QuakeIndex::get()] No partition manager. Index not built?");
     }
+
+    if (debug_) {
+        std::cout << "[QuakeIndex::get] Getting vectors for IDs: " << ids.sizes() << std::endl;
+    }
+
     return partition_manager_->get(ids);
 }
 
@@ -189,7 +194,7 @@ void QuakeIndex::save(const std::string& dir_path) {
     std::cout << "[QuakeIndex::save] Index saved to directory: " << dir_path << "\n";
 }
 
-void QuakeIndex::load(const std::string& dir_path) {
+void QuakeIndex::load(const std::string& dir_path, int n_workers) {
     namespace fs = std::filesystem;
 
     if (!fs::exists(dir_path) || !fs::is_directory(dir_path)) {
@@ -218,31 +223,33 @@ void QuakeIndex::load(const std::string& dir_path) {
             } else if (key == "level") {
                 current_level_ = std::stoi(val);
             }
-            // if more fields exist, parse them here similarly
         }
         ifs.close();
     }
 
-    // 2. Create partition manager if needed, and load it
+    // 2. Create partition manager and load it
     {
         partition_manager_ = std::make_shared<PartitionManager>();
         std::string partitions_path = (fs::path(dir_path) / "partitions").string();
         partition_manager_->load(partitions_path);
     }
 
-    // 3. Check if a "parent" subdirectory exists, load it if so
+    // 3. Check if parent exists and load it
     {
         std::string parent_dir = (fs::path(dir_path) / "parent").string();
         if (fs::exists(parent_dir) && fs::is_directory(parent_dir)) {
             parent_ = std::make_shared<QuakeIndex>();
             parent_->load(parent_dir);
+            partition_manager_->parent_ = parent_;
         } else {
             parent_ = nullptr;
         }
     }
 
     // 4. Create query coordinator
-    query_coordinator_ = std::make_shared<QueryCoordinator>(parent_, partition_manager_, metric_);
+    std::cout << "Loading coordinator with n_workers=" << n_workers << '\n';
+    query_coordinator_ = std::make_shared<QueryCoordinator>(parent_, partition_manager_, metric_, n_workers);
+    std::cout << "Loaded coordinator\n";
 }
 
 int64_t QuakeIndex::ntotal() {
