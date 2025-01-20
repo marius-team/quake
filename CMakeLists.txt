@@ -139,6 +139,7 @@ elseif(UNIX)
     endif()
 
     if(QUAKE_USE_NUMA)
+        message(STATUS "Using NUMA")
         list(APPEND LINK_LIBS -lnuma)
     endif()
 
