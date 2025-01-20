@@ -681,4 +681,24 @@ TEST_F(NUMAIndexPartitionTest, NUAMAppendTest) {
     verify_ids(partition->ids_, new_ids, append_start);
     verify_codes(partition->codes_, new_codes, append_start);
 }
+
+// Test set numa node
+TEST_F(NUMAIndexPartitionTest, SetNUMANode) {
+    for (int node_num = 0; node_num < 2; node_num++) {
+        partition->set_numa_node(node_num);
+        EXPECT_EQ(partition->numa_node_, node_num);
+
+        int codes_numa_node = -1;
+        get_mempolicy(&codes_numa_node, NULL, 0, (void*) partition->codes_, MPOL_F_NODE | MPOL_F_ADDR);
+        if(codes_numa_node != node_num) {
+            throw std::runtime_error("Partition Thread " + std::to_string(thread_id) + " running on numa node " + std::to_string(curr_worker_numa_node) + " but codes on node " + std::to_string(codes_numa_node));
+        }
+
+        int ids_numa_node = -1;
+        get_mempolicy(&ids_numa_node, NULL, 0, (void*) partition->ids_, MPOL_F_NODE | MPOL_F_ADDR);
+        if(ids_numa_node != node_num) {
+            throw std::runtime_error("Partition Thread " + std::to_string(thread_id) + " running on numa node " + std::to_string(curr_worker_numa_node) + " but ids on node " + std::to_string(ids_numa_node));
+        }
+    }
+}
 #endif

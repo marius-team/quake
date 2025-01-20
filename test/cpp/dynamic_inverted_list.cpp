@@ -484,13 +484,9 @@ TEST_F(DynamicInvertedListTest, NumaTests) {
     // Initially numa_node_ should be -1 for new partitions
     EXPECT_EQ(invlists->get_numa_node(list_no), -1);
 
-    // Set a numa node (if valid in your environment)
-    // We test set_numa_node and get_numa_node
     invlists->set_numa_node(list_no, -1); // no change
     EXPECT_EQ(invlists->get_numa_node(list_no), -1);
 
-    // If you have a machine with NUMA nodes, you could try setting to node 0
-    // For testing purpose, we assume node 0 is valid
     invlists->set_numa_node(list_no, 0);
     EXPECT_EQ(invlists->get_numa_node(list_no), 0);
 
