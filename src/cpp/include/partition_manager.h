@@ -111,6 +111,12 @@ public:
     void distribute_partitions(int num_workers);
 
     /**
+     * @brief Return the number of NUMA nodes.
+     * @return The number of NUMA nodes.
+     */
+    int get_num_numa_nodes();
+
+    /**
      * @brief Return total number of vectors across all partitions.
      */
     int64_t ntotal() const;

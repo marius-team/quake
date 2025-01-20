@@ -501,24 +501,33 @@ void PartitionManager::distribute_partitions(int num_workers) {
         std::cout << "Index is flat." << std::endl;
         throw std::runtime_error("Index is not partitioned");
     } else {
-        // TODO: Implement distribute_partitions
+
+        int num_numa_nodes = std::min(get_num_numa_nodes(), num_workers);
+
+        if (num_numa_nodes == -1) {
+            std::cout << "No NUMA nodes detected." << std::endl;
+            return;
+        }
+
+        // round robin assignment of partitions to numa nodes
+        int next_numa_node = 0;
+        for (auto partition : partitions_->partitions_) {
+            int numa_node = next_numa_node;
+            next_numa_node = (next_numa_node + 1) % num_numa_nodes;
+            partition.second->set_numa_node(numa_node);
+        }
     }
     std::cout << "Distributing partitions across " << num_workers << " workers." << std::endl;
 }
 
+int PartitionManager::get_num_numa_nodes() {
+#ifdef QUAKE_USE_NUMA
+    return numa_max_node() + 1;
+#else
+    return -1;
+#endif
+}
 
-//
-// /**
-//  * @brief Randomly breaks up the single partition into multiple partitions and distributes the partitions. Only applicable for flat indexes.
-//  * @param n_partitions The number of partitions to split the single partition into.
-//  */
-// void distribute_flat(int n_partitions);
-//
-// /**
-//  * @brief Distribute the partitions across multiple workers.
-//  * @param num_workers The number of workers to distribute the partitions across.
-//  */
-// void distribute_partitions(int num_workers);
 
 int64_t PartitionManager::ntotal() const {
     if (!partitions_) {

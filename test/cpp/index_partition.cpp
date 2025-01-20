@@ -589,87 +589,20 @@ TEST_F(IndexPartitionTest, UpdateWithZeroEntriesTest) {
 }
 
 #ifdef QUAKE_USE_NUMA
-class NUMAIndexPartitionTest : public ::testing::Test {
-protected:
-    int64_t initial_num_vectors = 10;
-    int64_t code_size = 16; // bytes per code
-    IndexPartition* partition;
-
-    // Vectors to hold initial codes and ids for verification
-    std::vector<uint8_t> initial_codes_vec_;
-    std::vector<idx_t> initial_ids_vec_;
-
-    virtual void SetUp() {
-        // Initialize initial_ids with sequential IDs starting from 1000
-        generate_sequential_ids(initial_num_vectors, initial_ids_vec_, 1000);
-
-        // Initialize initial_codes with sequential codes starting from 0
-        generate_sequential_codes(initial_num_vectors, initial_codes_vec_, 0);
-
-        // Allocate memory and copy initial data
-        uint8_t* initial_codes = static_cast<uint8_t*>(std::malloc(initial_num_vectors * code_size));
-        idx_t* initial_ids = static_cast<idx_t*>(std::malloc(initial_num_vectors * sizeof(idx_t)));
-        std::memcpy(initial_codes, initial_codes_vec_.data(), initial_num_vectors * code_size);
-        std::memcpy(initial_ids, initial_ids_vec_.data(), initial_num_vectors * sizeof(idx_t));
-
-        // Initialize an IndexPartition with initial data
-        partition = new IndexPartition(initial_num_vectors, initial_codes, initial_ids, code_size);
-        partition->set_numa_node(1);
-
-        // Free temporary allocations as IndexPartition has its own copies
-        std::free(initial_codes);
-        std::free(initial_ids);
-    }
-
-    virtual void TearDown() {
-        delete partition;
-    }
-
-    // Helper function to generate sequential codes
-    void generate_sequential_codes(size_t n, std::vector<uint8_t>& codes, unsigned int start_val = 0) {
-        codes.resize(n * code_size);
-        for (size_t i = 0; i < n * code_size; ++i) {
-            codes[i] = static_cast<uint8_t>((start_val + i) % 256);
-        }
-    }
-
-    // Helper function to generate sequential IDs
-    void generate_sequential_ids(size_t n, std::vector<idx_t>& ids, idx_t start_id = 0) {
-        ids.resize(n);
-        for (size_t i = 0; i < n; ++i) {
-            ids[i] = start_id + i;
-        }
-    }
-
-    // Helper functions for verification
-    void verify_ids(const idx_t* actual_ids, const std::vector<idx_t>& expected_ids, size_t start_idx = 0) {
-        for (size_t i = 0; i < expected_ids.size(); ++i) {
-            EXPECT_EQ(actual_ids[start_idx + i], expected_ids[i]) << "Mismatch at index " << (start_idx + i);
-        }
-    }
-
-    void verify_codes(const uint8_t* actual_codes, const std::vector<uint8_t>& expected_codes, size_t start_idx = 0) {
-        size_t code_bytes = code_size;
-        for (size_t i = 0; i < expected_codes.size() / code_bytes; ++i) {
-            EXPECT_EQ(std::memcmp(actual_codes + (start_idx + i) * code_bytes,
-                                  expected_codes.data() + i * code_bytes,
-                                  code_bytes), 0)
-                << "Code mismatch at vector " << (start_idx + i);
-        }
-    }
-};
 
 // Test append method
-TEST_F(NUMAIndexPartitionTest, NUAMAppendTest) {
+TEST_F(IndexPartitionTest, NUMAAppendTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> new_codes;
     std::vector<idx_t> new_ids;
     generate_sequential_codes(n_entry, new_codes, 500);
     generate_sequential_ids(n_entry, new_ids, 6000);
 
+    // set the numa node
+    partition->set_numa_node(0);
+
     // Append entries
     partition->append(n_entry, new_ids.data(), new_codes.data());
-
     EXPECT_EQ(partition->num_vectors_, initial_num_vectors + n_entry);
 
     // Verify initial data remains unchanged
@@ -683,7 +616,7 @@ TEST_F(NUMAIndexPartitionTest, NUAMAppendTest) {
 }
 
 // Test set numa node
-TEST_F(NUMAIndexPartitionTest, SetNUMANode) {
+TEST_F(IndexPartitionTest, SetNUMANode) {
     for (int node_num = 0; node_num < 2; node_num++) {
         partition->set_numa_node(node_num);
         EXPECT_EQ(partition->numa_node_, node_num);

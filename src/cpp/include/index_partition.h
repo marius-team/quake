@@ -57,10 +57,8 @@ public:
 
     void reallocate_memory(int64_t new_capacity);
 
-#ifdef QUAKE_USE_NUMA
     // Set the NUMA node and move data there if necessary
     void set_numa_node(int new_numa_node);
-#endif
 
 private:
     void move_from(IndexPartition&& other);

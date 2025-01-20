@@ -43,7 +43,6 @@ TEST_F(PartitionManagerTest, InitPartitionsSuccess) {
 
   auto build_params = std::make_shared<IndexBuildParams>();
   parent_->build(clustering->centroids, clustering->partition_ids, build_params);
-
   partition_manager_->init_partitions(parent_, clustering);
 
   EXPECT_EQ(partition_manager_->nlist(), 3);
@@ -164,4 +163,53 @@ TEST_F(PartitionManagerTest, RefinePartitions) {
   partition_manager_->refine_partitions(torch::tensor({0, 1, 2}, torch::kInt64), 3); // run 3 iterations of refinement on partitions 0, 1, 2
   ASSERT_EQ(partition_manager_->ntotal(), n_total);
   ASSERT_EQ(partition_manager_->nlist(), n_list);
+}
+
+
+TEST_F(PartitionManagerTest, DistributePartitions) {
+  auto clustering = std::make_shared<Clustering>();
+  clustering->partition_ids = torch::tensor({0, 1, 2}, torch::kInt64);
+
+  auto v0 = torch::tensor({{1.0f, 2.0f, 3.0f, 4.0f},
+                           {5.0f, 6.0f, 7.0f, 8.0f}}, torch::kFloat32);
+  auto v1 = torch::tensor({{0.1f, 0.2f, 0.3f, 0.4f}}, torch::kFloat32);
+  auto v2 = torch::tensor({{9.0f,  9.1f,  9.2f,  9.3f},
+                           {10.0f, 10.1f, 10.2f, 10.3f}}, torch::kFloat32);
+
+  auto i0 = torch::tensor({10, 11}, torch::kInt64);
+  auto i1 = torch::tensor({100}, torch::kInt64);
+  auto i2 = torch::tensor({1000, 1001}, torch::kInt64);
+
+  clustering->partition_ids = torch::tensor({0, 1, 2}, torch::kInt64);
+  clustering->centroids = torch::tensor({{0.0f, 0.0f, 0.0f, 0.0f},
+                                         {1.0f, 1.0f, 1.0f, 1.0f},
+                                         {2.0f, 2.0f, 2.0f, 2.0f}}, torch::kFloat32);
+  clustering->vectors = {v0, v1, v2};
+  clustering->vector_ids = {i0, i1, i2};
+
+  auto build_params = std::make_shared<IndexBuildParams>();
+  parent_->build(clustering->centroids, clustering->partition_ids, build_params);
+  partition_manager_->init_partitions(parent_, clustering);
+
+
+  // distribute partitions across 2 numa nodes
+  partition_manager_->distribute_partitions(2);
+
+#ifdef QUAKE_USE_NUMA
+  std::cout << "Num NUMA nodes: " << partition_manager_->get_num_numa_nodes() << std::endl;
+  // check that each partition has a numa node of 0 or 1
+  for (auto partition : partition_manager_->partitions_) {
+    ASSERT_TRUE(partition.second->numa_node_ == 0 || partition.second->numa_node_ == 1);
+
+    int codes_numa_node = -1;
+    get_mempolicy(&codes_numa_node, NULL, 0, (void*) partition->codes_, MPOL_F_NODE | MPOL_F_ADDR);
+    ASSERT_TRUE(codes_numa_node == 0 || codes_numa_node == 1);
+
+    int ids_numa_node = -1;
+    get_mempolicy(&ids_numa_node, NULL, 0, (void*) partition->ids_, MPOL_F_NODE | MPOL_F_ADDR);
+    ASSERT_TRUE(ids_numa_node == 0 || ids_numa_node == 1);
+  }
+#endif
+
+
 }

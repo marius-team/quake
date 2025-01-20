@@ -121,12 +121,13 @@ int64_t IndexPartition::find_id(idx_t id) const {
     return -1; // not found
 }
 
-#ifdef QUAKE_USE_NUMA
+
 void IndexPartition::set_numa_node(int new_numa_node) {
     if (new_numa_node == numa_node_) {
         return; // no change
     }
 
+#ifdef QUAKE_USE_NUMA
     bool is_valid_numa = (new_numa_node == -1) ||
                          (numa_available() != -1 && new_numa_node <= numa_max_node());
     if (!is_valid_numa) {
@@ -154,8 +155,10 @@ void IndexPartition::set_numa_node(int new_numa_node) {
     codes_ = new_codes;
     ids_ = new_ids;
     numa_node_ = new_numa_node;
-}
+#else
+    throw std::runtime_error("NUMA support not enabled");
 #endif
+}
 
 void IndexPartition::move_from(IndexPartition&& other) {
     numa_node_ = other.numa_node_;
