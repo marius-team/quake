@@ -690,11 +690,11 @@ TEST_F(NUMAIndexPartitionTest, SetNUMANode) {
 
         int codes_numa_node = -1;
         get_mempolicy(&codes_numa_node, NULL, 0, (void*) partition->codes_, MPOL_F_NODE | MPOL_F_ADDR);
-        EXPECT_EQ(codes_numa_node, node_num)
+        EXPECT_EQ(codes_numa_node, node_num);
 
         int ids_numa_node = -1;
         get_mempolicy(&ids_numa_node, NULL, 0, (void*) partition->ids_, MPOL_F_NODE | MPOL_F_ADDR);
-        EXPECT_EQ(ids_numa_node, node_num)
+        EXPECT_EQ(ids_numa_node, node_num);
     }
 }
 #endif
