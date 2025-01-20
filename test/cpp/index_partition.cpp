@@ -588,7 +588,7 @@ TEST_F(IndexPartitionTest, UpdateWithZeroEntriesTest) {
     verify_codes(partition->codes_, append_codes, initial_num_vectors);
 }
 
-
+#ifdef QUAKE_USE_NUMA
 class NUMAIndexPartitionTest : public ::testing::Test {
 protected:
     int64_t initial_num_vectors = 10;
@@ -681,3 +681,4 @@ TEST_F(NUMAIndexPartitionTest, NUAMAppendTest) {
     verify_ids(partition->ids_, new_ids, append_start);
     verify_codes(partition->codes_, new_codes, append_start);
 }
+#endif
