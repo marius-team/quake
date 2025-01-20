@@ -589,7 +589,6 @@ TEST_F(IndexPartitionTest, UpdateWithZeroEntriesTest) {
 }
 
 
-#ifdef QUAKE_USE_NUMA
 class NUMAIndexPartitionTest : public ::testing::Test {
 protected:
     int64_t initial_num_vectors = 10;
@@ -615,7 +614,7 @@ protected:
 
         // Initialize an IndexPartition with initial data
         partition = new IndexPartition(initial_num_vectors, initial_codes, initial_ids, code_size);
-        partition->set_numa_node(1)
+        partition->set_numa_node(1);
 
         // Free temporary allocations as IndexPartition has its own copies
         std::free(initial_codes);
@@ -682,4 +681,3 @@ TEST_F(NUMAIndexPartitionTest, NUAMAppendTest) {
     verify_ids(partition->ids_, new_ids, append_start);
     verify_codes(partition->codes_, new_codes, append_start);
 }
-#endif
