@@ -198,7 +198,7 @@ TEST_F(PartitionManagerTest, DistributePartitions) {
 #ifdef QUAKE_USE_NUMA
   std::cout << "Num NUMA nodes: " << partition_manager_->get_num_numa_nodes() << std::endl;
   // check that each partition has a numa node of 0 or 1
-  for (auto partition : partition_manager_->partitions_) {
+  for (auto partition : partition_manager_->partitions_->partitions_) {
     ASSERT_TRUE(partition.second->numa_node_ == 0 || partition.second->numa_node_ == 1);
 
     int codes_numa_node = -1;
