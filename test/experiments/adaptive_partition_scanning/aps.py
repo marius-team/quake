@@ -503,6 +503,8 @@ def run_experiment_for_configuration(
         fixed_nprobe=False
 ):
 
+    timing_infos = []
+
     if oracle:
         nprobes = []
         for i, query in enumerate(queries):
@@ -534,7 +536,6 @@ def run_experiment_for_configuration(
         # Second run to execute queries
         all_ids = []
         all_dists = []
-        timing_infos = []
 
         for query, nprobe in zip(queries, nprobes):
 
@@ -585,7 +586,6 @@ def run_experiment_for_configuration(
         # Second run to execute queries
         all_ids = []
         all_dists = []
-        timing_infos = []
 
         search_params = SearchParams()
         search_params.nprobe = best_nprobe
@@ -602,15 +602,15 @@ def run_experiment_for_configuration(
     else:
         all_ids = []
         all_dists = []
-        timing_infos = []
 
         search_params = SearchParams()
         search_params.nprobe = -1
         search_params.k = k
-        search_params.initial_search_fraction = .2
+        search_params.initial_search_fraction = .1
         search_params.recall_target = recall_target
         search_params.recompute_threshold = 0.05
         search_params.use_precomputed = use_precompute
+        search_params.aps_flush_period_us = 25
 
         # debug print search params
         print(f"Search Params: {search_params.nprobe}, {search_params.k}, {search_params.recall_target}, {search_params.recompute_threshold}, {search_params.use_precomputed}")

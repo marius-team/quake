@@ -337,6 +337,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         // Create a job for each (query, partition)
+        vector<std::pair<int64_t, int64_t>> worker_ids_per_job_id;
         for (int64_t q = 0; q < num_queries; q++) {
             for (int64_t p = 0; p < partition_ids.size(1); p++) {
                 int64_t partition_id = partition_ids_accessor[q][p];
@@ -362,8 +363,11 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 }
 
                 int worker_id = partition_id % num_workers_;
-                jobs_queue_[worker_id].enqueue(job_id);
+                worker_ids_per_job_id.push_back({worker_id, job_id});
             }
+        }
+        for (const auto &pair : worker_ids_per_job_id) {
+            jobs_queue_[pair.first].enqueue(pair.second);
         }
     }
     end_time = std::chrono::high_resolution_clock::now();

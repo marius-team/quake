@@ -119,6 +119,7 @@ PYBIND11_MODULE(_bindings, m) {
             .def_readwrite("batched_scan", &SearchParams::batched_scan)
             .def_readwrite("initial_search_fraction", &SearchParams::initial_search_fraction)
             .def_readwrite("recompute_threshold", &SearchParams::recompute_threshold)
+            .def_readwrite("aps_flush_period_us", &SearchParams::aps_flush_period_us)
             .def_readwrite("use_precomputed", &SearchParams::use_precomputed);
 
     class_<SearchResult, shared_ptr<SearchResult> >(m, "SearchResult")
