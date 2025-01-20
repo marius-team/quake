@@ -661,7 +661,7 @@ protected:
 };
 
 // Test append method
-TEST_F(IndexPartitionTest, NUAMAppendTest) {
+TEST_F(NUMAIndexPartitionTest, NUAMAppendTest) {
     size_t n_entry = 5;
     std::vector<uint8_t> new_codes;
     std::vector<idx_t> new_ids;
