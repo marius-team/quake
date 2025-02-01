@@ -25,7 +25,7 @@ Quake is a C++ library (with Python bindings) for dynamic, high‑performance ap
 
 - **C++ Compiler:** Must support C++17 (GCC 8+, Clang 10+, or MSVC 2019+)
 - **CMake:** Version 3.16 or later
-- **LibTorch:** (Download from [PyTorch.org](https://pytorch.org/))
+- **PyTorch 2.0+:** (Download from [PyTorch.org](https://pytorch.org/))
 - **Python 3:** Required for Python bindings
 - **Optional:** Faiss (for GPU support), OpenMP, NUMA libraries
 
