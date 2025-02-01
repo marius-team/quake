@@ -27,7 +27,6 @@ Quake is a C++ library (with Python bindings) for dynamic, high‑performance ap
 - **CMake:** Version 3.16 or later
 - **PyTorch 2.0+:** (Download from [PyTorch.org](https://pytorch.org/))
 - **Python 3:** Required for Python bindings
-- **Optional:** Faiss (for GPU support), OpenMP, NUMA libraries
 
 ### Build Instructions
 
@@ -63,22 +62,22 @@ Quake’s core operations are simple: build an index, search it, update it, and 
 
 1. **Build the Index**
 ``` cpp
-  #include "quake_index.h"
-  
-  auto index = std::make_shared<QuakeIndex>();
-  
-  // Configure build parameters
-  auto build_params = std::make_shared<IndexBuildParams>();
-  build_params->nlist = 1000;      // Number of partitions (clusters)
-  build_params->metric = "l2";     // Use Euclidean (L2) distance
-  build_params->niter = 5;         // K‑means iterations for clustering
-  
-  // Prepare your data
-  Tensor vectors = torch::randn({100000, 128});
-  Tensor ids = torch::arange(100000, torch::kInt64);
-  
-  // Build the index
-  index->build(vectors, ids, build_params);
+#include "quake_index.h"
+
+auto index = std::make_shared<QuakeIndex>();
+
+// Configure build parameters
+auto build_params = std::make_shared<IndexBuildParams>();
+build_params->nlist = 1000;      // Number of partitions (clusters)
+build_params->metric = "l2";     // Use Euclidean (L2) distance
+build_params->niter = 5;         // K‑means iterations for clustering
+
+// Prepare your data
+Tensor vectors = torch::randn({100000, 128});
+Tensor ids = torch::arange(100000, torch::kInt64);
+
+// Build the index
+index->build(vectors, ids, build_params);
 ```
 
 2. **Search the Index**
