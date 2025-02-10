@@ -53,6 +53,10 @@ jobs:
           submodules: true
           fetch-depth: 0
 
+      - name: Debug Checkout
+        run: |
+          ls -R
+
       - name: Build project
         run: |
           git config --global --add safe.directory '*'
