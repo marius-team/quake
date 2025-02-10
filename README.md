@@ -33,26 +33,27 @@ Quake is a C++ library (with Python bindings) for dynamic, high‑performance ap
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/youruser/quake.git
+   git clone https://github.com/marius-team/quake.git
    cd quake
    ```
 
-2. **Configure the build**
+2. **Install**
+
+   ```bash
+   pip install .
+   ```"
+
+3**(C++ Βuild) Configure the build**
    ```bash
    mkdir build && cd build
    cmake -DCMAKE_BUILD_TYPE=Release ..
+      make bindings -j$(nproc)
    ```
 
    To enable GPU, NUMA, or AVX512 support, add:
    ```
    cmake -DCMAKE_BUILD_TYPE=Release -DQUAKE_ENABLE_GPU=ON -DQUAKE_USE_NUMA=ON -DQUAKE_USE_AVX512=ON ..
    ```
-3. **Compile**
-   ```
-   make bindings -j$(nproc)
-   ```
-   
-The build produces a Python module named _bindings that you can import.
 
 ### Using Quake
 
@@ -138,12 +139,12 @@ new_index->load("path/to/index_dir");
 The Python API mirrors the C++ usage:
 
 ``` python
-import _bindings
+import quake
 import torch
 
 # Build the index
-index = _bindings.QuakeIndex()
-build_params = _bindings.IndexBuildParams()
+index = quake.QuakeIndex()
+build_params = quake.IndexBuildParams()
 build_params.nlist = 1000
 build_params.metric = "l2"
 vectors = torch.randn(100000, 128)
@@ -151,7 +152,7 @@ ids = torch.arange(100000, dtype=torch.int64)
 index.build(vectors, ids, build_params)
 
 # Search the index
-search_params = _bindings.SearchParams()
+search_params = quake.SearchParams()
 search_params.k = 10
 search_params.nprobe = 50  # or set recall_target instead
 queries = torch.randn(100, 128)
