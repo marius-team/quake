@@ -74,6 +74,7 @@ setup(
     name="quake",
     version="0.0.1",
     packages=["quake"],
+    package_dir={"quake": "src/python"},
     ext_modules=[CMakeExtension("quake._bindings")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
