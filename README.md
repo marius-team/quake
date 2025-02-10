@@ -17,6 +17,16 @@ Quake is a C++ library (with Python bindings) for dynamic, high‑performance ap
 - **PyTorch Integration:**  
   Directly work with PyTorch tensors for easy integration into machine learning workflows.
 
+##  Key Limitations (for now)
+
+Quake has the following limitations which will be addressed in future development.
+
+1. **Metrics:** Only supports “l2” (Euclidean) and “ip” (inner product).
+2. **Data Types:** Vectors must be float32; IDs must be int64.
+3. **CPU-only Search:** Even if built with GPU, search is performed on the CPU.
+4. **Vectors Only:** Currently we don't support storing or filtering on per-vector attributes.
+5. **Single Node:** Currently supports only a single node.
+
 ---
 
 ## Installation
@@ -41,13 +51,13 @@ Quake is a C++ library (with Python bindings) for dynamic, high‑performance ap
 
    ```bash
    pip install .
-   ```"
+   ```
 
-3**(C++ Βuild) Configure the build**
+**C++ Βuild (Optional)**
    ```bash
    mkdir build && cd build
    cmake -DCMAKE_BUILD_TYPE=Release ..
-      make bindings -j$(nproc)
+   make bindings -j$(nproc)
    ```
 
    To enable GPU, NUMA, or AVX512 support, add:
@@ -57,7 +67,7 @@ Quake is a C++ library (with Python bindings) for dynamic, high‑performance ap
 
 ### Using Quake
 
-Quake’s core operations are simple: build an index, search it, update it, and maintain it.
+Quake’s core operations are: build an index, search it, update it, maintain it, and save/load it.
 
 #### C++ Usage
 
@@ -161,17 +171,7 @@ print("Neighbor IDs:", results.ids)
 print("Distances:", results.distances)
 ```
 
-####  Key Limitations (for now)
-
-Quake currently has the following limitations which will be addressed in future development.
-
-1. **Metrics:** Only supports “l2” (Euclidean) and “ip” (inner product).
-2. **Data Types:** Vectors must be float32; IDs must be int64.
-3. **CPU-only Search:** Even if built with GPU, search is performed on the CPU.
-4. **Vectors Only:** Currently we don't support storing or filtering on per-vector attributes.
-5. **Single Node:** Currently supports only a single node.
-
-#### Contact
+### Contact
 
 For questions or contributions, please open an issue or reach out to jasonmohoney@gmail.com
    
