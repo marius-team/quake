@@ -49,6 +49,7 @@ public:
     bool enable_delete_rejection_ = true;
     float delete_threshold_ns_ = 20.0;
     float split_threshold_ns_ = 20.0;
+    bool debug_ = false;
 
     // latency estimator
     std::vector<int> latency_grid_n_values_ = {1, 2, 4, 16, 64, 256, 1024, 4096, 16384, 65536};

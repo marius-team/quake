@@ -1,6 +1,7 @@
 import os
 import platform
 import subprocess
+import shutil
 import sys
 
 from setuptools import Extension, setup
@@ -28,6 +29,8 @@ class CMakeBuild(build_ext):
 
         for ext in self.extensions:
             self.build_extension(ext)
+
+        # self.generate_stubs()
 
     def build_extension(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
@@ -70,11 +73,47 @@ class CMakeBuild(build_ext):
         subprocess.check_call(["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
         subprocess.check_call(["cmake", "--build", ".", "--target", "bindings"] + build_args, cwd=self.build_temp)
 
+
+    def generate_stubs(self):
+        # Get the full path to the built extension.
+        ext = self.extensions[0]
+        ext_fullpath = self.get_ext_fullpath(ext.name)
+        # ext_output_dir is the 'quake' directory.
+        ext_output_dir = os.path.abspath(os.path.dirname(ext_fullpath))
+        # The parent directory that contains 'quake'.
+        package_parent_dir = os.path.dirname(ext_output_dir)
+
+        print(f"Generating stubs for {ext.name} in {ext_output_dir}")
+
+        # Add the parent directory to PYTHONPATH so that "import quake" works.
+        env = os.environ.copy()
+        env["PYTHONPATH"] = package_parent_dir + os.pathsep + env.get("PYTHONPATH", "")
+
+        # Create a temporary directory for stub generation.
+        stub_output_dir = os.path.join(self.build_temp, "stubs")
+        os.makedirs(stub_output_dir, exist_ok=True)
+
+        # Run stubgen on your module.
+        cmd = [
+            "pybind11-stubgen",
+            "-o", stub_output_dir,
+            "quake._bindings"
+        ]
+        subprocess.check_call(cmd, env=env)
+
+        # The generated stub should be at <stub_output_dir>/quake/_bindings.pyi.
+        generated_stub = os.path.join(stub_output_dir, "quake", "_bindings.pyi")
+        if not os.path.exists(generated_stub):
+            raise RuntimeError("Stub generation failed; expected file not found.")
+
+        # Copy the generated stub into your package directory so it gets installed.
+        dest = os.path.join(ext_output_dir, "_bindings.pyi")
+        shutil.copyfile(generated_stub, dest)
+        print(f"Stub file copied to {dest}")
+
 setup(
     name="quake",
     version="0.0.1",
-    packages=["quake"],
-    package_dir={"quake": "src/python"},
     ext_modules=[CMakeExtension("quake._bindings")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,

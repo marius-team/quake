@@ -57,6 +57,14 @@ namespace faiss {
         // partitions_ will clean themselves up as IndexPartition destructor frees memory
     }
 
+    size_t DynamicInvertedLists::ntotal() const {
+        size_t ntotal = 0;
+        for (auto &kv: partitions_) {
+            ntotal += kv.second->num_vectors_;
+        }
+        return ntotal;
+    }
+
     size_t DynamicInvertedLists::list_size(size_t list_no) const {
         auto it = partitions_.find(list_no);
         if (it == partitions_.end()) {
@@ -146,7 +154,7 @@ namespace faiss {
         const idx_t *ids,
         const uint8_t *codes) {
         if (n_entry == 0) {
-            throw std::runtime_error("n_entry is 0 in add_entries");
+            return 0;
         }
 
         auto it = partitions_.find(list_no);

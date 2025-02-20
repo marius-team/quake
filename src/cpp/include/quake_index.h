@@ -65,6 +65,11 @@ public:
     Tensor get(Tensor ids);
 
     /**
+     * @brief Get IDs in the index.
+     */
+    Tensor get_ids();
+
+    /**
      * @brief Add vectors to the index.
      * @param x Tensor of shape [num_vectors, dimension].
      * @param ids Tensor of shape [num_vectors].
@@ -97,6 +102,12 @@ public:
      * @return Timing information for the maintenance.
      */
     shared_ptr<MaintenanceTimingInfo> maintenance();
+
+    /**
+     * @brief Validate the state of the index.
+     * @return True if the index is valid, false otherwise.
+     */
+    bool validate();
 
     /**
      * @brief Save the index to a file.

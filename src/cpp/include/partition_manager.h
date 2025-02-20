@@ -28,6 +28,9 @@ public:
     int64_t curr_partition_id_ = 0; ///< Current partition ID.
 
     bool debug_ = false; ///< If true, print debug information.
+    bool check_uniques_ = true; ///< If true, check that vector IDs are unique and don't already exist in the index.
+
+    std::set<int64_t> resident_ids_; ///< Set of partition IDs.
 
     /**
      * @brief Constructor for PartitionManager.
@@ -44,7 +47,7 @@ public:
      * @param parent Pointer to the parent index over the centroids.
      * @param partitions Clustering object containing the partitions to initialize.
      */
-    void init_partitions(shared_ptr<QuakeIndex> parent, shared_ptr<Clustering> partitions);
+    void init_partitions(shared_ptr<QuakeIndex> parent, shared_ptr<Clustering> partitions, bool check_uniques = true);
 
     /**
     * @brief Add vectors to the appropriate partition(s).
@@ -52,7 +55,7 @@ public:
     * @param vector_ids Tensor of shape [num_vectors].
     * @param assignments Tensor of shape [num_vectors] containing partition IDs. If not provided, vectors are assigned using the parent index.
     */
-    void add(const Tensor &vectors, const Tensor &vector_ids, const Tensor &assignments = Tensor());
+    void add(const Tensor &vectors, const Tensor &vector_ids, const Tensor &assignments = Tensor(), bool check_uniques = true);
 
     /**
      * @brief Remove vectors by ID from the index.
@@ -98,10 +101,10 @@ public:
      */
     shared_ptr<Clustering> select_partitions(const Tensor &partition_ids, bool copy = false);
 
-   /**
-    * @brief Randomly breaks up the single partition into multiple partitions and distributes the partitions. Only applicable for flat indexes.
-    * @param n_partitions The number of partitions to split the single partition into.
-    */
+    /**
+     * @brief Randomly breaks up the single partition into multiple partitions and distributes the partitions. Only applicable for flat indexes.
+     * @param n_partitions The number of partitions to split the single partition into.
+     */
     void distribute_flat(int n_partitions);
 
     /**
@@ -135,6 +138,16 @@ public:
      * @brief Get the partition IDs.
      */
     Tensor get_partition_ids();
+
+    /**
+    * @brief Get ids of vectors.
+    */
+    Tensor get_ids();
+
+    /**
+     * @brief Validate the state of the index partitions.
+     */
+    bool validate();
 
     /**
      * @brief Save the partition manager to a file.

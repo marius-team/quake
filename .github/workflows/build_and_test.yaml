@@ -43,7 +43,7 @@ jobs:
             cd build
             test/cpp/quake_tests
 
-  pip_build:
+  python_build:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/marius-team/quake/ubuntu-latest:latest
@@ -63,3 +63,5 @@ jobs:
           eval "$(conda shell.bash hook)"
           conda activate test-env
           pip install .
+          pip install pytest
+          python -m pytest test/python
