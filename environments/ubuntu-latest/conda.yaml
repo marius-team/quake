@@ -7,4 +7,3 @@ dependencies:
   - numpy
   - pytorch
   - cpuonly
-  - pybind11-stubgen
