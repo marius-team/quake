@@ -1,10 +1,9 @@
 from typing import Optional, Tuple, Union, List
 
-import faiss
+import quake
 import torch
 from quake import QuakeIndex
 
-from quake.index_wrappers.faiss_wrapper import metric_str_to_faiss
 from quake.index_wrappers.wrapper import IndexWrapper
 
 
@@ -58,12 +57,19 @@ class DynamicIVF(IndexWrapper):
         metric = metric.lower()
         print(
             f"Building index with {vectors.shape[0]} vectors of dimension {vec_dim} and {nc} centroids, with metric {metric}.")
-        self.index = QuakeIndex(vec_dim, nc, metric_str_to_faiss(metric), n_workers, m, code_size)
+        # self.index = QuakeIndex(vec_dim, nc, metric_str_to_faiss(metric), n_workers, m, code_size)
+
+        build_params = quake.IndexBuildParams()
+        build_params.metric = metric
+        build_params.nlist = nc
+        build_params.num_workers = n_workers
+
+        self.index = QuakeIndex()
 
         if ids is None:
             ids = torch.arange(vectors.shape[0], dtype=torch.int64)
 
-        self.index.build(vectors, ids.to(torch.int64), True, True)
+        self.index.build(vectors, ids.to(torch.int64), build_params)
 
         print("Index built successfully.")
 
@@ -81,7 +87,7 @@ class DynamicIVF(IndexWrapper):
             curr_id = self.n_total()
             ids = torch.arange(curr_id, curr_id + vectors.shape[0], dtype=torch.int64)
 
-        self.index.add(vectors, ids, False)
+        self.index.add(vectors, ids)
 
     def set_worker_counts(self, all_workers: List[int], same_core: bool, use_numa_optimizations: bool):
         curr_index = self.index
@@ -97,7 +103,7 @@ class DynamicIVF(IndexWrapper):
         """
         assert self.index is not None
         assert ids.ndim == 1
-        self.index.remove(ids, False)
+        self.index.remove(ids)
 
     def search(self, query: torch.Tensor, k: int, nprobe: int = 1, recall_target: float = .9, k_factor=4.0, use_precomputed = True) -> Tuple[
         torch.Tensor, torch.Tensor]:
@@ -110,7 +116,12 @@ class DynamicIVF(IndexWrapper):
 
         :return: The distances and indices of the k-nearest neighbors.
         """
-        return self.index.search(query, nprobe, k, recall_target, k_factor, use_precomputed)
+        search_params = quake.SearchParams()
+        search_params.nprobe = nprobe
+        search_params.recall_target = recall_target
+        search_params.use_precomputed = use_precomputed
+        search_params.k = k
+        return self.index.search(query, search_params)
 
     def save(self, filename: str):
         """
@@ -129,8 +140,7 @@ class DynamicIVF(IndexWrapper):
         """
         print(
             f"Loading index from {filename}, with {n_workers} workers, use_numa={use_numa}, verbose={verbose}, verify_numa={verify_numa}, same_core={same_core}, use_centroid_workers={use_centroid_workers}")
-        self.index = QuakeIndex(0, 0, faiss.METRIC_L2, n_workers, -1, -1, use_numa, verbose, verify_numa, same_core,
-                                  use_centroid_workers, use_adaptive_n_probe)
+        self.index = QuakeIndex()
         self.index.load(str(filename), True)
     
     def set_timeout_values(self, max_query_latency : int = -1, flush_gap_time : int = -1):
@@ -156,7 +166,7 @@ class DynamicIVF(IndexWrapper):
 
         :return: The cluster ids of the index
         """
-        return self.index.get_cluster_ids()
+        return self.index.parent.get_ids()
 
     def metric(self) -> str:
         """
