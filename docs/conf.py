@@ -6,12 +6,11 @@ from datetime import datetime
 # assume that quake has been installed with pip and the bindings are located in the pip site-packages
 import quake
 
-bindings_path = os.path.dirname(quake.__file__)
-print(f"Adding bindings path: {bindings_path}")
+quake_path = os.path.dirname(os.path.dirname(quake.__file__))
+print(f"Adding quake path: {quake_path}")
 
 # Add the path to your bindings (adjust as needed)
-sys.path.insert(0, bindings_path)
-
+sys.path.insert(0, quake_path)
 # -- Project information -----------------------------------------------------
 project = 'Quake'
 author = 'Jason Mohoney'

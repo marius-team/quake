@@ -10,14 +10,6 @@ Prerequisites
 - Python 3.9+
 - PyTorch 2.0+
 
-Using pip
----------
-You can install the latest version from PyPI:
-
-.. code-block:: bash
-
-    pip install quake
-
 Building from source
 --------------------
 Clone the repository and build the extension:

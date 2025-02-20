@@ -1,4 +1,4 @@
-name: test-env
+name: quake-env
 channels:
   - pytorch
   - defaults

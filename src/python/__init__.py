@@ -4,7 +4,7 @@ try:
     """
     Quake Python API
     
-    This module provides the Python bindings for the Quake dynamic index.
+    This module provides the Python bindings for the Quake index
     """
     from ._bindings import *
 

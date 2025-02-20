@@ -7,7 +7,9 @@ Quake Documentation
    :maxdepth: 2
    :caption: Contents:
 
-   modules
+   install
+   development_guide
+   api
 
 Indices and tables
 ==================
