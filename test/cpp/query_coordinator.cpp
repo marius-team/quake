@@ -50,6 +50,7 @@ TEST_F(QueryCoordinatorTest, NullParentBatchedScanTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         nullptr /* parent */,
         index_->partition_manager_,
+        nullptr,
         faiss::METRIC_L2);
 
     auto search_params = std::make_shared<SearchParams>();
@@ -75,6 +76,7 @@ TEST_F(QueryCoordinatorTest, NullParentSerialScanTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         nullptr,
         index_->partition_manager_,
+        nullptr,
         faiss::METRIC_L2);
 
     // We'll set batched_scan = false artificially to see if the serial path works
@@ -92,6 +94,7 @@ TEST_F(QueryCoordinatorTest, NonNullParentTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         index_->parent_,
         index_->partition_manager_,
+        nullptr,
         faiss::METRIC_L2);
 
     auto search_params = std::make_shared<SearchParams>();
@@ -112,6 +115,7 @@ TEST_F(QueryCoordinatorTest, EmptyQueryTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         nullptr,
         index_->partition_manager_,
+        nullptr,
         faiss::METRIC_L2);
 
     auto empty_queries = torch::empty({0, dimension_}, torch::kCPU);
@@ -130,6 +134,7 @@ TEST_F(QueryCoordinatorTest, NullPartitionManagerThrows) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         nullptr,
         nullptr /* partition_manager_ = null */,
+        nullptr,
         faiss::METRIC_L2);
 
     auto search_params = std::make_shared<SearchParams>();
@@ -145,6 +150,7 @@ TEST_F(QueryCoordinatorTest, WorkerInitializationTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         index_->parent_,
         index_->partition_manager_,
+        nullptr,
         faiss::METRIC_L2
     );
 
@@ -154,6 +160,7 @@ TEST_F(QueryCoordinatorTest, WorkerInitializationTest) {
     coordinator = std::make_shared<QueryCoordinator>(
         index_->parent_,
         index_->partition_manager_,
+        nullptr,
         faiss::METRIC_L2,
         4 /* num_workers */
     );
@@ -175,6 +182,7 @@ TEST_F(QueryCoordinatorTest, FlatWorkerScan) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         flat_index->parent_,
         flat_index->partition_manager_,
+        nullptr,
         faiss::METRIC_L2,
         num_workers
     );
@@ -195,6 +203,7 @@ TEST_F(QueryCoordinatorTest, WorkerScanCorrectnessTest) {
     auto coordinator_worker = std::make_shared<QueryCoordinator>(
         index_->parent_,
         partition_manager_,
+        nullptr,
         faiss::METRIC_L2,
         num_workers
     );
@@ -214,6 +223,7 @@ TEST_F(QueryCoordinatorTest, WorkerScanCorrectnessTest) {
     auto coordinator_serial = std::make_shared<QueryCoordinator>(
         index_->parent_,
         partition_manager_,
+        nullptr,
         faiss::METRIC_L2
     );
 
@@ -262,6 +272,7 @@ TEST_F(QueryCoordinatorTest, WorkerHandlesEmptyPartitionsTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         parent,
         partition_manager,
+        nullptr,
         faiss::METRIC_L2,
         num_workers
     );
@@ -313,6 +324,7 @@ TEST_F(QueryCoordinatorTest, WorkerHandlesKGreaterThanPartitionSizeTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         parent,
         partition_manager,
+        nullptr,
         faiss::METRIC_L2,
         num_workers
     );
@@ -364,6 +376,7 @@ TEST_F(QueryCoordinatorTest, MultipleWorkersMultipleQueriesTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         index_->parent_,
         partition_manager_,
+        nullptr,
         faiss::METRIC_L2,
         num_workers
     );
@@ -397,6 +410,7 @@ TEST_F(QueryCoordinatorTest, ShutdownWorkersTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         index_->parent_,
         partition_manager_,
+        nullptr,
         faiss::METRIC_L2,
         num_workers
     );
@@ -447,6 +461,7 @@ TEST_F(QueryCoordinatorTest, WorkerScanZeroPartitionsTest) {
     auto coordinator = std::make_shared<QueryCoordinator>(
         index_->parent_,
         partition_manager_,
+        nullptr,
         faiss::METRIC_L2,
         num_workers
     );
@@ -519,6 +534,7 @@ TEST_F(WorkerTest, FlatWorkerScan) {
         auto coordinator = std::make_shared<QueryCoordinator>(
             flat_index->parent_,
             flat_index->partition_manager_,
+            nullptr,
             faiss::METRIC_L2,
             num_worker
         );
@@ -570,6 +586,7 @@ TEST_F(WorkerTest, IVFWorkerScan) {
             auto coordinator = std::make_shared<QueryCoordinator>(
                 ivf_index->parent_,
                 ivf_index->partition_manager_,
+                nullptr,
                 faiss::METRIC_L2,
                 num_worker
             );
