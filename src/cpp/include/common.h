@@ -228,7 +228,9 @@ struct Clustering {
     int64_t ntotal() const {
         int64_t n = 0;
         for (const auto &v : vectors) {
-            n += v.size(0);
+            if (v.defined() && v.numel() > 0) {
+                n += v.size(0);
+            }
         }
         return n;
     }
@@ -238,7 +240,7 @@ struct Clustering {
     }
 
     int64_t dim() const {
-        return vectors[0].size(1);
+        return centroids.size(1);
     }
 
     int64_t cluster_size(int64_t i) const {

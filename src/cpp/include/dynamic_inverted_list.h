@@ -38,6 +38,8 @@ namespace faiss {
 
         ~DynamicInvertedLists() override;
 
+        size_t ntotal() const;
+
         size_t list_size(size_t list_no) const override;
 
         const uint8_t* get_codes(size_t list_no) const override;

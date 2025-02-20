@@ -9,6 +9,7 @@
 
 #include <common.h>
 #include <list_scanning.h>
+#include <maintenance_policies.h>
 #include <blockingconcurrentqueue.h>
 
 class QuakeIndex;
@@ -27,6 +28,7 @@ struct ScanJob {
 class QueryCoordinator {
 public:
     shared_ptr<PartitionManager> partition_manager_;
+    shared_ptr<MaintenancePolicy> maintenance_policy_;
     shared_ptr<QuakeIndex> parent_;
     MetricType metric_;
 
@@ -45,7 +47,11 @@ public:
 
     bool debug_ = false;
 
-    QueryCoordinator(shared_ptr<QuakeIndex> parent, shared_ptr<PartitionManager> partition_manager, MetricType metric, int num_workers=0);
+    QueryCoordinator(shared_ptr<QuakeIndex> parent,
+        shared_ptr<PartitionManager> partition_manager,
+        shared_ptr<MaintenancePolicy> maintenance_policy,
+        MetricType metric,
+        int num_workers=0);
 
     ~QueryCoordinator();
 
