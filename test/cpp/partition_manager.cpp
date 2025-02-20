@@ -58,20 +58,20 @@ TEST_F(PartitionManagerTest, AddVectors) {
                                          {1.0f, 1.0f, 1.0f, 1.0f},
                                          {2.0f, 2.0f, 2.0f, 2.0f}}, torch::kFloat32);
   clustering->vectors = {
-    torch::empty({1, dim_}, torch::kFloat32),
-    torch::empty({1, dim_}, torch::kFloat32),
-    torch::empty({1, dim_}, torch::kFloat32)
+    Tensor(),
+    Tensor(),
+    Tensor()
   };
   clustering->vector_ids = {
-    torch::empty({1}, torch::kInt64),
-    torch::empty({1}, torch::kInt64),
-    torch::empty({1}, torch::kInt64)
+    Tensor(),
+    Tensor(),
+    Tensor()
   };
   auto build_params = std::make_shared<IndexBuildParams>();
   parent_->build(clustering->centroids, clustering->partition_ids, build_params);
 
   partition_manager_->init_partitions(parent_, clustering);
-  EXPECT_EQ(partition_manager_->ntotal(), 3);
+  EXPECT_EQ(partition_manager_->ntotal(), 0);
 
   auto new_vectors = torch::tensor({{0.1f, 0.2f, 0.3f, 0.4f},
                                     {1.1f, 1.2f, 1.3f, 1.4f},
@@ -81,7 +81,7 @@ TEST_F(PartitionManagerTest, AddVectors) {
   // Assign them to partitions [0, 0, 2]
   auto assignments = torch::tensor({0, 0, 2}, torch::kInt64);
   partition_manager_->add(new_vectors, new_ids, assignments);
-  EXPECT_EQ(partition_manager_->ntotal(), 3+3);
+  EXPECT_EQ(partition_manager_->ntotal(), 3);
 }
 
 TEST_F(PartitionManagerTest, RemoveVectors) {

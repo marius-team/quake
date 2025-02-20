@@ -36,9 +36,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
     timing_info->n_vectors = x.size(0);
     timing_info->d = x.size(1);
 
-    auto start_time = std::chrono::high_resolution_clock::now();
     if (build_params_->nlist > 1) {
-        auto train_start = std::chrono::high_resolution_clock::now();
         shared_ptr<Clustering> clustering = kmeans(
             x,
             ids,
@@ -46,10 +44,6 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
             metric_,
             build_params_->niter
         );
-        auto train_end = std::chrono::high_resolution_clock::now();
-
-        auto add_start = std::chrono::high_resolution_clock::now();
-
         // create parent index over the centroids, assume is flat for now
         parent_ = make_shared<QuakeIndex>(current_level_ + 1);
         auto parent_build_params = make_shared<IndexBuildParams>();
@@ -59,8 +53,6 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         // initialize the partition manager
         partition_manager_ = make_shared<PartitionManager>();
         partition_manager_->init_partitions(parent_, clustering);
-
-        auto add_end = std::chrono::high_resolution_clock::now();
     } else {
         // flat index
         partition_manager_ = make_shared<PartitionManager>();
@@ -73,9 +65,11 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
 
         partition_manager_->init_partitions(parent_, clustering);
     }
+    auto default_params = make_shared<MaintenancePolicyParams>();
+    initialize_maintenance_policy(default_params);
 
     // create query coordinator
-    query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, metric_, build_params_->num_workers);
+    query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, build_params_->num_workers);
 
     return timing_info;
 }
@@ -88,6 +82,15 @@ QuakeIndex::search(Tensor x, shared_ptr<SearchParams> search_params) {
     }
     return query_coordinator_->search(x, search_params);
 }
+
+Tensor QuakeIndex::get_ids() {
+    if (!partition_manager_) {
+        throw std::runtime_error("[QuakeIndex::get_ids()] No partition manager. Index not built?");
+    }
+
+    return partition_manager_->get_ids();
+}
+
 
 Tensor QuakeIndex::get(Tensor ids) {
     if (!partition_manager_) {
@@ -153,6 +156,10 @@ shared_ptr<MaintenanceTimingInfo> QuakeIndex::maintenance() {
     }
 
     return maintenance_policy_->maintenance();
+}
+
+bool QuakeIndex::validate() {
+    partition_manager_->validate();
 }
 
 
@@ -245,10 +252,13 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers) {
             parent_ = nullptr;
         }
     }
+    // 4. Setup maintenance policy
+    auto default_params = make_shared<MaintenancePolicyParams>();
+    initialize_maintenance_policy(default_params);
 
-    // 4. Create query coordinator
+    // 5. Create query coordinator
     std::cout << "Loading coordinator with n_workers=" << n_workers << '\n';
-    query_coordinator_ = std::make_shared<QueryCoordinator>(parent_, partition_manager_, metric_, n_workers);
+    query_coordinator_ = std::make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, n_workers);
     std::cout << "Loaded coordinator\n";
 }
 

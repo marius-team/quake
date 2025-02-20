@@ -7,3 +7,6 @@ dependencies:
   - numpy
   - pytorch
   - cpuonly
+  - faiss-cpu
+  - matplotlib
+  - pytest

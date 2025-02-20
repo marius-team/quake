@@ -36,7 +36,7 @@ protected:
         // Generate random data
         data_vectors_ = generate_random_data(num_vectors_, dimension_);
         // Generate sequential IDs
-        data_ids_ = generate_sequential_ids(num_vectors_, 1000);
+        data_ids_ = generate_sequential_ids(num_vectors_, 0);
 
         // Queries
         query_vectors_ = generate_random_data(num_queries_, dimension_);
@@ -183,11 +183,15 @@ TEST_F(QuakeIndexTest, AddTest) {
     build_params->nlist = nlist_;
     index.build(data_vectors_, data_ids_, build_params);
 
-    auto modify_info = index.add(data_vectors_.slice(0, 0, 10),
-                                 data_ids_.slice(0, 0, 10));
-    // Basic checks
+    Tensor add_vectors = generate_random_data(10, dimension_);
+    Tensor add_ids = generate_sequential_ids(10, 1000);
+
+    auto modify_info = index.add(add_vectors, add_ids);
     EXPECT_EQ(modify_info->n_vectors, 10);
     EXPECT_GT(modify_info->modify_time_us, 0);
+
+    // check adding duplicate vectors throws error
+    EXPECT_THROW(index.add(add_vectors, add_ids), std::runtime_error);
 }
 
 // Test remove method
@@ -380,10 +384,11 @@ TEST(QuakeIndexStressTest, RapidAddRemoveAddTest) {
 
     index.build(initial_vectors, initial_ids, build_params);
 
-    for (int i = 0; i < repeats; ++i) {
+    for (int i = 1; i < repeats; ++i) {
         // Add
         auto add_vectors = generate_random_data(batch_size, dimension);
-        auto add_ids = generate_sequential_ids(batch_size, i * 10000);
+        auto add_ids = generate_sequential_ids(batch_size, i * batch_size);
+        std::cout << add_ids << std::endl;
         auto add_info = index.add(add_vectors, add_ids);
         ASSERT_EQ(add_info->n_vectors, batch_size);
 
@@ -393,7 +398,7 @@ TEST(QuakeIndexStressTest, RapidAddRemoveAddTest) {
         ASSERT_EQ(remove_info->n_vectors, batch_size / 2);
 
         // Add again
-        auto add_info_2 = index.add(add_vectors.slice(0, batch_size / 2), add_ids.slice(0, batch_size / 2));
+        auto add_info_2 = index.add(add_vectors.slice(0, 0, batch_size / 2), add_ids.slice(0, 0, batch_size / 2));
         ASSERT_EQ(add_info_2->n_vectors, batch_size / 2);
 
         // Optional: do a sanity check search
@@ -440,4 +445,53 @@ TEST(QuakeIndexStressTest, HighDimensionTest) {
 
     ASSERT_EQ(result->ids.size(0), query_vectors.size(0));
     ASSERT_EQ(result->ids.size(1), search_params->k);
+}
+
+// -------------------------------------------------------------------------
+// SEARCH, ADD, REMOVE, AND MAINTENANCE TEST
+// -------------------------------------------------------------------------
+TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
+    // Repeatedly search, add, remove, and perform maintenance to see if the index remains consistent.
+
+    int64_t dimension = 16;
+    int64_t num_vectors = 10000;
+    int64_t num_queries = 1;
+    int64_t batch_size = 10;
+
+    QuakeIndex index;
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = 100;
+    build_params->metric = "l2";
+    build_params->niter = 3;
+
+    Tensor data_vectors = generate_random_data(num_vectors, dimension);
+    Tensor data_ids = generate_sequential_ids(num_vectors, 0);
+
+    index.build(data_vectors, data_ids, build_params);
+
+    for (int i = 0; i < 100; i++) {
+        // Search
+        auto query_vectors = generate_random_data(num_queries, dimension) * .0001;
+        auto search_params = std::make_shared<SearchParams>();
+        search_params->nprobe = 1;
+        search_params->k = 5;
+        auto search_result = index.search(query_vectors, search_params);
+        ASSERT_EQ(search_result->ids.size(0), query_vectors.size(0));
+        ASSERT_EQ(search_result->ids.size(1), search_params->k);
+
+        // Add
+        auto add_vectors = generate_random_data(batch_size, dimension);
+        auto add_ids = generate_sequential_ids(batch_size, (i * batch_size) + num_vectors);
+        auto add_info = index.add(add_vectors, add_ids);
+        ASSERT_EQ(add_info->n_vectors, batch_size);
+
+        // Remove
+        auto remove_ids = add_ids.slice(0, 0, batch_size / 2);
+        auto remove_info = index.remove(remove_ids);
+        ASSERT_EQ(remove_info->n_vectors, batch_size / 2);
+
+        index.maintenance();
+    }
+
+    SUCCEED();
 }
