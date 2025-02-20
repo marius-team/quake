@@ -50,7 +50,7 @@ class IndexType(Enum):
     IVFPQ = 3
 
 
-class FaissWrapper(IndexWrapper):
+class FaissIVF(IndexWrapper):
     """
     Wrapper class for faiss indexes.
     """

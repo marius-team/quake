@@ -51,6 +51,11 @@ class IndexWrapper(abc.ABC):
         raise NotImplementedError("Subclasses must implement n_total method")
 
     @abstractmethod
+    def maintenance(self):
+        """Perform any necessary maintenance operations on the index"""
+        return None
+
+    @abstractmethod
     def d(self) -> int:
         """Return the dimension of vectors in the index"""
         raise NotImplementedError("Subclasses must implement d method")

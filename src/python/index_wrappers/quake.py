@@ -7,7 +7,7 @@ from quake import QuakeIndex
 from quake.index_wrappers.wrapper import IndexWrapper
 
 
-class DynamicIVF(IndexWrapper):
+class QuakeWrapper(IndexWrapper):
     index: QuakeIndex
     assignments: Union[torch.Tensor, None]
 
@@ -32,14 +32,6 @@ class DynamicIVF(IndexWrapper):
         """
         return self.index.d
 
-    def index_ready(self) -> bool:
-        """
-        Returns if the workers have been initialized in the index
-
-        :return: A boolean indicating whether the workers have been initialized or nor
-        """
-        return self.index.index_ready()
-
     def build(self, vectors: torch.Tensor, nc: int, metric: str = "l2", ids: Optional[torch.Tensor] = None,
               n_workers: int = 1, m: int = -1, code_size: int = 8):
         """
@@ -57,8 +49,6 @@ class DynamicIVF(IndexWrapper):
         metric = metric.lower()
         print(
             f"Building index with {vectors.shape[0]} vectors of dimension {vec_dim} and {nc} centroids, with metric {metric}.")
-        # self.index = QuakeIndex(vec_dim, nc, metric_str_to_faiss(metric), n_workers, m, code_size)
-
         build_params = quake.IndexBuildParams()
         build_params.metric = metric
         build_params.nlist = nc
@@ -89,12 +79,6 @@ class DynamicIVF(IndexWrapper):
 
         self.index.add(vectors, ids)
 
-    def set_worker_counts(self, all_workers: List[int], same_core: bool, use_numa_optimizations: bool):
-        curr_index = self.index
-        for curr_worker_count in reversed(all_workers):
-            curr_index.reset_workers(curr_worker_count, same_core, use_numa_optimizations)
-            curr_index = curr_index.parent
-
     def remove(self, ids: torch.Tensor):
         """
         Remove vectors from the index.
@@ -105,7 +89,7 @@ class DynamicIVF(IndexWrapper):
         assert ids.ndim == 1
         self.index.remove(ids)
 
-    def search(self, query: torch.Tensor, k: int, nprobe: int = 1, recall_target: float = .9, k_factor=4.0, use_precomputed = True) -> Tuple[
+    def search(self, query: torch.Tensor, k: int, nprobe: int = 1, recall_target: float = -1, k_factor=4.0, use_precomputed = True) -> Tuple[
         torch.Tensor, torch.Tensor]:
         """
         Find the k-nearest neighbors of the query vectors.
@@ -122,6 +106,13 @@ class DynamicIVF(IndexWrapper):
         search_params.use_precomputed = use_precomputed
         search_params.k = k
         return self.index.search(query, search_params)
+
+    def maintenance(self):
+        """
+        Perform maintenance on the index.
+        :return: maintenance results
+        """
+        return self.index.maintenance()
 
     def save(self, filename: str):
         """
@@ -142,15 +133,6 @@ class DynamicIVF(IndexWrapper):
             f"Loading index from {filename}, with {n_workers} workers, use_numa={use_numa}, verbose={verbose}, verify_numa={verify_numa}, same_core={same_core}, use_centroid_workers={use_centroid_workers}")
         self.index = QuakeIndex()
         self.index.load(str(filename), True)
-    
-    def set_timeout_values(self, max_query_latency : int = -1, flush_gap_time : int = -1):
-        """
-        Set the timeout values for the index
-
-        :param max_query_latency: The end to end query time we are trying to hit (in uS)
-        :param flush_gap_time: How often we flush the shared buffer where results are being written (in uS)
-        """
-        self.index.set_timeout_values(max_query_latency, flush_gap_time)
 
     def centroids(self) -> torch.Tensor:
         """
