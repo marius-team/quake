@@ -1,0 +1,318 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Development Guide &mdash; Quake 0.0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/css/modify.css?v=fab1bd98" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=d45e8c67"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
+      <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
+      <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs";mermaid.registerLayoutLoaders(elkLayouts);mermaid.initialize({startOnLoad:false});</script>
+      <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+      <script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
+window.addEventListener("load", () => mermaid.run());
+</script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API" href="api.html" />
+    <link rel="prev" title="Installation" href="install.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Quake
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Development Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview-of-the-architecture">Overview of the Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#directory-structure">Directory Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#contribution-workflow-coding-standards">Contribution Workflow &amp; Coding Standards</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#git-workflow-prs">Git Workflow &amp; PRs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#coding-standards">Coding Standards</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#testing">Testing</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow">Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#conclusion">Conclusion</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Quake</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Development Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/development_guide.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="development-guide">
+<h1>Development Guide<a class="headerlink" href="#development-guide" title="Link to this heading"></a></h1>
+<p>Quake is a high‑performance vector search engine written in C++ with Python bindings. It supports adaptive, real‑time updates and query‑adaptive search—letting you specify a recall target so that the index automatically adjusts its search scope. This guide will help you rapidly understand our design, coding standards and contribution workflow.</p>
+<section id="overview-of-the-architecture">
+<h2>Overview of the Architecture<a class="headerlink" href="#overview-of-the-architecture" title="Link to this heading"></a></h2>
+<p>Quake’s design is split into two major layers:</p>
+<ol class="arabic simple">
+<li><p><strong>The C++ Core</strong>
+Implements the heavy‑lifting: index construction, query processing, vector updates, and dynamic maintenance (splits, merges, and reassignments). It is organized in the <code class="docutils literal notranslate"><span class="pre">src/cpp/</span></code> directory. Key components include:</p>
+<ul class="simple">
+<li><p><strong>QuakeIndex:</strong>
+The central class that coordinates building, searching, and maintaining the index.</p></li>
+<li><p><strong>PartitionManager:</strong>
+Manages dynamic partitions (or “clusters”) of vectors.</p></li>
+<li><p><strong>MaintenancePolicy:</strong>
+Encapsulates the rules for when and how to split or merge partitions to meet recall targets.</p></li>
+<li><p><strong>QueryCoordinator:</strong>
+Distributes search queries across partitions and aggregates results.</p></li>
+<li><p><strong>Bindings:</strong>
+C++ functionality is exposed to Python via pybind11 (located in <code class="docutils literal notranslate"><span class="pre">src/cpp/bindings</span></code>).</p></li>
+</ul>
+</li>
+<li><p><strong>The Python Layer</strong>
+Provides user-friendly wrappers, dataset loaders, and utility functions for integrating with PyTorch and other ML workflows. It is located in the <code class="docutils literal notranslate"><span class="pre">src/python/</span></code> directory and uses Sphinx (with autodoc) to extract docstrings from our Python code.</p></li>
+</ol>
+<p>Below shows a flowchart of how the main components and classes of Quake interact.</p>
+<pre  class="mermaid">
+        flowchart TD
+    subgraph C++_Core[&quot;C++ Core&quot;]
+        QI[QuakeIndex]
+        PM[PartitionManager]
+        MP[&quot;MaintenancePolicy&quot;]
+        QC[QueryCoordinator]
+        DIL[DynamicInvertedLists]
+        IP[IndexPartition]
+        B[&quot;Bindings (pybind11)&quot;]
+
+        MO[MaintenancePolicyParams]
+        SO[SearchParams]
+        IB[IndexBuildParams]
+    end
+
+    subgraph Python_Layer[&quot;Python Layer&quot;]
+        PA[&quot;Quake Python API&quot;]
+        UT[&quot;Utility Modules &amp; Helpers&quot;]
+        DS[&quot;Dataset Loaders&quot;]
+        WG[&quot;Workload Generator&quot;]
+    end
+
+    %% Connections within C++ Core
+    QI --&gt; PM
+    QI --&gt; MP
+    QI --&gt; QC
+    PM --&gt; DIL
+    DIL --&gt; IP
+
+    B --&gt; QI
+    B --&gt; MO
+    B --&gt; SO
+    B --&gt; IB
+
+    %% Expose C++ Core to Python
+    PA --&gt; B
+
+    %% Python Layer structure
+    PA --&gt; UT
+    PA --&gt; DS
+    PA --&gt; WG
+
+    %% Define custom styles
+    classDef coreStyle fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef pythonStyle fill:#bbf,stroke:#333,stroke-width:2px;
+
+    %% Assign styles to nodes
+    class QI,PM,MP,QC,DIL,IP,MO,SO,IB coreStyle;
+    class PA,UT,DS,WG pythonStyle;
+    </pre></section>
+<section id="directory-structure">
+<h2>Directory Structure<a class="headerlink" href="#directory-structure" title="Link to this heading"></a></h2>
+<p>Familiarize yourself with the layout of the repository:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>.
+├── CMakeLists.txt              # CMake build configuration
+├── README.md                   # High-level project description
+├── docs/                       # Documentation sources (RST files, Sphinx config)
+│   ├── index.rst
+│   ├── install.rst
+│   └── development_guide.rst    &lt;-- This guide
+├── src/
+│   ├── cpp/                    # C++ source, headers, and third‑party submodules
+│   │   ├── include/            # Public headers (API)
+│   │   ├── src/                # Implementation files
+│   │   ├── bindings/           # Python bindings via pybind11
+│   │   └── third_party/        # External dependencies (e.g., Faiss, SimSIMD)
+│   └── python/                 # Python modules and utilities
+├── test/                      # Unit and integration tests (C++ and Python)
+├── setup.py / setup.cfg       # Python packaging files
+└── .gitmodules                # Git submodule configuration
+</pre></div>
+</div>
+</section>
+<section id="contribution-workflow-coding-standards">
+<h2>Contribution Workflow &amp; Coding Standards<a class="headerlink" href="#contribution-workflow-coding-standards" title="Link to this heading"></a></h2>
+<p>We expect all contributors to follow these practices:</p>
+<section id="git-workflow-prs">
+<h3>Git Workflow &amp; PRs<a class="headerlink" href="#git-workflow-prs" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Branching:</strong> Create feature branches from the main branch.</p></li>
+<li><p><strong>Pull Requests:</strong> Submit clear PRs with detailed descriptions and links to related issues.</p></li>
+<li><p><strong>Code Reviews:</strong> Expect direct feedback—clarity and correctness are our top priorities.</p></li>
+</ul>
+</section>
+<section id="coding-standards">
+<h3>Coding Standards<a class="headerlink" href="#coding-standards" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>C++:</strong> Follow the <a class="reference external" href="https://google.github.io/styleguide/cppguide.html">Google C++ Style Guide</a></p></li>
+<li><p><strong>Python:</strong> Adhere to <a class="reference external" href="https://peps.python.org/pep-0008/">PEP8</a></p></li>
+<li><p><strong>Docstrings &amp; Comments:</strong> Every class and function should be documented. Clear inline comments and comprehensive docstrings help both human readers and our automated documentation tools.</p></li>
+</ul>
+</section>
+<section id="testing">
+<h3>Testing<a class="headerlink" href="#testing" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>C++ Tests:</strong> Located in <code class="docutils literal notranslate"><span class="pre">test/cpp/</span></code>; run them via CMake (e.g. using <code class="docutils literal notranslate"><span class="pre">ctest</span></code> or <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">quake_tests</span></code>).</p></li>
+<li><p><strong>Python Tests:</strong> Located in <code class="docutils literal notranslate"><span class="pre">test/python/</span></code>; run them with pytest.</p></li>
+<li><p><strong>When Adding Features:</strong> Always add tests covering new functionality and ensure tests are clear and reflect real usage scenarios.</p></li>
+</ul>
+</section>
+</section>
+<section id="workflow">
+<h2>Workflow<a class="headerlink" href="#workflow" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p><strong>Clone and Set Up:</strong></p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/marius-team/quake.git
+<span class="nb">cd</span><span class="w"> </span>quake
+git<span class="w"> </span>submodule<span class="w"> </span>update<span class="w"> </span>--init<span class="w"> </span>--recursive
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p><strong>Create a Feature Branch:</strong></p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>checkout<span class="w"> </span>-b<span class="w"> </span>feature/my-feature
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p><strong>Build and Activate Conda Environment:</strong></p></li>
+</ol>
+<p>This installs the necessary dependencies for building Quake. See <a class="reference internal" href="install.html"><span class="doc">Installation</span></a> for more details.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environments/ubuntu-latest/conda.yaml
+conda<span class="w"> </span>activate<span class="w"> </span>quake-env
+</pre></div>
+</div>
+<ol class="arabic simple" start="4">
+<li><p><strong>Build the Code &amp; Bindings:</strong></p></li>
+</ol>
+<p>C++ Build (optional, if you only want to work on Python code):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>build<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>build
+cmake<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span>..
+make<span class="w"> </span>-j<span class="k">$(</span>nproc<span class="k">)</span><span class="w"> </span>bindings
+</pre></div>
+</div>
+<p>Python Build</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>.
+</pre></div>
+</div>
+<ol class="arabic simple" start="5">
+<li><p><strong>Run Tests:</strong></p></li>
+</ol>
+<p><strong>C++ Tests:</strong></p>
+<p>Build the tests and run them (assuming you are in the <code class="docutils literal notranslate"><span class="pre">build/</span></code> directory):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>make<span class="w"> </span>-j<span class="k">$(</span>nproc<span class="k">)</span><span class="w"> </span>quake_tests
+test/cpp/quake_tests<span class="w"> </span>--gtest_filter<span class="o">=</span>*<span class="w"> </span><span class="c1"># use filters to run specific tests</span>
+</pre></div>
+</div>
+<p><strong>Python Tests:</strong></p>
+<p>Quake must be installed with pip to run the Python tests. Run them using pytest:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pytest<span class="w"> </span>test/python/
+</pre></div>
+</div>
+<ol class="arabic simple" start="6">
+<li><p><strong>Make Changes and submit a PR:</strong></p></li>
+</ol>
+<p>After making changes, commit them and push to your branch. Then, create a PR on the main branch.</p>
+</section>
+<section id="conclusion">
+<h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading"></a></h2>
+<p>This guide is a living document. As Quake evolves, update it to reflect improvements and new practices. Our goal is to keep the codebase and its documentation clear, correct, and easy to contribute to.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api.html" class="btn btn-neutral float-right" title="API" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Jason Mohoney.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
