@@ -196,10 +196,10 @@ PYBIND11_MODULE(_bindings, m) {
          "Time taken for refinement of split operations in microseconds.")
      .def_readonly("delete_refine_time_us", &MaintenanceTimingInfo::delete_refine_time_us,
          "Time taken for refinement of delete operations in microseconds.")
-     .def_readonly("split_count", &MaintenanceTimingInfo::n_splits,
-         "Number of split operations performed.")
-     .def_readonly("delete_count", &MaintenanceTimingInfo::n_deletes,
-         "Number of delete operations performed.");
+     .def_readonly("n_splits", &MaintenanceTimingInfo::n_splits,
+         "Number of partition split operations performed.")
+     .def_readonly("n_deletes", &MaintenanceTimingInfo::n_deletes,
+         "Number of partition delete operations performed.");
 
      /*********** ModifyTimingInfo Binding ***********/
      class_<ModifyTimingInfo, shared_ptr<ModifyTimingInfo>>(m, "ModifyTimingInfo")

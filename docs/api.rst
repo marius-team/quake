@@ -1,7 +1,7 @@
-API
+Python API
 =================
 
-Index Python Bindings
+Quake Index and Configuration
 --------------------------
 .. autoclass:: quake.QuakeIndex
    :members:
@@ -46,7 +46,7 @@ Workload Generation and Evaluation
    :undoc-members:
    :show-inheritance:
 
-Datasets
+Built-in Datasets
 --------
 .. automodule:: quake.datasets.ann_datasets
    :members:
