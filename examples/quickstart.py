@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 """
-basic_example.py
+Quake Basic Example
 ================
 
 This example demonstrates the basic functionality of Quake:
 - Building an index from a sample dataset.
 - Executing a search query on the index.
 - Removing and adding vectors to the index.
-- Printing out the search results and timing information.
+- Performing maintenance on the index..
 
 Ensure you have set up the conda environment (quake-env) and installed Quake prior to running this example.
 
 Usage:
-    python examples/basic_example.py
+    python examples/quickstart.py
 """
 
 import torch
