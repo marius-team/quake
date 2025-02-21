@@ -11,7 +11,9 @@ dependencies:
   - faiss-cpu
   - matplotlib
   - pytest
-  - sphinx
-  - sphinx_rtd_theme
-  - sphinxcontrib-mermaid
+  - pip
+  - pip:
+    - sphinx
+    - sphinx_rtd_theme
+    - sphinxcontrib-mermaid
 

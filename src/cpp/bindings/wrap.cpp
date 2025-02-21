@@ -112,7 +112,11 @@ PYBIND11_MODULE(_bindings, m) {
         .def("ntotal", &QuakeIndex::ntotal,
              "Return the total number of vectors stored in the index.")
         .def("nlist", &QuakeIndex::nlist,
-             "Return the number of partitions (lists) in the index.");
+             "Return the number of partitions (lists) in the index.")
+        .def("parent", &QuakeIndex::parent_,
+            "Return the parent index over the centroids.")
+        .def_readonly("current_level", &QuakeIndex::current_level_,
+             "The current level of the index.");
 
     /*********** IndexBuildParams Binding ***********/
     class_<IndexBuildParams, shared_ptr<IndexBuildParams>>(m, "IndexBuildParams")
