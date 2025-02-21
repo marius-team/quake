@@ -47,9 +47,6 @@ def main():
     end_time = time.time()
     print(f"Build time: {end_time - start_time:.4f} seconds\n")
 
-
-
-
     ######### Search the index #########
     # Set up search parameters
     search_params = SearchParams()
@@ -66,7 +63,6 @@ def main():
 
     print(f"Mean recall: {recall.mean().item():.4f}")
     print(f"Search time: {end_time - start_time:.4f} seconds\n")
-
 
     ######### Remove vectors from index #########
     n_remove = 100
