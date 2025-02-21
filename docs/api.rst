@@ -35,6 +35,10 @@ Index Python Bindings
     :members:
     :undoc-members:
 
+.. autoclass:: quake.ModifyTimingInfo
+    :members:
+    :undoc-members:
+
 Workload Generation and Evaluation
 ----------------------------------
 .. automodule:: quake.workload_generator

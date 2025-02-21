@@ -177,6 +177,72 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Target partition size. default = ") + std::to_string(DEFAULT_TARGET_PARTITION_SIZE)).c_str())
         .def_readwrite("max_partition_ratio", &MaintenancePolicyParams::max_partition_ratio,
              (std::string("Maximum allowed partition ratio. default = ") + std::to_string(DEFAULT_MAX_PARTITION_RATIO)).c_str());
+
+     /*********** MaintenanceTimingInfo Binding ***********/
+     class_<MaintenanceTimingInfo, shared_ptr<MaintenanceTimingInfo>>(m, "MaintenanceTimingInfo")
+         .def_readonly("total_time_us", &MaintenanceTimingInfo::total_time_us,
+             "Total time taken for maintenance in microseconds.")
+     .def_readonly("split_time_us", &MaintenanceTimingInfo::split_time_us,
+         "Time taken for split operations in microseconds.")
+     .def_readonly("delete_time_us", &MaintenanceTimingInfo::delete_time_us,
+         "Time taken for delete operations in microseconds.")
+     .def_readonly("split_refine_time_us", &MaintenanceTimingInfo::split_refine_time_us,
+         "Time taken for refinement of split operations in microseconds.")
+     .def_readonly("delete_refine_time_us", &MaintenanceTimingInfo::delete_refine_time_us,
+         "Time taken for refinement of delete operations in microseconds.")
+     .def_readonly("split_count", &MaintenanceTimingInfo::n_splits,
+         "Number of split operations performed.")
+     .def_readonly("delete_count", &MaintenanceTimingInfo::n_deletes,
+         "Number of delete operations performed.");
+
+     /*********** ModifyTimingInfo Binding ***********/
+     class_<ModifyTimingInfo, shared_ptr<ModifyTimingInfo>>(m, "ModifyTimingInfo")
+         .def_readonly("modify_time_us", &ModifyTimingInfo::modify_time_us,
+             "Total time taken for the modify operation in microseconds.")
+         .def_readonly("modify_count", &ModifyTimingInfo::n_vectors)
+     .def_readonly("find_partition_time_us", &ModifyTimingInfo::find_partition_time_us,
+         "Time taken to find the partition for the modify operation in microseconds.");
+
+     /*********** SearchTimingInfo Binding ***********/
+     class_<SearchTimingInfo, shared_ptr<SearchTimingInfo>>(m, "SearchTimingInfo")
+     .def_readonly("total_time_ns", &SearchTimingInfo::total_time_ns,
+         "Total time taken for the search operation in nanoseconds.")
+     .def_readonly("n_queries", &SearchTimingInfo::n_queries,
+         "Number of queries performed.")
+     .def_readonly("n_clusters", &SearchTimingInfo::n_clusters,
+         "Number of clusters searched.")
+     .def_readonly("partitions_scanned", &SearchTimingInfo::partitions_scanned,
+         "Number of partitions scanned.")
+     .def_readonly("search_params", &SearchTimingInfo::search_params,
+         "Parameters used for the search operation.")
+     .def_readonly("parent_info", &SearchTimingInfo::parent_info,
+         "Search info for the parent index.");
+
+    /**************** BuildTimingInfo Binding ***********/
+    class_<BuildTimingInfo, shared_ptr<BuildTimingInfo>>(m, "BuildTimingInfo")
+        .def_readonly("total_time_us", &BuildTimingInfo::total_time_us,
+            "Total time taken for the build operation in microseconds.")
+        .def_readonly("assign_time_us", &BuildTimingInfo::assign_time_us,
+            "Time taken for assignment in microseconds.")
+        .def_readonly("train_time_us", &BuildTimingInfo::train_time_us,
+            "Time taken for training in microseconds.")
+        .def_readonly("d", &BuildTimingInfo::d,
+            "Dimension of the vectors.")
+        .def_readonly("code_size", &BuildTimingInfo::code_size,
+            "Size of PQ codes in bytes.")
+        .def_readonly("n_codebooks", &BuildTimingInfo::num_codebooks,
+            "Number of codebooks in the index.")
+        .def_readonly("n_vectors", &BuildTimingInfo::n_vectors,
+            "Number of vectors in the index.");
+
+     /************* SearchResult Binding ***********/
+     class_<SearchResult, shared_ptr<SearchResult>>(m, "SearchResult")
+         .def_readonly("distances", &SearchResult::distances,
+             "Distances to the nearest neighbors.")
+         .def_readonly("ids", &SearchResult::ids,
+             "Indices of the nearest neighbors.")
+         .def_readonly("timing_info", &SearchResult::timing_info,
+             "Timing information for the search operation.");
 }
 
 #endif //QUAKE_WRAP_H
