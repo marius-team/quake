@@ -113,7 +113,7 @@ PYBIND11_MODULE(_bindings, m) {
              "Return the total number of vectors stored in the index.")
         .def("nlist", &QuakeIndex::nlist,
              "Return the number of partitions (lists) in the index.")
-        .def("parent", &QuakeIndex::parent_,
+        .def_readonly("parent", &QuakeIndex::parent_,
             "Return the parent index over the centroids.")
         .def_readonly("current_level", &QuakeIndex::current_level_,
              "The current level of the index.");
@@ -141,10 +141,12 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Recall target. default = ") + std::to_string(DEFAULT_RECALL_TARGET)).c_str())
         .def_readwrite("batched_scan", &SearchParams::batched_scan,
              (std::string("Flag for batched scanning. default = ") + std::to_string(DEFAULT_BATCHED_SCAN)).c_str())
+        .def_readwrite("use_precomputed", &SearchParams::use_precomputed,
+             (std::string("Flag to use precomputed inc beta fn for APS. default = ") + std::to_string(DEFAULT_PRECOMPUTED)).c_str())
         .def_readwrite("initial_search_fraction", &SearchParams::initial_search_fraction,
              (std::string("Initial fraction of partitions to search. default = ") + std::to_string(DEFAULT_INITIAL_SEARCH_FRACTION)).c_str())
         .def_readwrite("recompute_threshold", &SearchParams::recompute_threshold,
-             (std::string("Threshold to trigger recomputation of search parameters. default = ") + std::to_string(DEFAULT_RECOMPUTE_THRESHOLD)).c_str())
+             (std::string("Threshold to trigger recomputation of APS. default = ") + std::to_string(DEFAULT_RECOMPUTE_THRESHOLD)).c_str())
         .def_readwrite("aps_flush_period_us", &SearchParams::aps_flush_period_us,
              (std::string("APS flush period in microseconds. default = ") + std::to_string(DEFAULT_APS_FLUSH_PERIOD_US)).c_str());
 
