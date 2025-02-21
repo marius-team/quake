@@ -128,10 +128,10 @@ Quake’s Python API provides a set of core operations. The following sections d
 
 ## Further Documentation
 
-For detailed instructions and advanced usage, please see:
-- [Installation Guide](./install.rst)
-- [Developer Guide](./development_guide.rst)
-- [API Documentation](./api.rst)
+For detailed instructions and advanced usage, please see the documentation: http://marius-project.org/quake/
+- [Installation Guide](http://marius-project.org/quake/install)
+- [Developer Guide](http://marius-project.org/quake/development_guide)
+- [API Documentation](http://marius-project.org/quake/api)
 
 ---
 ### Contact
