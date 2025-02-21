@@ -1,12 +1,23 @@
-Quake API
+API
 =================
 
-Python Bindings
+Index Python Bindings
 --------------------------
-.. automodule:: quake._bindings
+.. autoclass:: quake.QuakeIndex
    :members:
    :undoc-members:
-   :show-inheritance:
+
+.. autoclass:: quake.SearchParams
+    :members:
+    :undoc-members:
+
+.. autoclass:: quake.IndexBuildParams
+    :members:
+    :undoc-members:
+
+.. autoclass:: quake.MaintenancePolicyParams
+    :members:
+    :undoc-members:
 
 Workload Generation and Evaluation
 ----------------------------------
@@ -17,14 +28,24 @@ Workload Generation and Evaluation
 
 Datasets
 --------
-.. automodule:: quake.datasets
+.. automodule:: quake.datasets.ann_datasets
    :members:
    :undoc-members:
    :show-inheritance:
 
 Index Wrappers
 --------------
-.. automodule:: quake.index_wrappers
+.. automodule:: quake.index_wrappers.quake
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: quake.index_wrappers.faiss_ivf
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: quake.index_wrappers.faiss_hnsw
    :members:
    :undoc-members:
    :show-inheritance:

@@ -65,30 +65,63 @@ using faiss::MetricType;
 static const uint32_t SerializationMagicNumber = 0x44494E4C;
 static const uint32_t SerializationVersion = 3;
 
+// Default constants for index build parameters
+constexpr int DEFAULT_NLIST = 0;                   ///< Default number of clusters (lists); if not specified, a flat index is assumed.
+constexpr int DEFAULT_NITER = 5;                   ///< Default number of k-means iterations used during clustering.
+constexpr const char* DEFAULT_METRIC = "l2";       ///< Default distance metric (either "l2" for Euclidean or "ip" for inner product).
+constexpr int DEFAULT_NUM_WORKERS = 0;             ///< Default number of workers (0 means single-threaded).
+
+// Default constants for search parameters
+constexpr int DEFAULT_K = 1;                             ///< Default number of neighbors to return.
+constexpr int DEFAULT_NPROBE = 1;                        ///< Default number of partitions to probe during search.
+constexpr float DEFAULT_RECALL_TARGET = -1.0f;           ///< Default recall target (a negative value means no adaptive search).
+constexpr bool DEFAULT_BATCHED_SCAN = false;             ///< Default flag for batched scanning.
+constexpr bool DEFAULT_PRECOMPUTED = false;              ///< Default flag to use precomputed incomplete beta fn for APS.
+constexpr float DEFAULT_INITIAL_SEARCH_FRACTION = 0.2f;  ///< Default initial fraction of partitions to search.
+constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.01f;     ///< Default threshold to trigger recomputation of search parameters.
+constexpr int DEFAULT_APS_FLUSH_PERIOD_US = 100;         ///< Default period (in microseconds) for flushing the APS buffer.
+
+// Default constants for maintenance policy parameters
+constexpr const char* DEFAULT_MAINTENANCE_POLICY = "query_cost"; ///< Default maintenance policy type.
+constexpr int DEFAULT_WINDOW_SIZE = 1000;              ///< Default window size for measuring hit rates.
+constexpr int DEFAULT_REFINEMENT_RADIUS = 100;         ///< Default radius for local partition refinement.
+constexpr int DEFAULT_REFINEMENT_ITERATIONS = 3;       ///< Default number of iterations for refinement.
+constexpr int DEFAULT_MIN_PARTITION_SIZE = 32;         ///< Default minimum allowed partition size.
+constexpr float DEFAULT_ALPHA = 0.9f;                  ///< Default alpha parameter for maintenance.
+constexpr bool DEFAULT_ENABLE_SPLIT_REJECTION = true;  ///< Default flag to enable rejection of splits.
+constexpr bool DEFAULT_ENABLE_DELETE_REJECTION = true; ///< Default flag to enable rejection of deletions.
+constexpr float DEFAULT_DELETE_THRESHOLD_NS = 20.0f;   ///< Default threshold in nanoseconds for deletion decisions.
+constexpr float DEFAULT_SPLIT_THRESHOLD_NS = 20.0f;    ///< Default threshold in nanoseconds for split decisions.
+constexpr int DEFAULT_K_LARGE = 50;                    ///< Default "large" k value (used in de-drift maintenance).
+constexpr int DEFAULT_K_SMALL = 50;                    ///< Default "small" k value (used in de-drift maintenance).
+constexpr bool DEFAULT_MODIFY_CENTROIDS = true;        ///< Default flag to modify centroids during maintenance.
+constexpr int DEFAULT_TARGET_PARTITION_SIZE = 1000;    ///< Default target partition size.
+constexpr float DEFAULT_MAX_PARTITION_RATIO = 2.0f;    ///< Default maximum allowed partition ratio.
+
 // macros
 #define DEBUG_PRINT(x) std::cout << #x << " = " << x << std::endl;
 
 struct MaintenancePolicyParams {
-    std::string maintenance_policy = "query_cost";
-    int window_size = 1000;
-    int refinement_radius = 100;
-    int refinement_iterations = 3;
-    int min_partition_size = 32;
-    float alpha = .9;
-    bool enable_split_rejection = true;
-    bool enable_delete_rejection = true;
+    std::string maintenance_policy = DEFAULT_MAINTENANCE_POLICY;
+    int window_size = DEFAULT_WINDOW_SIZE;
+    int refinement_radius = DEFAULT_REFINEMENT_RADIUS;
+    int refinement_iterations = DEFAULT_REFINEMENT_ITERATIONS;
+    int min_partition_size = DEFAULT_MIN_PARTITION_SIZE;
+    float alpha = DEFAULT_ALPHA;
+    bool enable_split_rejection = DEFAULT_ENABLE_SPLIT_REJECTION;
+    bool enable_delete_rejection = DEFAULT_ENABLE_DELETE_REJECTION;
 
-    float delete_threshold_ns = 20.0;
-    float split_threshold_ns = 20.0;
+    float delete_threshold_ns = DEFAULT_DELETE_THRESHOLD_NS;
+    float split_threshold_ns = DEFAULT_SPLIT_THRESHOLD_NS;
 
     // de-drift parameters
-    int k_large = 50;
-    int k_small = 50;
-    bool modify_centroids = true;
+    int k_large = DEFAULT_K_LARGE;
+    int k_small = DEFAULT_K_SMALL;
+    bool modify_centroids = DEFAULT_MODIFY_CENTROIDS;
 
     // lire parameters
-    int target_partition_size = 1000;
-    float max_partition_ratio = 2.0;
+    int target_partition_size = DEFAULT_TARGET_PARTITION_SIZE;
+    float max_partition_ratio = DEFAULT_MAX_PARTITION_RATIO;
 
     MaintenancePolicyParams() = default;
 };
@@ -98,13 +131,13 @@ struct MaintenancePolicyParams {
  */
 struct IndexBuildParams {
     // Basic configuration
-    int dimension = 0;          // e.g. d_
-    int nlist = 0;              // number of clusters
-    int num_workers = 0;        // concurrency (0 means main thread processes queries)
-    int code_size = -1;         // e.g. for product quantization
-    int num_codebooks = -1;     // e.g. for product quantization
-    string metric = "l2";       // distance metric
-    int niter = 5;              // number of kmeans iterations
+    int dimension = 0;
+    int nlist = DEFAULT_NLIST;
+    int num_workers = DEFAULT_NUM_WORKERS;
+    int code_size = -1;         // for PQ
+    int num_codebooks = -1;     // for PQ
+    string metric = DEFAULT_METRIC;
+    int niter = DEFAULT_NITER;
 
     bool use_adaptive_nprobe = false;
     bool use_numa = false;
@@ -144,15 +177,15 @@ inline string metric_type_to_str(faiss::MetricType metric) {
 * @brief Parameters for the search operation
 */
 struct SearchParams {
-    int nprobe = 1;
-    int k = 1;
-    float recall_target = -1.0f;
+    int nprobe = DEFAULT_NPROBE;
+    int k = DEFAULT_K;
+    float recall_target = DEFAULT_RECALL_TARGET;
     float k_factor = 1.0f;
-    bool use_precomputed = false;
-    bool batched_scan = false;
-    float recompute_threshold = 0.01f;
-    float initial_search_fraction = 0.2f;
-    int aps_flush_period_us = 100;
+    bool use_precomputed = DEFAULT_PRECOMPUTED;
+    bool batched_scan = DEFAULT_BATCHED_SCAN;
+    float recompute_threshold = DEFAULT_RECOMPUTE_THRESHOLD;
+    float initial_search_fraction = DEFAULT_INITIAL_SEARCH_FRACTION;
+    int aps_flush_period_us = DEFAULT_APS_FLUSH_PERIOD_US;
 
     SearchParams() = default;
 };

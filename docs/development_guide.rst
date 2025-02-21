@@ -1,4 +1,4 @@
-Quake Development Guide
+Development Guide
 =======================
 
 Quake is a high‑performance vector search engine written in C++ with Python bindings. It supports adaptive, real‑time updates and query‑adaptive search—letting you specify a recall target so that the index automatically adjusts its search scope. This guide will help you rapidly understand our design, coding standards and contribution workflow.
