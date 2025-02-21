@@ -1,0 +1,32 @@
+name: Build and Publish Docs
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build_docs:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Install Documentation Dependencies
+        run: |
+          pip install sphinx sphinx_rtd_theme
+
+      - name: Build Sphinx Documentation
+        working-directory: docs
+        run: make html
+
+      - name: Deploy Documentation to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/_build/html
