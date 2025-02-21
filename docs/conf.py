@@ -22,6 +22,7 @@ extensions = [
     'sphinx.ext.autodoc',     # Automatically extract docstrings from Python
     'sphinx.ext.napoleon',    # Support for Google and NumPy style docstrings
     'sphinx.ext.viewcode',    # Add links to highlighted source code
+    'sphinxcontrib.mermaid',  # Add support for Mermaid diagrams
 ]
 
 templates_path = ['_templates']

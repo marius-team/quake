@@ -24,6 +24,60 @@ Quake’s design is split into two major layers:
 2. **The Python Layer**
    Provides user-friendly wrappers, dataset loaders, and utility functions for integrating with PyTorch and other ML workflows. It is located in the ``src/python/`` directory and uses Sphinx (with autodoc) to extract docstrings from our Python code.
 
+Below shows a flowchart of how the main components and classes of Quake interact.
+
+.. mermaid::
+
+    flowchart TD
+        subgraph C++_Core["C++ Core"]
+            QI[QuakeIndex]
+            PM[PartitionManager]
+            MP["MaintenancePolicy"]
+            QC[QueryCoordinator]
+            DIL[DynamicInvertedLists]
+            IP[IndexPartition]
+            B["Bindings (pybind11)"]
+
+            MO[MaintenancePolicyParams]
+            SO[SearchParams]
+            IB[IndexBuildParams]
+        end
+
+        subgraph Python_Layer["Python Layer"]
+            PA["Quake Python API"]
+            UT["Utility Modules & Helpers"]
+            DS["Dataset Loaders"]
+            WG["Workload Generator"]
+        end
+
+        %% Connections within C++ Core
+        QI --> PM
+        QI --> MP
+        QI --> QC
+        PM --> DIL
+        DIL --> IP
+
+        B --> QI
+        B --> MO
+        B --> SO
+        B --> IB
+
+        %% Expose C++ Core to Python
+        PA --> B
+
+        %% Python Layer structure
+        PA --> UT
+        PA --> DS
+        PA --> WG
+
+        %% Define custom styles
+        classDef coreStyle fill:#f9f,stroke:#333,stroke-width:2px;
+        classDef pythonStyle fill:#bbf,stroke:#333,stroke-width:2px;
+
+        %% Assign styles to nodes
+        class QI,PM,MP,QC,DIL,IP,MO,SO,IB coreStyle;
+        class PA,UT,DS,WG pythonStyle;
+
 Directory Structure
 -------------------
 Familiarize yourself with the layout of the repository:
@@ -53,14 +107,14 @@ Contribution Workflow & Coding Standards
 We expect all contributors to follow these practices:
 
 Git Workflow & PRs
-**********
+******************
 
 - **Branching:** Create feature branches from the main branch.
 - **Pull Requests:** Submit clear PRs with detailed descriptions and links to related issues.
 - **Code Reviews:** Expect direct feedback—clarity and correctness are our top priorities.
 
 Coding Standards
-**********
+****************
 
 - **C++:** Follow the `Google C++ Style Guide <https://google.github.io/styleguide/cppguide.html>`_
 - **Python:** Adhere to `PEP8 <https://peps.python.org/pep-0008/>`_
