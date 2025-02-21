@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Installation &mdash; Quake 0.0.1 documentation</title>
+  <title>Quick Start Guide &mdash; Quake 0.0.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="_static/css/modify.css?v=fab1bd98" />
@@ -20,8 +20,8 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Development Guide" href="development_guide.html" />
-    <link rel="prev" title="Quick Start Guide" href="quickstart.html" /> 
+    <link rel="next" title="Installation" href="install.html" />
+    <link rel="prev" title="Quake Documentation" href="index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -45,12 +45,15 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start Guide</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Quick Start Guide</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#building-from-source">Building from source</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-1-clone-the-repository">Step 1: Clone the Repository</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-2-set-up-the-environment">Step 2: Set Up the Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-3-install-quake">Step 3: Install Quake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-4-run-example-program">Step 4: Run Example Program</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development_guide.html">Development Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">Python API</a></li>
 </ul>
@@ -69,9 +72,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Installation</li>
+      <li class="breadcrumb-item active">Quick Start Guide</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="_sources/install.rst.txt" rel="nofollow"> View page source</a>
+            <a href="_sources/quickstart.rst.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -79,38 +82,55 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="installation">
-<h1>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h1>
-<p>This document explains how to install Quake on your system.</p>
+  <section id="quick-start-guide">
+<h1>Quick Start Guide<a class="headerlink" href="#quick-start-guide" title="Link to this heading"></a></h1>
+<p>Welcome to Quake! This guide provides you with the essential steps to quickly set up, build, and run Quake—a high‑performance dynamic vector search engine with Python bindings.</p>
 <section id="prerequisites">
 <h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
+<p>Before you begin, ensure you have the following installed:</p>
 <ul class="simple">
-<li><p>A C++17–compliant compiler (e.g. GCC 8+, Clang 10+)</p></li>
-<li><p>CMake 3.16 or newer</p></li>
-<li><p>Python 3.9+</p></li>
-<li><p>PyTorch 2.0+</p></li>
+<li><p><strong>C++17 Compiler</strong> (e.g. GCC 8+, Clang 10+, or MSVC 2019+)</p></li>
+<li><p><strong>Python 3.9+</strong></p></li>
+<li><p><strong>Conda</strong> (for dependency management)</p></li>
+<li><p><strong>Git</strong></p></li>
 </ul>
 </section>
-<section id="building-from-source">
-<h2>Building from source<a class="headerlink" href="#building-from-source" title="Link to this heading"></a></h2>
-<p>Clone the repository and build the extension:</p>
+<section id="step-1-clone-the-repository">
+<h2>Step 1: Clone the Repository<a class="headerlink" href="#step-1-clone-the-repository" title="Link to this heading"></a></h2>
+<p>Clone the repository and initialize submodules:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/marius-team/quake.git
 <span class="nb">cd</span><span class="w"> </span>quake
 git<span class="w"> </span>submodule<span class="w"> </span>update<span class="w"> </span>--init<span class="w"> </span>--recursive
-conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environments/ubuntu-latest/conda.yaml
+</pre></div>
+</div>
+</section>
+<section id="step-2-set-up-the-environment">
+<h2>Step 2: Set Up the Environment<a class="headerlink" href="#step-2-set-up-the-environment" title="Link to this heading"></a></h2>
+<p>Create and activate the Conda environment using the provided YAML file:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environments/ubuntu-latest/conda.yaml
 conda<span class="w"> </span>activate<span class="w"> </span>quake-env
-pip<span class="w"> </span>install<span class="w"> </span>.
 </pre></div>
 </div>
-<p>For advanced build options (e.g. enabling GPU, NUMA, or AVX512), use the cmake build:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>build<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>build
-cmake<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span><span class="se">\</span>
-<span class="w">      </span>-DQUAKE_ENABLE_GPU<span class="o">=</span>ON<span class="w"> </span><span class="se">\</span>
-<span class="w">      </span>-DQUAKE_USE_NUMA<span class="o">=</span>ON<span class="w"> </span><span class="se">\</span>
-<span class="w">      </span>-DQUAKE_USE_AVX512<span class="o">=</span>ON<span class="w"> </span>..
-make<span class="w"> </span>bindings<span class="w"> </span>-j<span class="k">$(</span>nproc<span class="k">)</span>
+</section>
+<section id="step-3-install-quake">
+<h2>Step 3: Install Quake<a class="headerlink" href="#step-3-install-quake" title="Link to this heading"></a></h2>
+<p>Install the Quake package (which includes the Python bindings):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>.
 </pre></div>
 </div>
+</section>
+<section id="step-4-run-example-program">
+<h2>Step 4: Run Example Program<a class="headerlink" href="#step-4-run-example-program" title="Link to this heading"></a></h2>
+<p>Quake comes with an example program that demonstrates its basic functionality.
+Run the example by executing the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/basic_example.py
+</pre></div>
+</div>
+<p>This program will:
+- Build an index from a sample dataset.
+- Perform a basic search.
+- Print the search results along with performance metrics.</p>
+<p>For more detailed instructions, please refer to the <strong>Installation Guide</strong> (<a class="reference internal" href="install.html"><span class="doc">Installation</span></a>) and the <strong>Developer Guide</strong> (<a class="reference internal" href="development_guide.html"><span class="doc">Development Guide</span></a>).</p>
 </section>
 </section>
 
@@ -118,8 +138,8 @@ make<span class="w"> </span>bindings<span class="w"> </span>-j<span class="k">$(
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="quickstart.html" class="btn btn-neutral float-left" title="Quick Start Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="development_guide.html" class="btn btn-neutral float-right" title="Development Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="index.html" class="btn btn-neutral float-left" title="Quake Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="install.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

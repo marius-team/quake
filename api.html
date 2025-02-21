@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>API &mdash; Quake 0.0.1 documentation</title>
+  <title>Python API &mdash; Quake 0.0.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="_static/css/modify.css?v=fab1bd98" />
@@ -44,10 +44,11 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development_guide.html">Development Guide</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">API</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#index-python-bindings">Index Python Bindings</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Python API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#quake-index-and-configuration">Quake Index and Configuration</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#quake.QuakeIndex"><code class="docutils literal notranslate"><span class="pre">QuakeIndex</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#quake.QuakeIndex.add"><code class="docutils literal notranslate"><span class="pre">QuakeIndex.add()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.QuakeIndex.build"><code class="docutils literal notranslate"><span class="pre">QuakeIndex.build()</span></code></a></li>
@@ -108,10 +109,10 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.MaintenanceTimingInfo"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.delete_count"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.delete_count</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.delete_refine_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.delete_refine_time_us</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.delete_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.delete_time_us</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.split_count"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.split_count</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.n_deletes"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.n_deletes</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.n_splits"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.n_splits</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.split_refine_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.split_refine_time_us</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.split_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.split_time_us</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.total_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.total_time_us</span></code></a></li>
@@ -177,7 +178,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#quake.workload_generator.run_query"><code class="docutils literal notranslate"><span class="pre">run_query()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#module-quake.datasets.ann_datasets">Datasets</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#built-in-datasets">Built-in Datasets</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.Dataset"><code class="docutils literal notranslate"><span class="pre">Dataset</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Dataset.download"><code class="docutils literal notranslate"><span class="pre">Dataset.download()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Dataset.download_dir"><code class="docutils literal notranslate"><span class="pre">Dataset.download_dir</span></code></a></li>
@@ -263,7 +264,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">API</li>
+      <li class="breadcrumb-item active">Python API</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/api.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -273,10 +274,10 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="api">
-<h1>API<a class="headerlink" href="#api" title="Link to this heading"></a></h1>
-<section id="index-python-bindings">
-<h2>Index Python Bindings<a class="headerlink" href="#index-python-bindings" title="Link to this heading"></a></h2>
+  <section id="python-api">
+<h1>Python API<a class="headerlink" href="#python-api" title="Link to this heading"></a></h1>
+<section id="quake-index-and-configuration">
+<h2>Quake Index and Configuration<a class="headerlink" href="#quake-index-and-configuration" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="quake.QuakeIndex">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.</span></span><span class="sig-name descname"><span class="pre">QuakeIndex</span></span><a class="headerlink" href="#quake.QuakeIndex" title="Link to this definition"></a></dt>
@@ -630,12 +631,6 @@ Returns timing information for the maintenance operation.</p>
 <dt class="sig sig-object py" id="quake.MaintenanceTimingInfo">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.</span></span><span class="sig-name descname"><span class="pre">MaintenanceTimingInfo</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo" title="Link to this definition"></a></dt>
 <dd><dl class="py property">
-<dt class="sig sig-object py" id="quake.MaintenanceTimingInfo.delete_count">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">delete_count</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo.delete_count" title="Link to this definition"></a></dt>
-<dd><p>Number of delete operations performed.</p>
-</dd></dl>
-
-<dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenanceTimingInfo.delete_refine_time_us">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">delete_refine_time_us</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo.delete_refine_time_us" title="Link to this definition"></a></dt>
 <dd><p>Time taken for refinement of delete operations in microseconds.</p>
@@ -648,9 +643,15 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="quake.MaintenanceTimingInfo.split_count">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">split_count</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo.split_count" title="Link to this definition"></a></dt>
-<dd><p>Number of split operations performed.</p>
+<dt class="sig sig-object py" id="quake.MaintenanceTimingInfo.n_deletes">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_deletes</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo.n_deletes" title="Link to this definition"></a></dt>
+<dd><p>Number of partition delete operations performed.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.MaintenanceTimingInfo.n_splits">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_splits</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo.n_splits" title="Link to this definition"></a></dt>
+<dd><p>Number of partition split operations performed.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -915,9 +916,9 @@ to sample in a stratified fashion.</p>
 </dd></dl>
 
 </section>
-<section id="module-quake.datasets.ann_datasets">
-<span id="datasets"></span><h2>Datasets<a class="headerlink" href="#module-quake.datasets.ann_datasets" title="Link to this heading"></a></h2>
-<dl class="py class">
+<section id="built-in-datasets">
+<h2>Built-in Datasets<a class="headerlink" href="#built-in-datasets" title="Link to this heading"></a></h2>
+<dl class="py class" id="module-quake.datasets.ann_datasets">
 <dt class="sig sig-object py" id="quake.datasets.ann_datasets.Dataset">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.datasets.ann_datasets.</span></span><span class="sig-name descname"><span class="pre">Dataset</span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Dataset" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>

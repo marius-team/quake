@@ -7,13 +7,9 @@ Quake Documentation
    :maxdepth: 2
    :caption: Contents:
 
+   quickstart
    install
    development_guide
    api
 
-Indices and tables
-==================
-
 * :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
