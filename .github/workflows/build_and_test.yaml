@@ -26,7 +26,7 @@ jobs:
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
-          conda activate test-env
+          conda activate quake-env
           mkdir -p build
           cd build
           cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -61,7 +61,7 @@ jobs:
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
-          conda activate test-env
+          conda activate quake-env
           pip install .
           pip install pytest
           python -m pytest test/python

@@ -1,7 +1,8 @@
-name: test-env
+name: quake-env
 channels:
   - pytorch
   - defaults
+  - conda-forge
 dependencies:
   - python=3.11
   - numpy
@@ -10,3 +11,9 @@ dependencies:
   - faiss-cpu
   - matplotlib
   - pytest
+  - pip
+  - pip:
+    - sphinx
+    - sphinx_rtd_theme
+    - sphinxcontrib-mermaid
+

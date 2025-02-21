@@ -53,8 +53,6 @@ def run_query(
 ):
     """
     Run queries on the index and compute the recall.
-
-    [Docstring shortened for brevity]
     """
     # ... (existing implementation)
     recalls = []
