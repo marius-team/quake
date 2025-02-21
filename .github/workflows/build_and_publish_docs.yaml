@@ -17,9 +17,13 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      - name: Install Documentation Dependencies
+      - name: Install Quake
         run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate test-env
           pip install sphinx sphinx_rtd_theme
+          pip install .
 
       - name: Build Sphinx Documentation
         working-directory: docs
