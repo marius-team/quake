@@ -7,7 +7,7 @@ import time
 
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_torch
-from quake import SearchTimingInfo
+from quake import SearchTimingInfo, SearchResult
 
 
 def metric_str_to_faiss(metric: str) -> int:
@@ -77,6 +77,25 @@ class FaissIVF(IndexWrapper):
         :return: The dimension of the vectors in the index.
         """
         return self.index.d
+
+    def index_state(self) -> dict:
+        """
+        Return the state of the index.
+
+        - `n_list`: The number of centroids in the index.
+        - `n_total': The number of vectors in the index.
+        - `metric`: The distance metric used in the index.
+
+        :return: The state of the index as a dictionary.
+        """
+        return {
+            "n_list": self.index.nlist,
+            "n_total": self.index.ntotal,
+            "metric": faiss_metric_to_str(self.index.metric_type)
+        }
+
+    def maintenance(self):
+        return
 
     def build(
             self,
@@ -166,12 +185,16 @@ class FaissIVF(IndexWrapper):
         else:
             self.index.add_with_ids(vectors, ids.to(torch.int64))
 
+        return None
+
     def remove(self, ids: torch.Tensor):
         """
         Remove vectors from the index.
         :param ids: The ids of the vectors to remove.
         """
         self.index.remove_ids(ids)
+
+        return None
 
     def search(self, query: torch.Tensor, k: int, nprobe: int = 1, rf: int = 1) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -202,9 +225,14 @@ class FaissIVF(IndexWrapper):
         distances, indices = self.index.search(query, k)
         end = time.time()
 
-        timing_info.total_time_us = int((end - start) * 1e6)
+        timing_info.total_time_ns = int((end - start) * 1e9)
 
-        return to_torch(indices), to_torch(distances), timing_info
+        search_result = SearchResult()
+        search_result.ids = to_torch(indices)
+        search_result.distances = to_torch(distances)
+        search_result.timing_info = timing_info
+
+        return search_result
 
         # The code below only works for faiss 1.18.0
 

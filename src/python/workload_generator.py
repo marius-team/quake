@@ -13,34 +13,6 @@ from quake import MaintenancePolicyParams
 import hashlib
 import matplotlib.pyplot as plt
 
-def get_index_class(index_name):
-    if index_name == 'Quake':
-        from quake.index_wrappers.quake import QuakeWrapper as IndexClass
-    elif index_name == 'HNSW':
-        from quake.index_wrappers.faiss_hnsw import FaissHNSW as IndexClass
-    elif index_name == 'IVF':
-        from quake.index_wrappers.faiss_ivf import FaissIVF as IndexClass
-    elif index_name == "DiskANN":
-        from quake.index_wrappers.diskann import DiskANNDynamic as IndexClass
-    else:
-        raise ValueError(f"Unknown index type: {index_name}")
-    return IndexClass
-
-
-# Generate a unique method ID based on index configuration and experiment parameters
-def generate_method_id(index_cfg, experiment_params):
-    """
-    Generate a unique method ID based on index configuration and experiment parameters.
-    """
-    method_dict = {
-        'index_name': index_cfg.name,
-        'experiment_params': experiment_params
-    }
-    method_str = json.dumps(method_dict, sort_keys=True)
-    method_id = hashlib.md5(method_str.encode()).hexdigest()
-    return method_id
-
-
 def run_query(
         index,
         queries: torch.Tensor,
@@ -359,13 +331,10 @@ class WorkloadEvaluator:
     def __init__(
             self,
             workload_dir: Union[str, Path],
-            index_cfg: dict,
             output_dir: Union[str, Path],
             base_vectors_path: Optional[Union[str, Path]] = None,
     ):
         self.workload_dir = to_path(workload_dir)
-        self.index_cfg = index_cfg
-        self.index = None
         self.output_dir = to_path(output_dir)
         self.runbook_path = self.workload_dir / "runbook.json"
         self.operations_dir = self.workload_dir / "operations"
@@ -373,34 +342,23 @@ class WorkloadEvaluator:
         self.base_vectors_path = to_path(base_vectors_path) if base_vectors_path else self.workload_dir / "base_vectors.pt"
         self.runbook = None
 
-    def build_or_load_index(self, index_cfg):
+    def initialize_index(self, name, index, build_params):
         index_dir = self.workload_dir / "init_indexes"
         index_dir.mkdir(parents=True, exist_ok=True)
-        index_name = index_cfg['name']
-        index_path = index_dir / f"{index_name}.index"
-        IndexClass = get_index_class(index_name)
+        index_path = index_dir / f"{name}.index"
         vectors = torch.load(self.base_vectors_path, weights_only=True).to(torch.float32)
         initial_indices = torch.load(self.initial_indices_path, weights_only=True).to(torch.int64)
         vectors = vectors[initial_indices]
-        if index_name == 'DiskANN':
-            index = IndexClass()
-            build_params = index_cfg.get('build_params', {})
+        if not index_path.exists():
             index.build(vectors, ids=initial_indices, **build_params)
-            print(f"DiskANN index built")
+            index.save(index_path)
+            print(f"Index {name} built and saved to {index_path}")
         else:
-            if not index_path.exists():
-                index = IndexClass()
-                build_params = index_cfg.get('build_params', {})
-                print(f"Building index {index_name} with parameters: {build_params}")
-                index.build(vectors, ids=initial_indices, **build_params)
-                index.save(index_path)
-                print(f"Index {index_name} built and saved to {index_path}")
-            index = IndexClass()
             index.load(index_path)
-            print(f"Index {index_name} loaded from {index_path}")
+            print(f"Index {name} loaded from {index_path}")
         return index
 
-    def evaluate_workload(self, search_params, do_maintenance=False):
+    def evaluate_workload(self, name, index, build_params, search_params, do_maintenance=False):
         """
         Evaluate the workload on the index. At the end a summary is printed and a multi-panel plot is saved.
         """
@@ -410,13 +368,14 @@ class WorkloadEvaluator:
         # --- Load Workload and Index ---
         base_vectors = torch.load(self.base_vectors_path, weights_only=True).to(torch.float32)
         initial_indices = torch.load(self.initial_indices_path, weights_only=True).to(torch.int64)
+
+        index = self.initialize_index(name, index, build_params)
+
         self.runbook = json.load(open(self.runbook_path, "r"))
-        metric = self.runbook["parameters"]["metric"]
         query_vectors = (base_vectors if self.runbook["parameters"]["sample_queries"]
                          else torch.load(self.workload_dir / "query_vectors.pt", weights_only=True))
         query_vectors = query_vectors.to(torch.float32)
         start_time = time.time()
-        self.index = self.build_or_load_index(self.index_cfg)
         init_time = time.time() - start_time
         self.runbook["initialize"]["time"] = init_time
 
@@ -433,12 +392,12 @@ class WorkloadEvaluator:
                 curr_ids = torch.cat([curr_ids, operation_ids])
                 curr_vectors = torch.cat([curr_vectors, base_vectors[operation_ids]])
                 start_time = time.time()
-                self.index.add(base_vectors[operation_ids], ids=operation_ids, num_threads=16)
+                index.add(base_vectors[operation_ids], ids=operation_ids, num_threads=16)
                 op_time = time.time() - start_time
                 mean_recall = None
             elif operation_type == "delete":
                 start_time = time.time()
-                self.index.remove(operation_ids)
+                index.remove(operation_ids)
                 op_time = time.time() - start_time
                 mean_recall = None
             elif operation_type == "query":
@@ -449,7 +408,7 @@ class WorkloadEvaluator:
                 start_time = time.time()
                 for query in queries:
                     query = query.unsqueeze(0)
-                    search_result = self.index.search(query, **search_params)
+                    search_result = index.search(query, **search_params)
                     Is.append(search_result.ids)
                     Ds.append(search_result.distances)
                     timing_infos.append(search_result.timing_info)
@@ -463,20 +422,18 @@ class WorkloadEvaluator:
                 print(f"Query Time: {mean_time:.2f} ns, Recall: {mean_recall:.2f}")
 
             if do_maintenance:
-                self.index.maintenance()
+                index.maintenance()
 
             n_resident = operation.get("n_resident", None)
-            n_partitions = self.index.index.nlist() if hasattr(self.index, "index") and hasattr(self.index.index, "nlist") else None
+            index_state = index.index_state()
             result = {
                 'operation_number': operation_id_int,
                 'operation_type': operation_type,
                 'latency_ms': op_time * 1000,
                 'recall': mean_recall,
                 'n_resident': n_resident,
-                'n_partitions': n_partitions,
-                'index_name': self.index_cfg['name'],
             }
-            result.update(self.index_cfg.get('build_params', {}))
+            result.update(index_state)
             result.update(search_params)
             results.append(result)
 
@@ -523,8 +480,8 @@ class WorkloadEvaluator:
         ax.legend()
         # Plot B: Number of partitions per operation (if available)
         ax = axs[0, 1]
-        partitions = [r['n_partitions'] for r in results if r['n_partitions'] is not None]
-        op_nums_part = [r['operation_number'] for r in results if r['n_partitions'] is not None]
+        partitions = [r['n_list'] for r in results if r['n_list'] is not None]
+        op_nums_part = [r['operation_number'] for r in results if r['n_list'] is not None]
         if partitions:
             ax.plot(op_nums_part, partitions, marker='o')
             ax.set_xlabel('Operation Number')

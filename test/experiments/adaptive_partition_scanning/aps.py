@@ -657,7 +657,6 @@ def get_nprobe_for_recall_target(recall_target, nlist):
     nprobe = max(1, min(nprobe, nlist))
     return nprobe
 
-# Main Function
 @hydra.main(config_path="configs", config_name="sift1m")
 def main(cfg: DictConfig):
     # Set up directories

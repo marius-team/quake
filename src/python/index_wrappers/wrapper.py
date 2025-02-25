@@ -4,12 +4,23 @@ from typing import Optional, Tuple, Union
 
 import torch
 
+def get_index_class(index_name):
+    if index_name == 'Quake':
+        from quake.index_wrappers.quake import QuakeWrapper as IndexClass
+    elif index_name == 'HNSW':
+        from quake.index_wrappers.faiss_hnsw import FaissHNSW as IndexClass
+    elif index_name == 'IVF':
+        from quake.index_wrappers.faiss_ivf import FaissIVF as IndexClass
+    elif index_name == "DiskANN":
+        from quake.index_wrappers.diskann import DiskANNDynamic as IndexClass
+    else:
+        raise ValueError(f"Unknown index type: {index_name}")
+    return IndexClass
 
 class IndexWrapper(abc.ABC):
     """
     Wrapper interface of various index implementations (faiss, leviathan, etc.)
     """
-
     @abstractmethod
     def build(self, vectors: torch.Tensor, *args, ids: Optional[torch.Tensor] = None):
         """Build the index with the provided build arguments"""
@@ -59,3 +70,8 @@ class IndexWrapper(abc.ABC):
     def d(self) -> int:
         """Return the dimension of vectors in the index"""
         raise NotImplementedError("Subclasses must implement d method")
+
+    @abstractmethod
+    def index_state(self) -> dict:
+        """Return the state of the index"""
+        raise NotImplementedError("Subclasses must implement index_state method")

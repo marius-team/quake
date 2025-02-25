@@ -32,8 +32,23 @@ class QuakeWrapper(IndexWrapper):
         """
         return self.index.d
 
+    def index_state(self) -> dict:
+        """
+        Return the state of the index.
+
+        - `n_list`: The number of centroids in the index.
+        - `n_total': The number of vectors in the index.
+        - `metric`: The distance metric used in the index.
+
+        :return: The state of the index as a dictionary.
+        """
+        return {
+            "n_list": self.index.nlist(),
+            "n_total": self.index.ntotal(),
+        }
+
     def build(self, vectors: torch.Tensor, nc: int, metric: str = "l2", ids: Optional[torch.Tensor] = None,
-              n_workers: int = 1, m: int = -1, code_size: int = 8):
+              n_workers: int = 0, m: int = -1, code_size: int = 8):
         """
         Build the index with the given vectors and arguments.
 
@@ -59,9 +74,7 @@ class QuakeWrapper(IndexWrapper):
         if ids is None:
             ids = torch.arange(vectors.shape[0], dtype=torch.int64)
 
-        self.index.build(vectors, ids.to(torch.int64), build_params)
-
-        print("Index built successfully.")
+        return self.index.build(vectors, ids.to(torch.int64), build_params)
 
     def add(self, vectors: torch.Tensor, ids: Optional[torch.Tensor] = None, num_threads: int = 0):
         """
@@ -77,7 +90,7 @@ class QuakeWrapper(IndexWrapper):
             curr_id = self.n_total()
             ids = torch.arange(curr_id, curr_id + vectors.shape[0], dtype=torch.int64)
 
-        self.index.add(vectors, ids)
+        return self.index.add(vectors, ids)
 
     def remove(self, ids: torch.Tensor):
         """
@@ -87,7 +100,7 @@ class QuakeWrapper(IndexWrapper):
         """
         assert self.index is not None
         assert ids.ndim == 1
-        self.index.remove(ids)
+        return self.index.remove(ids)
 
     def search(self, query: torch.Tensor, k: int, nprobe: int = 1, recall_target: float = -1, k_factor=4.0, use_precomputed = True) -> Tuple[
         torch.Tensor, torch.Tensor]:
