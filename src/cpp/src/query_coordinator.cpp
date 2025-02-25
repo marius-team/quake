@@ -644,7 +644,6 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
     if (parent_ == nullptr) {
         // scan all partitions for each query
         partition_ids_to_scan = torch::arange(partition_manager_->nlist(), torch::kInt64);
-        search_params->batched_scan = false;
     } else {
         auto parent_search_params = make_shared<SearchParams>();
 

@@ -209,6 +209,7 @@ struct BuildTimingInfo {
  */
 struct ModifyTimingInfo {
     int64_t n_vectors; ///< Number of vectors.
+    int input_validation_time_us; ///< Time spent on input validation in microseconds.
     int find_partition_time_us; ///< Time spent on finding the partition for each vector in microseconds.
     int modify_time_us; ///< Time spent on modify operations in microseconds.
     int maintenance_time_us; ///< Time spent on maintenance operations in microseconds.

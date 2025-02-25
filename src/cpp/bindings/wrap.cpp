@@ -272,35 +272,21 @@ PYBIND11_MODULE(_bindings, m) {
     class_<ModifyTimingInfo, shared_ptr<ModifyTimingInfo>>(m, "ModifyTimingInfo")
          .def_readonly("modify_time_us", &ModifyTimingInfo::modify_time_us,
              "Total time taken for the modify operation in microseconds.")
+        .def_readonly("input_validation_time_us", &ModifyTimingInfo::input_validation_time_us,
+             "Time taken for validation in microseconds.")
          .def_readonly("modify_count", &ModifyTimingInfo::n_vectors)
          .def_readonly("find_partition_time_us", &ModifyTimingInfo::find_partition_time_us,
              "Time taken to find the partition for the modify operation in microseconds.")
          .def("__repr__", [](const ModifyTimingInfo &m) {
              std::ostringstream oss;
              oss << "{";
-             oss << "\"modify_time_us\": " << m.modify_time_us << ", ";
              oss << "\"modify_count\": " << m.n_vectors << ", ";
+             oss << "\"input_validation_time_us\": " << m.input_validation_time_us << ", ";
+             oss << "\"modify_time_us\": " << m.modify_time_us << ", ";
              oss << "\"find_partition_time_us\": " << m.find_partition_time_us;
              oss << "}";
              return oss.str();
          });
-
-//     */
-// struct SearchTimingInfo {
-//         int64_t n_queries; ///< Number of queries.
-//         int64_t n_clusters; ///< Number of clusters (nlist).
-//         int partitions_scanned; ///< Number of partitions scanned.
-//         shared_ptr<SearchParams> search_params = nullptr; ///< Search parameters.
-//         shared_ptr<SearchTimingInfo> parent_info = nullptr; ///< Timing info for the parent index, if any.
-//
-//         // main thread counters for worker scan
-//         int64_t buffer_init_time_ns; ///< Time spent on initializing buffers in nanoseconds.
-//         int64_t job_enqueue_time_ns; ///< Time spent on creating jobs in nanoseconds.
-//         int64_t boundary_distance_time_ns; ///< Time spent on computing boundary distances in nanoseconds.
-//         int64_t job_wait_time_ns; ///< Time spent waiting for jobs to complete in nanoseconds.
-//         int64_t result_aggregate_time_ns; ///< Time spent on aggregating results in nanoseconds.
-//         int64_t total_time_ns; ///< Total time spent in nanoseconds.
-//     };
 
     /*********** SearchTimingInfo Binding ***********/
     class_<SearchTimingInfo, shared_ptr<SearchTimingInfo>>(m, "SearchTimingInfo")
