@@ -196,7 +196,7 @@ class FaissIVF(IndexWrapper):
 
         return None
 
-    def search(self, query: torch.Tensor, k: int, nprobe: int = 1, rf: int = 1) -> Tuple[torch.Tensor, torch.Tensor]:
+    def search(self, query: torch.Tensor, k: int, nprobe: int = 1, rf: int = 1, batched_scan: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Find the k-nearest neighbors of the query vectors.
 

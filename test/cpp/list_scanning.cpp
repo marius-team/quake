@@ -122,8 +122,7 @@ TEST_F(ListScanningTest, BatchedScanList_MultipleQueries_L2) {
         4, // list_size
         3, // dim
         topk_buffers,
-        metric,
-        2  // batch_size
+        metric
     );
 
     // Expected results:
@@ -162,10 +161,10 @@ TEST_F(ListScanningTest, BatchedScanList_MultipleQueries_InnerProduct) {
 
     // Define a list of vectors (dim=3)
     float list_vecs[4 * 3] = {
-        1.0f, 0.0f, 0.0f, // Inner product: 1.0 (id=10)
-        0.0f, 1.0f, 0.0f, // Inner product: 1.0 (id=20)
-        1.0f, 1.0f, 0.0f, // Inner product: 2.0 (id=30)
-        2.0f, 0.0f, 0.0f  // Inner product: 2.0 (id=40)
+        1.0f, 0.0f, 0.0f, // Inner products [1.0, 0.0] (id=10)
+        0.0f, 1.0f, 0.0f, // Inner products [0.0, 1.0] (id=20)
+        .5f, 1.5f, 0.0f, // Inner products [.5, 1.5] (id=30)
+        2.0f, 0.0f, 0.0f  // Inner products [2.0, 0.0] (id=40)
     };
     int64_t list_ids[4] = {10, 20, 30, 40};
 
@@ -181,20 +180,23 @@ TEST_F(ListScanningTest, BatchedScanList_MultipleQueries_InnerProduct) {
         4, // list_size
         3, // dim
         topk_buffers,
-        metric,
-        2  // batch_size
+        metric
     );
 
     // Expected results:
-    // Query 0: top-k scores: 2.0 (id=30 or 40), 1.0 (id=10 or 20)
-    // Query 1: top-k scores: 2.0 (id=30 or 40), 1.0 (id=20)
+    // Query 0: top-k scores: 2.0 (id=40), 1.0 (id=10)
+    // Query 1: top-k scores: 1.5 (id=30), 1.0 (id=20)
 
     // Verify Query 0
     auto topk_q0 = topk_buffers[0]->get_topk();
     auto topk_q0_ids = topk_buffers[0]->get_topk_indices();
+
+    std::cout << "topk_q0: " << topk_q0[0] << " " << topk_q0[1] << std::endl;
+    std::cout << "topk_q0_ids: " << topk_q0_ids[0] << " " << topk_q0_ids[1] << std::endl;
+
     ASSERT_EQ(topk_q0.size(), 2);
     EXPECT_FLOAT_EQ(topk_q0[0], 2.0f);
-    EXPECT_TRUE(topk_q0_ids[0] == 30 || topk_q0_ids[0] == 40);
+    EXPECT_TRUE(topk_q0_ids[0] == 40);
     EXPECT_FLOAT_EQ(topk_q0[1], 1.0f);
     EXPECT_TRUE(topk_q0_ids[1] == 10 || topk_q0_ids[1] == 20);
 
@@ -202,10 +204,10 @@ TEST_F(ListScanningTest, BatchedScanList_MultipleQueries_InnerProduct) {
     auto topk_q1 = topk_buffers[1]->get_topk();
     auto topk_q1_ids = topk_buffers[1]->get_topk_indices();
     ASSERT_EQ(topk_q1.size(), 2);
-    EXPECT_FLOAT_EQ(topk_q1[0], 1.0f);
-    EXPECT_TRUE(topk_q1_ids[0] == 30 || topk_q1_ids[0] == 20);
+    EXPECT_FLOAT_EQ(topk_q1[0], 1.5f);
+    EXPECT_TRUE(topk_q1_ids[0] == 30);
     EXPECT_FLOAT_EQ(topk_q1[1], 1.0f);
-    EXPECT_TRUE(topk_q1_ids[1] == 30 || topk_q1_ids[1] == 20);
+    EXPECT_TRUE(topk_q1_ids[1] == 20);
 }
 
 // Test batched_scan_list without list_ids (list_ids == nullptr)
@@ -308,8 +310,7 @@ TEST_F(ListScanningTest, BatchedScanList_WithBatchSize) {
         4, // list_size
         2, // dim
         topk_buffers,
-        metric,
-        2  // batch_size
+        metric
     );
 
     // Expected top-k per query:
@@ -480,8 +481,7 @@ TEST_F(ListScanningTest, LargeListCorrectnessInnerProduct) {
         list_size,
         d,
         buffers,
-        faiss::METRIC_INNER_PRODUCT,
-        100
+        faiss::METRIC_INNER_PRODUCT
     );
 
     for (int i = 0; i < num_queries; i++) {
@@ -547,8 +547,7 @@ TEST_F(ListScanningTest, LargeListCorrectnessL2) {
         list_size,
         d,
         buffers,
-        faiss::METRIC_L2,
-        100
+        faiss::METRIC_L2
     );
 
     for (int i = 0; i < num_queries; i++) {
@@ -560,41 +559,4 @@ TEST_F(ListScanningTest, LargeListCorrectnessL2) {
             EXPECT_EQ(topk_ids[j], gt_ids_accessor[i][j]);
         }
     }
-}
-
-TEST_F(ListScanningTest, BatchedScanBatchSize) {
-
-    int num_queries = 1000;
-    Tensor query_vectors = torch::randn({num_queries, 128}, torch::kFloat32);
-    Tensor list_vectors = torch::randn({1000000, 128}, torch::kFloat32);
-    Tensor list_ids = torch::arange(0, 1000000, torch::kInt64);
-
-    vector<int64_t> batch_sizes = {1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576};
-
-    for (auto batch_size : batch_sizes) {
-        auto start = std::chrono::high_resolution_clock::now();
-        auto buffers = create_buffers(num_queries, 10, false);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto buffer_creation_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
-        start = std::chrono::high_resolution_clock::now();
-        batched_scan_list(
-            query_vectors.data_ptr<float>(),
-            list_vectors.data_ptr<float>(),
-            list_ids.data_ptr<int64_t>(),
-            num_queries,
-            1000000,
-            128,
-            buffers,
-            faiss::METRIC_L2,
-            batch_size
-        );
-        end = std::chrono::high_resolution_clock::now();
-
-        auto batched_scan_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
-        std::cout << "Batch size: " << batch_size << " Buffer creation time: " << buffer_creation_time << " Batched scan time: " << batched_scan_time << std::endl;
-
-    }
-
 }

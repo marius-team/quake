@@ -102,7 +102,7 @@ class QuakeWrapper(IndexWrapper):
         assert ids.ndim == 1
         return self.index.remove(ids)
 
-    def search(self, query: torch.Tensor, k: int, nprobe: int = 1, recall_target: float = -1, k_factor=4.0, use_precomputed = True) -> Tuple[
+    def search(self, query: torch.Tensor, k: int, nprobe: int = 1, batched_scan = False, recall_target: float = -1, k_factor=4.0, use_precomputed = True) -> Tuple[
         torch.Tensor, torch.Tensor]:
         """
         Find the k-nearest neighbors of the query vectors.
@@ -117,6 +117,7 @@ class QuakeWrapper(IndexWrapper):
         search_params.nprobe = nprobe
         search_params.recall_target = recall_target
         search_params.use_precomputed = use_precomputed
+        search_params.batched_scan = batched_scan
         search_params.k = k
         return self.index.search(query, search_params)
 

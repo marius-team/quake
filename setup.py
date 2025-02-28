@@ -54,6 +54,27 @@ class CMakeBuild(build_ext):
         except ImportError:
             raise ImportError("Pytorch not found. Please install pytorch first.")
 
+        # if the gpu version of torch is installed, add the flag to the cmake args to enable the GPU build
+        if torch.cuda.is_available():
+            cmake_args += ["-DQUAKE_ENABLE_GPU=ON"]
+
+        # check if numa is available
+        try:
+            subprocess.check_output(["numactl", "--version"])
+            cmake_args += ["-DQUAKE_USE_NUMA=ON"]
+        except OSError:
+            cmake_args += ["-DQUAKE_USE_NUMA=OFF"]
+
+        # check if avx512 is supported by parsing lscpu output
+        try:
+            lscpu_output = subprocess.check_output(["lscpu"], universal_newlines=True)
+            if "avx512" in lscpu_output.lower():
+                cmake_args += ["-DQUAKE_USE_AVX512=ON"]
+            else:
+                cmake_args += ["-DQUAKE_USE_AVX512=OFF"]
+        except OSError:
+            cmake_args += ["-DQUAKE_USE_AVX512=OFF"]
+
         if sys.platform == "darwin":
             cmake_args.append("-DCMAKE_INSTALL_RPATH=@loader_path")
         else:  # values: linux*, aix, freebsd, ... just as well win32 & cygwin

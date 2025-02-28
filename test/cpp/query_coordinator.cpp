@@ -12,6 +12,7 @@
 #include "partition_manager.h"
 #include "quake_index.h"
 #include "faiss/IndexFlat.h"
+#include "faiss/IndexIVFFlat.h"
 
 // Test fixture
 class QueryCoordinatorTest : public ::testing::Test {
@@ -499,7 +500,7 @@ class WorkerTest : public ::testing::Test {
 protected:
     int64_t dimension_ = 128;
     int64_t total_vectors_ = 1000 * 1000;
-    int64_t num_queries_ = 100;
+    int64_t num_queries_ = 10000;
     Tensor queries_;
     Tensor vectors_;
     Tensor ids_;
@@ -521,6 +522,7 @@ TEST_F(WorkerTest, FlatWorkerScan) {
 
     auto search_params = std::make_shared<SearchParams>();
     search_params->k = 10;
+    search_params->batched_scan = true;
 
     // set number of omp threads to 1
     omp_set_num_threads(1);
@@ -577,7 +579,7 @@ TEST_F(WorkerTest, IVFWorkerScan) {
     auto ivf_index = std::make_shared<QuakeIndex>();
     ivf_index->build(vectors_, ids_, build_params);
 
-    vector<int64_t> num_workers = {0, 1, 2, 4, 8, 16, 32};
+    vector<int64_t> num_workers = {0, 1, 2, 4, 8};
     vector<bool> batched_scan = {true, false};
     // vector<int64_t> num_workers = {0};
     for (bool batch : batched_scan) {
@@ -606,4 +608,19 @@ TEST_F(WorkerTest, IVFWorkerScan) {
             ASSERT_EQ(result_worker->distances.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
         }
     }
+
+    // search with faiss
+    auto faiss_ivf_index = make_shared<faiss::IndexIVFFlat>(new faiss::IndexFlatL2(dimension_), dimension_, build_params->nlist);
+    faiss_ivf_index->train(total_vectors_, vectors_.data_ptr<float>());
+    faiss_ivf_index->add(total_vectors_, vectors_.data_ptr<float>());
+    faiss_ivf_index->nprobe = search_params->nprobe;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    Tensor distances = 10000000 * torch::ones({num_queries_, search_params->k}, torch::kFloat32);
+    Tensor indices = -torch::ones({num_queries_, search_params->k}, torch::kInt64);
+    faiss_ivf_index->search(num_queries_, queries_.data_ptr<float>(), search_params->k, distances.data_ptr<float>(), indices.data_ptr<int64_t>());
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end - start;
+    std::cout << "Elapsed time with faiss: " << elapsed_seconds.count() << "s" << std::endl;
+
 }

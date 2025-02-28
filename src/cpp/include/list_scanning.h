@@ -8,10 +8,8 @@
 #define LIST_SCANNING_H
 
 #include <common.h>
-#include "simsimd/simsimd.h"
 #include "faiss/utils/Heap.h"
 #include "faiss/utils/distances.h"
-#
 
 inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     Tensor num_correct = torch::zeros(ids.size(0), torch::kInt64);
@@ -127,31 +125,24 @@ public:
             jobs_left_.fetch_sub(1, std::memory_order_relaxed);
             return;
         }
-
         if (!currently_processing_query()) {
-            // If not processing, still decrement job count to avoid deadlock
             jobs_left_.fetch_sub(1, std::memory_order_relaxed);
             return;
         }
-
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-
-        // Ensure buffer has enough capacity
-        if (curr_offset_ + num_values > static_cast<int>(topk_.size())) {
-            flush();
-            if (curr_offset_ + num_values > static_cast<int>(topk_.size())) {
-                throw std::runtime_error("Insufficient buffer capacity even after flush");
+        std::lock_guard<std::recursive_mutex> lock(buffer_mutex_);
+        int pos = 0;
+        while (pos < num_values) {
+            int available = static_cast<int>(topk_.size()) - curr_offset_;
+            if (available <= 0) {
+                flush();
+                available = static_cast<int>(topk_.size()) - curr_offset_;
             }
+            int to_copy = std::min(num_values - pos, available);
+            for (int i = 0; i < to_copy; i++) {
+                topk_[curr_offset_++] = { distances[pos + i], indices[pos + i] };
+            }
+            pos += to_copy;
         }
-
-        int write_offset = curr_offset_;
-        curr_offset_ += num_values;
-
-        // Write new entries under the lock to maintain thread safety
-        for (int i = 0; i < num_values; i++) {
-            topk_[write_offset + i] = {distances[i], indices[i]};
-        }
-
         jobs_left_.fetch_sub(1, std::memory_order_relaxed);
         partitions_scanned_.fetch_add(1, std::memory_order_relaxed);
     }
@@ -246,49 +237,75 @@ inline vector<shared_ptr<TopkBuffer>> create_buffers(int n, int k, bool is_desce
     return buffers;
 }
 
+inline void scan_list_no_ids_inner_product(const float *query_vec,
+                                                   const float *list_vecs,
+                                                   int list_size,
+                                                   int d,
+                                                   TopkBuffer &buffer) {
+    const float *vec = list_vecs;
+    for (int l = 0; l < list_size; l++) {
+        buffer.add(faiss::fvec_inner_product(query_vec, vec, d), l);
+        vec += d;  // move pointer to next vector
+    }
+}
+
+inline void scan_list_no_ids_l2(const float *query_vec,
+                                      const float *list_vecs,
+                                      int list_size,
+                                      int d,
+                                      TopkBuffer &buffer) {
+    const float *vec = list_vecs;
+    for (int l = 0; l < list_size; l++) {
+        buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), l);
+        vec += d;
+    }
+}
+
+inline void scan_list_with_ids_inner_product(const float *query_vec,
+                                                     const float *list_vecs,
+                                                     const int64_t *list_ids,
+                                                     int list_size,
+                                                     int d,
+                                                     TopkBuffer &buffer) {
+    const float *vec = list_vecs;
+    for (int l = 0; l < list_size; l++) {
+        buffer.add(faiss::fvec_inner_product(query_vec, vec, d), list_ids[l]);
+        vec += d;
+    }
+}
+
+inline void scan_list_with_ids_l2(const float *query_vec,
+                                        const float *list_vecs,
+                                        const int64_t *list_ids,
+                                        int list_size,
+                                        int d,
+                                        TopkBuffer &buffer) {
+    const float *vec = list_vecs;
+    for (int l = 0; l < list_size; l++) {
+        buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
+        vec += d;
+    }
+}
+
+// The main scan_list function that dispatches to one of the specialized functions.
 inline void scan_list(const float *query_vec,
-                      const float *list_vecs,
-                      const int64_t *list_ids,
-                      int list_size,
-                      int d,
-                      TopkBuffer &buffer,
-                      faiss::MetricType metric = faiss::METRIC_L2) {
-    simsimd_distance_t dist;
-    const float *vec;
-
-
+                            const float *list_vecs,
+                            const int64_t *list_ids,
+                            int list_size,
+                            int d,
+                            TopkBuffer &buffer,
+                            faiss::MetricType metric = faiss::METRIC_L2) {
+    // Dispatch based on metric type and whether list_ids is provided.
     if (metric == faiss::METRIC_INNER_PRODUCT) {
-        if (list_ids == nullptr) {
-#pragma unroll
-            for (int l = 0; l < list_size; l++) {
-                vec = list_vecs + l * d;
-                simsimd_dot_f32(query_vec, vec, d, &dist);
-                buffer.add(dist, l);
-            }
-        } else {
-#pragma unroll
-            for (int l = 0; l < list_size; l++) {
-                vec = list_vecs + l * d;
-                simsimd_dot_f32(query_vec, vec, d, &dist);
-                buffer.add(dist, list_ids[l]);
-            }
-        }
-    } else {
-        if (list_ids == nullptr) {
-#pragma unroll
-            for (int l = 0; l < list_size; l++) {
-                vec = list_vecs + l * d;
-                simsimd_l2sq_f32(query_vec, vec, d, &dist);
-                buffer.add(sqrt(dist), l);
-            }
-        } else {
-#pragma unroll
-            for (int l = 0; l < list_size; l++) {
-                vec = list_vecs + l * d;
-                simsimd_l2sq_f32(query_vec, vec, d, &dist);
-                buffer.add(sqrt(dist), list_ids[l]);
-            }
-        }
+        if (list_ids == nullptr)
+            scan_list_no_ids_inner_product(query_vec, list_vecs, list_size, d, buffer);
+        else
+            scan_list_with_ids_inner_product(query_vec, list_vecs, list_ids, list_size, d, buffer);
+    } else { // Assume L2 (or similar)
+        if (list_ids == nullptr)
+            scan_list_no_ids_l2(query_vec, list_vecs, list_size, d, buffer);
+        else
+            scan_list_with_ids_l2(query_vec, list_vecs, list_ids, list_size, d, buffer);
     }
 }
 
@@ -313,13 +330,29 @@ inline void batched_scan_list(const float *query_vecs,
     float *distances = (float *) malloc(num_queries * k_max * sizeof(float));
 
     if (metric == faiss::METRIC_INNER_PRODUCT) {
-        faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k), labels, distances};
+        faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
         faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
     } else if (metric == faiss::METRIC_L2) {
-        faiss::float_maxheap_array_t res = {size_t(num_queries), size_t(k), labels, distances};
+        faiss::float_maxheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
         faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
     } else {
         throw std::runtime_error("Metric type not supported");
+    }
+
+    // map the labels to the actual list_ids
+    if (list_ids != nullptr) {
+        for (int i = 0; i < num_queries; i++) {
+            for (int j = 0; j < k_max; j++) {
+                labels[i * k_max + j] = list_ids[labels[i * k_max + j]];
+            }
+        }
+    }
+
+    // if the metric is l2, convert the distances to sqrt
+    if (metric == faiss::METRIC_L2) {
+        for (int i = 0; i < num_queries * k_max; i++) {
+            distances[i] = sqrt(distances[i]);
+        }
     }
 
     // add distances to the topk buffers

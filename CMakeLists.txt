@@ -86,8 +86,6 @@ endif()
 # Compiler options and definitions
 add_compile_options(-march=native)
 add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
-add_definitions(-DSIMSIMD_NATIVE_F16=0)
-add_definitions(-DSIMSIMD_NATIVE_BF16=0)
 
 # ---------------------------------------------------------------
 # Find Required Packages
@@ -116,7 +114,6 @@ target_include_directories(${PROJECT_NAME}
         PUBLIC
         ${TORCH_INCLUDE_DIRS}
         ${project_INCLUDE_DIR}
-        ${project_THIRD_PARTY_DIR}/SimSIMD/include/
         ${project_THIRD_PARTY_DIR}/concurrentqueue/
         faiss
 )
@@ -195,7 +192,6 @@ foreach(SOURCE ${BENCHMARK_SOURCES})
             PUBLIC
             ${TORCH_INCLUDE_DIRS}
             ${project_INCLUDE_DIR}
-            ${project_THIRD_PARTY_DIR}/SimSIMD/include/
             faiss
     )
     target_compile_features(${EXECUTABLE_NAME} PRIVATE cxx_std_17)
