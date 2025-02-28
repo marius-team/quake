@@ -2,7 +2,7 @@
 #define CPP_UTILS_GEOMETRY_H
 
 #include <common.h>
-#include <simsimd/simsimd.h>
+#include <faiss/utils/distances.h>
 
 #define NUM_X_VALUES 1001
 
@@ -75,34 +75,28 @@ inline Tensor compute_boundary_distances(const Tensor &query, const Tensor &cent
         for (int j = 1; j < centroids.size(0); j++) {
             subtract_arrays(centroids_ptr + (dimension * j), nearest_centroid_ptr, line_vector.data(), dimension);
             divide_array_by_constant(line_vector.data(), 2.0f, midpoint.data(), dimension);
-            double norm;
-            simsimd_dot_f32(line_vector.data(), line_vector.data(), dimension, &norm);
-            norm = std::sqrt(norm);
+
+            float norm = std::sqrt(faiss::fvec_inner_product(line_vector.data(), line_vector.data(), dimension));
             divide_array_by_constant(line_vector.data(), norm, line_vector.data(), dimension);
 
-            double projected_distance;
-            simsimd_dot_f32(residual_ptr, line_vector.data(), dimension, &projected_distance);
+            float projected_distance = faiss::fvec_inner_product(residual_ptr, line_vector.data(), dimension);
             multiply_array_by_constant(line_vector.data(), projected_distance, projection.data(), dimension);
 
-            double distance_to_boundary_squared;
-            simsimd_l2sq_f32(midpoint.data(), projection.data(), dimension, &distance_to_boundary_squared);
+            float distance_to_boundary_squared = faiss::fvec_L2sqr(residual_ptr, projection.data(), dimension);
             boundary_distances[j] = std::sqrt(distance_to_boundary_squared);
         }
     } else {
         // for dot product distance
-        double residual_angle;
-        simsimd_dot_f32(query_ptr, nearest_centroid_ptr, dimension, &residual_angle);
+        float residual_angle = faiss::fvec_inner_product(query_ptr, nearest_centroid_ptr, dimension);
         for (int j = 1; j < centroids.size(0); j++) {
             // get angle of the bisector using dot product
             subtract_arrays(centroids_ptr + (dimension * j), nearest_centroid_ptr, line_vector.data(), dimension);
             divide_array_by_constant(line_vector.data(), 2.0f, midpoint.data(), dimension);
             add_arrays(nearest_centroid_ptr, midpoint.data(), midpoint.data(), dimension);
-            double norm;
-            simsimd_dot_f32(midpoint.data(), midpoint.data(), dimension, &norm);
+            float norm = faiss::fvec_inner_product(midpoint.data(), midpoint.data(), dimension);
             norm = std::sqrt(norm);
             divide_array_by_constant(midpoint.data(), norm, midpoint.data(), dimension);
-            double boundary_angle;
-            simsimd_dot_f32(query_ptr, midpoint.data(), dimension, &boundary_angle);
+            float boundary_angle = faiss::fvec_inner_product(query_ptr, midpoint.data(), dimension);
             boundary_distances[j] = std::acos(boundary_angle);
         }
     }
@@ -331,8 +325,7 @@ inline Tensor compute_variance_in_direction_of_query(Tensor query, Tensor centro
         float *query_minus_centroid = new float[dimension];
         subtract_arrays(query_ptr, centroid, query_minus_centroid, dimension);
 
-        double dot_product;
-        simsimd_dot_f32(query_minus_centroid, query_minus_centroid, dimension, &dot_product);
+        float dot_product = faiss::fvec_inner_product(query_minus_centroid, query_minus_centroid, dimension);
 
         variances[j] = dot_product;
         delete[] query_minus_centroid;
@@ -433,8 +426,7 @@ inline Tensor estimate_overlap(const Tensor &new_centroid, const Tensor &old_cen
     for (int j = 0; j < nbr_centroids.size(0); j++) {
         subtract_arrays(nbr_centroids_ptr + (dimension * j), old_centroid_ptr, line_vector.data(), dimension);
         divide_array_by_constant(line_vector.data(), 2.0f, midpoint.data(), dimension);
-        double norm;
-        simsimd_dot_f32(midpoint.data(), midpoint.data(), dimension, &norm);
+        float norm = faiss::fvec_inner_product(midpoint.data(), midpoint.data(), dimension);
         norm = std::sqrt(norm);
         old_boundary_distance[j] = norm;
     }
@@ -443,8 +435,7 @@ inline Tensor estimate_overlap(const Tensor &new_centroid, const Tensor &old_cen
     for (int j = 0; j < nbr_centroids.size(0); j++) {
         subtract_arrays(nbr_centroids_ptr + (dimension * j), new_centroid_ptr, line_vector.data(), dimension);
         divide_array_by_constant(line_vector.data(), 2.0f, midpoint.data(), dimension);
-        double norm;
-        simsimd_dot_f32(midpoint.data(), midpoint.data(), dimension, &norm);
+        float norm = faiss::fvec_inner_product(midpoint.data(), midpoint.data(), dimension);
         norm = std::sqrt(norm);
         new_boundary_distance[j] = norm;
     }
