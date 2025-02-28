@@ -6,10 +6,7 @@
 // For Quake, a flat index is built with build_params->nlist == 1,
 // and an IVF index is built with nlist > 1.
 // For Faiss, we use IndexFlatL2 for flat and IndexIVFFlat for IVF.
-// In this updated version, we now call remove_ids() on the Faiss indexes
-// (both flat and IVF) because recent Faiss versions support removal.
-//
-// Compile with your existing CMake configuration and run via CLion’s test runner.
+
 
 #include <gtest/gtest.h>
 #include <chrono>

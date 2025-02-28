@@ -89,16 +89,19 @@ def test_workload_evaluation(synthetic_dataset):
     nc = 100
     build_params = {"nc": nc, "metric": "l2"}
 
-    index_cfg = {"name": "Quake", "build_params": build_params}
+    index = QuakeWrapper()
+
     experiment_params = {"n_workers": 2}
     evaluator = WorkloadEvaluator(
         workload_dir=workload_dir,
-        index_cfg=index_cfg,
         output_dir=workload_dir,
     )
 
     # Evaluate the workload
     results = evaluator.evaluate_workload(
+        name="quake_test",
+        index=index,
+        build_params=build_params,
         search_params={"k": 5, "nprobe": 1},
         do_maintenance=True
     )
