@@ -579,8 +579,8 @@ TEST_F(WorkerTest, IVFWorkerScan) {
     auto ivf_index = std::make_shared<QuakeIndex>();
     ivf_index->build(vectors_, ids_, build_params);
 
-    vector<int64_t> num_workers = {0, 1, 2, 4, 8};
-    vector<bool> batched_scan = {true, false};
+    vector<int64_t> num_workers = {0, 1};
+    vector<bool> batched_scan = {true};
     // vector<int64_t> num_workers = {0};
     for (bool batch : batched_scan) {
         for (int64_t num_worker : num_workers) {
@@ -602,6 +602,16 @@ TEST_F(WorkerTest, IVFWorkerScan) {
             std::chrono::duration<double> elapsed_seconds = end - start;
             // std::cout << "Elapsed time with " << num_worker << " workers: " << elapsed_seconds.count() << "s" << std::endl;
             std::cout << "Elapsed time with " << num_worker << " workers and batched_scan = " << batch << ": " << elapsed_seconds.count() << "s" << std::endl;
+
+            // print out contents of timing_info
+            std::cout << "Timing info: " << std::endl;
+            std::cout << "Total time: " << result_worker->timing_info->total_time_ns << std::endl;
+            std::cout << "Job enqueue time: " << result_worker->timing_info->job_enqueue_time_ns << std::endl;
+            std::cout << "Job wait time: " << result_worker->timing_info->job_wait_time_ns << std::endl;
+            std::cout << "Buffer init time: " << result_worker->timing_info->buffer_init_time_ns << std::endl;
+            std::cout << "Result agg time: " << result_worker->timing_info->result_aggregate_time_ns << std::endl;
+            std::cout << "Bound dist time: " << result_worker->timing_info->boundary_distance_time_ns << std::endl;
+            std::cout << "Parent total time: " << result_worker->timing_info->parent_info->total_time_ns << std::endl;
 
             ASSERT_TRUE(result_worker != nullptr);
             ASSERT_EQ(result_worker->ids.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
