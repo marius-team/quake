@@ -1,4 +1,7 @@
-# Quake: Query-Adaptive KNN Index
+
+![image](https://github.com/user-attachments/assets/559fe8da-84a6-4e44-a06a-cd35c5012e9a)
+
+# Query-Adaptive KNN Index
 
 Quake is a C++ library (with Python bindings) for dynamic, high‑performance approximate nearest neighbor (ANN) search. Its core operations—building a dynamic index, adaptive search, real‑time updates, and automatic maintenance—ensure high-throughput updates and low-latency queries without manual tuning.
 

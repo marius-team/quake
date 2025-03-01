@@ -524,9 +524,6 @@ TEST_F(WorkerTest, FlatWorkerScan) {
     search_params->k = 10;
     search_params->batched_scan = true;
 
-    // set number of omp threads to 1
-    omp_set_num_threads(1);
-
     vector<int64_t> num_workers = {0};
     // vector<int64_t> num_workers = {0};
     for (int64_t num_worker : num_workers) {
