@@ -28,7 +28,7 @@ public:
     int64_t curr_partition_id_ = 0; ///< Current partition ID.
 
     bool debug_ = false; ///< If true, print debug information.
-    bool check_uniques_ = true; ///< If true, check that vector IDs are unique and don't already exist in the index.
+    bool check_uniques_ = false; ///< If true, check that vector IDs are unique and don't already exist in the index.
 
     std::set<int64_t> resident_ids_; ///< Set of partition IDs.
 
@@ -54,14 +54,16 @@ public:
     * @param vectors Tensor of shape [num_vectors, dimension], or codes if already encoded.
     * @param vector_ids Tensor of shape [num_vectors].
     * @param assignments Tensor of shape [num_vectors] containing partition IDs. If not provided, vectors are assigned using the parent index.
+    * @return Timing information for the operation.
     */
-    void add(const Tensor &vectors, const Tensor &vector_ids, const Tensor &assignments = Tensor(), bool check_uniques = true);
+    shared_ptr<ModifyTimingInfo> add(const Tensor &vectors, const Tensor &vector_ids, const Tensor &assignments = Tensor(), bool check_uniques = true);
 
     /**
      * @brief Remove vectors by ID from the index.
      * @param ids Tensor of shape [num_to_remove].
+     * @return Timing information for the operation.
      */
-    void remove(const Tensor &ids);
+    shared_ptr<ModifyTimingInfo> remove(const Tensor &ids);
 
     /**
      * @brief Get vectors by ID.

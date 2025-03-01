@@ -14,6 +14,7 @@
 #include <pybind11/pybind11.h>
 #include "torch/extension.h"
 #include <pybind11/stl/filesystem.h>
+#include <sstream>  // For JSON-style string formatting
 
 // Helper macros for converting constants to strings
 #define TOSTRING(x) + std::to_string(x)
@@ -116,7 +117,15 @@ PYBIND11_MODULE(_bindings, m) {
         .def_readonly("parent", &QuakeIndex::parent_,
             "Return the parent index over the centroids.")
         .def_readonly("current_level", &QuakeIndex::current_level_,
-             "The current level of the index.");
+             "The current level of the index.")
+        // __repr__ produces a JSON-style string summary.
+        .def("__repr__", [](const QuakeIndex &q) {
+            std::ostringstream oss;
+            oss << "{";
+            oss << "\"current_level\": " << q.current_level_ << ", ";
+            oss << "}";
+            return oss.str();
+        });
 
     /*********** IndexBuildParams Binding ***********/
     class_<IndexBuildParams, shared_ptr<IndexBuildParams>>(m, "IndexBuildParams")
@@ -128,7 +137,17 @@ PYBIND11_MODULE(_bindings, m) {
         .def_readwrite("metric", &IndexBuildParams::metric,
              (std::string("Distance metric. default = ") + DEFAULT_METRIC).c_str())
         .def_readwrite("num_workers", &IndexBuildParams::num_workers,
-             (std::string("Number of workers. default = ") + std::to_string(DEFAULT_NUM_WORKERS)).c_str());
+             (std::string("Number of workers. default = ") + std::to_string(DEFAULT_NUM_WORKERS)).c_str())
+        .def("__repr__", [](const IndexBuildParams &p) {
+            std::ostringstream oss;
+            oss << "{";
+            oss << "\"nlist\": " << p.nlist << ", ";
+            oss << "\"niter\": " << p.niter << ", ";
+            oss << "\"metric\": \"" << p.metric << "\", ";
+            oss << "\"num_workers\": " << p.num_workers;
+            oss << "}";
+            return oss.str();
+        });
 
     /*********** SearchParams Binding ***********/
     class_<SearchParams, shared_ptr<SearchParams>>(m, "SearchParams")
@@ -148,7 +167,21 @@ PYBIND11_MODULE(_bindings, m) {
         .def_readwrite("recompute_threshold", &SearchParams::recompute_threshold,
              (std::string("Threshold to trigger recomputation of APS. default = ") + std::to_string(DEFAULT_RECOMPUTE_THRESHOLD)).c_str())
         .def_readwrite("aps_flush_period_us", &SearchParams::aps_flush_period_us,
-             (std::string("APS flush period in microseconds. default = ") + std::to_string(DEFAULT_APS_FLUSH_PERIOD_US)).c_str());
+             (std::string("APS flush period in microseconds. default = ") + std::to_string(DEFAULT_APS_FLUSH_PERIOD_US)).c_str())
+        .def("__repr__", [](const SearchParams &s) {
+            std::ostringstream oss;
+            oss << "{";
+            oss << "\"k\": " << s.k << ", ";
+            oss << "\"nprobe\": " << s.nprobe << ", ";
+            oss << "\"recall_target\": " << s.recall_target << ", ";
+            oss << "\"batched_scan\": " << (s.batched_scan ? "true" : "false") << ", ";
+            oss << "\"use_precomputed\": " << (s.use_precomputed ? "true" : "false") << ", ";
+            oss << "\"initial_search_fraction\": " << s.initial_search_fraction << ", ";
+            oss << "\"recompute_threshold\": " << s.recompute_threshold << ", ";
+            oss << "\"aps_flush_period_us\": " << s.aps_flush_period_us;
+            oss << "}";
+            return oss.str();
+        });
 
     /*********** MaintenancePolicyParams Binding ***********/
     class_<MaintenancePolicyParams, shared_ptr<MaintenancePolicyParams>>(m, "MaintenancePolicyParams")
@@ -182,73 +215,170 @@ PYBIND11_MODULE(_bindings, m) {
         .def_readwrite("target_partition_size", &MaintenancePolicyParams::target_partition_size,
              (std::string("Target partition size. default = ") + std::to_string(DEFAULT_TARGET_PARTITION_SIZE)).c_str())
         .def_readwrite("max_partition_ratio", &MaintenancePolicyParams::max_partition_ratio,
-             (std::string("Maximum allowed partition ratio. default = ") + std::to_string(DEFAULT_MAX_PARTITION_RATIO)).c_str());
+             (std::string("Maximum allowed partition ratio. default = ") + std::to_string(DEFAULT_MAX_PARTITION_RATIO)).c_str())
+        .def("__repr__", [](const MaintenancePolicyParams &m) {
+            std::ostringstream oss;
+            oss << "{";
+            oss << "\"maintenance_policy\": \"" << m.maintenance_policy << "\", ";
+            oss << "\"window_size\": " << m.window_size << ", ";
+            oss << "\"refinement_radius\": " << m.refinement_radius << ", ";
+            oss << "\"refinement_iterations\": " << m.refinement_iterations << ", ";
+            oss << "\"min_partition_size\": " << m.min_partition_size << ", ";
+            oss << "\"alpha\": " << m.alpha << ", ";
+            oss << "\"enable_split_rejection\": " << (m.enable_split_rejection ? "true" : "false") << ", ";
+            oss << "\"enable_delete_rejection\": " << (m.enable_delete_rejection ? "true" : "false") << ", ";
+            oss << "\"delete_threshold_ns\": " << m.delete_threshold_ns << ", ";
+            oss << "\"split_threshold_ns\": " << m.split_threshold_ns << ", ";
+            oss << "\"k_large\": " << m.k_large << ", ";
+            oss << "\"k_small\": " << m.k_small << ", ";
+            oss << "\"modify_centroids\": " << (m.modify_centroids ? "true" : "false") << ", ";
+            oss << "\"target_partition_size\": " << m.target_partition_size << ", ";
+            oss << "\"max_partition_ratio\": " << m.max_partition_ratio;
+            oss << "}";
+            return oss.str();
+        });
 
-     /*********** MaintenanceTimingInfo Binding ***********/
-     class_<MaintenanceTimingInfo, shared_ptr<MaintenanceTimingInfo>>(m, "MaintenanceTimingInfo")
+    /*********** MaintenanceTimingInfo Binding ***********/
+    class_<MaintenanceTimingInfo, shared_ptr<MaintenanceTimingInfo>>(m, "MaintenanceTimingInfo")
          .def_readonly("total_time_us", &MaintenanceTimingInfo::total_time_us,
              "Total time taken for maintenance in microseconds.")
-     .def_readonly("split_time_us", &MaintenanceTimingInfo::split_time_us,
-         "Time taken for split operations in microseconds.")
-     .def_readonly("delete_time_us", &MaintenanceTimingInfo::delete_time_us,
-         "Time taken for delete operations in microseconds.")
-     .def_readonly("split_refine_time_us", &MaintenanceTimingInfo::split_refine_time_us,
-         "Time taken for refinement of split operations in microseconds.")
-     .def_readonly("delete_refine_time_us", &MaintenanceTimingInfo::delete_refine_time_us,
-         "Time taken for refinement of delete operations in microseconds.")
-     .def_readonly("n_splits", &MaintenanceTimingInfo::n_splits,
-         "Number of partition split operations performed.")
-     .def_readonly("n_deletes", &MaintenanceTimingInfo::n_deletes,
-         "Number of partition delete operations performed.");
+         .def_readonly("split_time_us", &MaintenanceTimingInfo::split_time_us,
+             "Time taken for split operations in microseconds.")
+         .def_readonly("delete_time_us", &MaintenanceTimingInfo::delete_time_us,
+             "Time taken for delete operations in microseconds.")
+         .def_readonly("split_refine_time_us", &MaintenanceTimingInfo::split_refine_time_us,
+             "Time taken for refinement of split operations in microseconds.")
+         .def_readonly("delete_refine_time_us", &MaintenanceTimingInfo::delete_refine_time_us,
+             "Time taken for refinement of delete operations in microseconds.")
+         .def_readonly("n_splits", &MaintenanceTimingInfo::n_splits,
+             "Number of partition split operations performed.")
+         .def_readonly("n_deletes", &MaintenanceTimingInfo::n_deletes,
+             "Number of partition delete operations performed.")
+         .def("__repr__", [](const MaintenanceTimingInfo &t) {
+             std::ostringstream oss;
+             oss << "{";
+             oss << "\"total_time_us\": " << t.total_time_us << ", ";
+             oss << "\"split_time_us\": " << t.split_time_us << ", ";
+             oss << "\"delete_time_us\": " << t.delete_time_us << ", ";
+             oss << "\"split_refine_time_us\": " << t.split_refine_time_us << ", ";
+             oss << "\"delete_refine_time_us\": " << t.delete_refine_time_us << ", ";
+             oss << "\"n_splits\": " << t.n_splits << ", ";
+             oss << "\"n_deletes\": " << t.n_deletes;
+             oss << "}";
+             return oss.str();
+         });
 
-     /*********** ModifyTimingInfo Binding ***********/
-     class_<ModifyTimingInfo, shared_ptr<ModifyTimingInfo>>(m, "ModifyTimingInfo")
+    /*********** ModifyTimingInfo Binding ***********/
+    class_<ModifyTimingInfo, shared_ptr<ModifyTimingInfo>>(m, "ModifyTimingInfo")
          .def_readonly("modify_time_us", &ModifyTimingInfo::modify_time_us,
              "Total time taken for the modify operation in microseconds.")
+        .def_readonly("input_validation_time_us", &ModifyTimingInfo::input_validation_time_us,
+             "Time taken for validation in microseconds.")
          .def_readonly("modify_count", &ModifyTimingInfo::n_vectors)
-     .def_readonly("find_partition_time_us", &ModifyTimingInfo::find_partition_time_us,
-         "Time taken to find the partition for the modify operation in microseconds.");
+         .def_readonly("find_partition_time_us", &ModifyTimingInfo::find_partition_time_us,
+             "Time taken to find the partition for the modify operation in microseconds.")
+         .def("__repr__", [](const ModifyTimingInfo &m) {
+             std::ostringstream oss;
+             oss << "{";
+             oss << "\"modify_count\": " << m.n_vectors << ", ";
+             oss << "\"input_validation_time_us\": " << m.input_validation_time_us << ", ";
+             oss << "\"modify_time_us\": " << m.modify_time_us << ", ";
+             oss << "\"find_partition_time_us\": " << m.find_partition_time_us;
+             oss << "}";
+             return oss.str();
+         });
 
-     /*********** SearchTimingInfo Binding ***********/
-     class_<SearchTimingInfo, shared_ptr<SearchTimingInfo>>(m, "SearchTimingInfo")
-     .def_readonly("total_time_ns", &SearchTimingInfo::total_time_ns,
-         "Total time taken for the search operation in nanoseconds.")
-     .def_readonly("n_queries", &SearchTimingInfo::n_queries,
-         "Number of queries performed.")
-     .def_readonly("n_clusters", &SearchTimingInfo::n_clusters,
-         "Number of clusters searched.")
-     .def_readonly("partitions_scanned", &SearchTimingInfo::partitions_scanned,
-         "Number of partitions scanned.")
-     .def_readonly("search_params", &SearchTimingInfo::search_params,
-         "Parameters used for the search operation.")
-     .def_readonly("parent_info", &SearchTimingInfo::parent_info,
-         "Search info for the parent index.");
+    /*********** SearchTimingInfo Binding ***********/
+    class_<SearchTimingInfo, shared_ptr<SearchTimingInfo>>(m, "SearchTimingInfo")
+         .def(init<>())
+         .def_readwrite("total_time_ns", &SearchTimingInfo::total_time_ns,
+             "Total time taken for the search operation in nanoseconds.")
+        .def_readwrite("buffer_init_time_ns", &SearchTimingInfo::buffer_init_time_ns,
+             "Time spent on initializing buffers in nanoseconds.")
+        .def_readwrite("job_enqueue_time_ns", &SearchTimingInfo::job_enqueue_time_ns,
+             "Time spent on creating jobs in nanoseconds.")
+        .def_readwrite("boundary_distance_time_ns", &SearchTimingInfo::boundary_distance_time_ns,
+             "Time spent on computing boundary distances in nanoseconds.")
+        .def_readwrite("job_wait_time_ns", &SearchTimingInfo::job_wait_time_ns,
+             "Time spent waiting for jobs to complete in nanoseconds.")
+        .def_readwrite("result_aggregate_time_ns", &SearchTimingInfo::result_aggregate_time_ns,
+             "Time spent on aggregating results in nanoseconds.")
+         .def_readwrite("n_queries", &SearchTimingInfo::n_queries,
+             "Number of queries performed.")
+         .def_readwrite("n_clusters", &SearchTimingInfo::n_clusters,
+             "Number of clusters searched.")
+         .def_readwrite("partitions_scanned", &SearchTimingInfo::partitions_scanned,
+             "Number of partitions scanned.")
+         .def_readwrite("search_params", &SearchTimingInfo::search_params,
+             "Parameters used for the search operation.")
+         .def_readwrite("parent_info", &SearchTimingInfo::parent_info,
+             "Search info for the parent index.")
+         .def("__repr__", [](const SearchTimingInfo &s) {
+             std::ostringstream oss;
+             oss << "{";
+             oss << "\"total_time_ns\": " << s.total_time_ns << ", ";
+             oss << "\"buffer_init_time_ns\": " << s.buffer_init_time_ns << ", ";
+             oss << "\"job_enqueue_time_ns\": " << s.job_enqueue_time_ns << ", ";
+             oss << "\"boundary_distance_time_ns\": " << s.boundary_distance_time_ns << ", ";
+             oss << "\"job_wait_time_ns\": " << s.job_wait_time_ns << ", ";
+             oss << "\"result_aggregate_time_ns\": " << s.result_aggregate_time_ns << ", ";
+             if (s.parent_info != nullptr) {
+                 oss << "\"parent_scan_time_ns\": " << s.parent_info->total_time_ns << ", ";
+             }
+             oss << "\"n_queries\": " << s.n_queries << ", ";
+             oss << "\"n_clusters\": " << s.n_clusters << ", ";
+             oss << "\"partitions_scanned\": " << s.partitions_scanned;
+             oss << "}";
+             return oss.str();
+         });
 
     /**************** BuildTimingInfo Binding ***********/
     class_<BuildTimingInfo, shared_ptr<BuildTimingInfo>>(m, "BuildTimingInfo")
-        .def_readonly("total_time_us", &BuildTimingInfo::total_time_us,
+         .def_readonly("total_time_us", &BuildTimingInfo::total_time_us,
             "Total time taken for the build operation in microseconds.")
-        .def_readonly("assign_time_us", &BuildTimingInfo::assign_time_us,
+         .def_readonly("assign_time_us", &BuildTimingInfo::assign_time_us,
             "Time taken for assignment in microseconds.")
-        .def_readonly("train_time_us", &BuildTimingInfo::train_time_us,
+         .def_readonly("train_time_us", &BuildTimingInfo::train_time_us,
             "Time taken for training in microseconds.")
-        .def_readonly("d", &BuildTimingInfo::d,
+         .def_readonly("d", &BuildTimingInfo::d,
             "Dimension of the vectors.")
-        .def_readonly("code_size", &BuildTimingInfo::code_size,
+         .def_readonly("code_size", &BuildTimingInfo::code_size,
             "Size of PQ codes in bytes.")
-        .def_readonly("n_codebooks", &BuildTimingInfo::num_codebooks,
+         .def_readonly("n_codebooks", &BuildTimingInfo::num_codebooks,
             "Number of codebooks in the index.")
-        .def_readonly("n_vectors", &BuildTimingInfo::n_vectors,
-            "Number of vectors in the index.");
+         .def_readonly("n_vectors", &BuildTimingInfo::n_vectors,
+            "Number of vectors in the index.")
+         .def("__repr__", [](const BuildTimingInfo &b) {
+             std::ostringstream oss;
+             oss << "{";
+             oss << "\"total_time_us\": " << b.total_time_us << ", ";
+             oss << "\"assign_time_us\": " << b.assign_time_us << ", ";
+             oss << "\"train_time_us\": " << b.train_time_us << ", ";
+             oss << "\"d\": " << b.d << ", ";
+             oss << "\"code_size\": " << b.code_size << ", ";
+             oss << "\"n_codebooks\": " << b.num_codebooks << ", ";
+             oss << "\"n_vectors\": " << b.n_vectors;
+             oss << "}";
+             return oss.str();
+         });
 
-     /************* SearchResult Binding ***********/
-     class_<SearchResult, shared_ptr<SearchResult>>(m, "SearchResult")
-         .def_readonly("distances", &SearchResult::distances,
+    /************* SearchResult Binding ***********/
+    class_<SearchResult, shared_ptr<SearchResult>>(m, "SearchResult")
+         .def(init<>())
+         .def_readwrite("distances", &SearchResult::distances,
              "Distances to the nearest neighbors.")
-         .def_readonly("ids", &SearchResult::ids,
+         .def_readwrite("ids", &SearchResult::ids,
              "Indices of the nearest neighbors.")
-         .def_readonly("timing_info", &SearchResult::timing_info,
-             "Timing information for the search operation.");
+         .def_readwrite("timing_info", &SearchResult::timing_info,
+             "Timing information for the search operation.")
+         .def("__repr__", [](const SearchResult &r) {
+             std::ostringstream oss;
+             oss << "{";
+             oss << "\"num_ids\": " << r.ids.numel() << ", ";
+             oss << "\"num_distances\": " << r.distances.numel();
+             oss << "}";
+             return oss.str();
+         });
 }
 
 #endif //QUAKE_WRAP_H

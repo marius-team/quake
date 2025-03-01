@@ -36,7 +36,10 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
     timing_info->n_vectors = x.size(0);
     timing_info->d = x.size(1);
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     if (build_params_->nlist > 1) {
+        auto s1 = std::chrono::high_resolution_clock::now();
         shared_ptr<Clustering> clustering = kmeans(
             x,
             ids,
@@ -44,6 +47,10 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
             metric_,
             build_params_->niter
         );
+        auto e1 = std::chrono::high_resolution_clock::now();
+        timing_info->train_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e1 - s1).count();
+
+        auto s2 = std::chrono::high_resolution_clock::now();
         // create parent index over the centroids, assume is flat for now
         parent_ = make_shared<QuakeIndex>(current_level_ + 1);
         auto parent_build_params = make_shared<IndexBuildParams>();
@@ -53,6 +60,8 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         // initialize the partition manager
         partition_manager_ = make_shared<PartitionManager>();
         partition_manager_->init_partitions(parent_, clustering);
+        auto e2 = std::chrono::high_resolution_clock::now();
+        timing_info->assign_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e2 - s2).count();
     } else {
         // flat index
         partition_manager_ = make_shared<PartitionManager>();
@@ -65,12 +74,15 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
 
         partition_manager_->init_partitions(parent_, clustering);
     }
+
     auto default_params = make_shared<MaintenancePolicyParams>();
     initialize_maintenance_policy(default_params);
 
     // create query coordinator
     query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, build_params_->num_workers);
 
+    auto end = std::chrono::high_resolution_clock::now();
+    timing_info->total_time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     return timing_info;
 }
 
@@ -109,16 +121,8 @@ shared_ptr<ModifyTimingInfo> QuakeIndex::add(Tensor x, Tensor ids) {
         throw std::runtime_error("[QuakeIndex::add()] No partition manager. Build the index first.");
     }
 
-    auto modify_info = std::make_shared<ModifyTimingInfo>();
-    auto start_time = std::chrono::high_resolution_clock::now();
-
-    partition_manager_->add(x, ids);
-
-    auto end_time = std::chrono::high_resolution_clock::now();
+    auto modify_info = partition_manager_->add(x, ids);
     modify_info->n_vectors = x.size(0);
-    modify_info->modify_time_us =
-        std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-
     return modify_info;
 }
 
@@ -127,15 +131,8 @@ shared_ptr<ModifyTimingInfo> QuakeIndex::remove(Tensor ids) {
         throw std::runtime_error("[QuakeIndex::remove()] No partition manager. Build the index first.");
     }
 
-    auto modify_info = std::make_shared<ModifyTimingInfo>();
-    auto start_time = std::chrono::high_resolution_clock::now();
-
-    partition_manager_->remove(ids);
-
-    auto end_time = std::chrono::high_resolution_clock::now();
+    auto modify_info = partition_manager_->remove(ids);
     modify_info->n_vectors = ids.size(0);
-    modify_info->modify_time_us =
-        std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
     return modify_info;
 }
 

@@ -16,11 +16,8 @@ def synthetic_dataset():
     # For reproducibility
     torch.manual_seed(9299)
 
-    # Generate base vectors (e.g., 1000 vectors in 128 dimensions)
-    base_vectors = torch.randn(1000, 128)
-
-    # Optionally, generate query vectors (e.g., 10 queries)
-    queries = torch.randn(10, 128)
+    base_vectors = torch.randn(10000, 128)
+    queries = torch.randn(100, 128)
 
     workload_dir = Path(tempfile.gettempdir()) / "workload_test"
 
@@ -92,16 +89,19 @@ def test_workload_evaluation(synthetic_dataset):
     nc = 100
     build_params = {"nc": nc, "metric": "l2"}
 
-    index_cfg = {"name": "Quake", "build_params": build_params}
+    index = QuakeWrapper()
+
     experiment_params = {"n_workers": 2}
     evaluator = WorkloadEvaluator(
         workload_dir=workload_dir,
-        index_cfg=index_cfg,
         output_dir=workload_dir,
     )
 
     # Evaluate the workload
     results = evaluator.evaluate_workload(
+        name="quake_test",
+        index=index,
+        build_params=build_params,
         search_params={"k": 5, "nprobe": 1},
         do_maintenance=True
     )
@@ -112,5 +112,3 @@ def test_workload_evaluation(synthetic_dataset):
         # For query operations, recall should be a float between 0 and 1
         if result["operation_type"] == "query":
             assert 0.0 <= result["recall"] <= 1.0, "Recall out of bounds."
-
-    # Optionally, check that the results DataFrame has expected columns

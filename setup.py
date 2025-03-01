@@ -36,15 +36,13 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         cmake_args = ["-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir, "-DPYTHON_EXECUTABLE=" + sys.executable]
 
-        # cfg = "Debug" if self.debug else "Release"
-        cfg = "Debug"
+        cfg = "Debug" if self.debug else "Release"
         build_args = ["--config", cfg]
 
         if platform.system() == "Windows":
             raise RuntimeError("Unsupported on Windows")
         else:
             cmake_args += ["-DCMAKE_BUILD_TYPE=" + cfg]
-
             num_threads = os.cpu_count()
             build_args += ["--", "-j{}".format(num_threads)]
 
@@ -55,6 +53,27 @@ class CMakeBuild(build_ext):
             import torch
         except ImportError:
             raise ImportError("Pytorch not found. Please install pytorch first.")
+
+        # if the gpu version of torch is installed, add the flag to the cmake args to enable the GPU build
+        if torch.cuda.is_available():
+            cmake_args += ["-DQUAKE_ENABLE_GPU=ON"]
+
+        # check if numa is available
+        try:
+            subprocess.check_output(["numactl", "--version"])
+            cmake_args += ["-DQUAKE_USE_NUMA=ON"]
+        except OSError:
+            cmake_args += ["-DQUAKE_USE_NUMA=OFF"]
+
+        # check if avx512 is supported by parsing lscpu output
+        try:
+            lscpu_output = subprocess.check_output(["lscpu"], universal_newlines=True)
+            if "avx512" in lscpu_output.lower():
+                cmake_args += ["-DQUAKE_USE_AVX512=ON"]
+            else:
+                cmake_args += ["-DQUAKE_USE_AVX512=OFF"]
+        except OSError:
+            cmake_args += ["-DQUAKE_USE_AVX512=OFF"]
 
         if sys.platform == "darwin":
             cmake_args.append("-DCMAKE_INSTALL_RPATH=@loader_path")

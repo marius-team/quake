@@ -120,13 +120,14 @@ void PartitionManager::init_partitions(
     }
 }
 
-void PartitionManager::add(
+shared_ptr<ModifyTimingInfo> PartitionManager::add(
     const Tensor &vectors,
     const Tensor &vector_ids,
     const Tensor &assignments,
     bool check_uniques
 ) {
 
+    auto timing_info = std::make_shared<ModifyTimingInfo>();
 
     if (debug_) {
         std::cout << "[PartitionManager] add: Received " << vectors.size(0)
@@ -136,6 +137,7 @@ void PartitionManager::add(
     //////////////////////////////////////////
     /// Input validation
     //////////////////////////////////////////
+    auto s1 = std::chrono::high_resolution_clock::now();
     if (!partitions_) {
         throw runtime_error("[PartitionManager] add: partitions_ is null. Did you call init_partitions?");
     }
@@ -151,7 +153,7 @@ void PartitionManager::add(
         if (debug_) {
             std::cout << "[PartitionManager] add: No vectors to add. Exiting." << std::endl;
         }
-        return;
+        return timing_info;
     }
     if (vectors.dim() != 2) {
         throw runtime_error("[PartitionManager] add: 'vectors' must be 2D [N, dim].");
@@ -185,10 +187,14 @@ void PartitionManager::add(
     if (assignments.defined() && (assignments >= curr_partition_id_).any().item<bool>()) {
         throw runtime_error("[PartitionManager] add: assignments must be less than partitions_->curr_list_id_.");
     }
+    auto e1 = std::chrono::high_resolution_clock::now();
+    timing_info->input_validation_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e1 - s1).count();
+
 
     //////////////////////////////////////////
     /// Determine partition assignments
     //////////////////////////////////////////
+    auto s2 = std::chrono::high_resolution_clock::now();
     int64_t dim = vectors.size(1);
     // Determine partition assignments for each vector.
     vector<int64_t> partition_ids_for_each(n, -1);
@@ -213,7 +219,9 @@ void PartitionManager::add(
             auto search_params = make_shared<SearchParams>();
             search_params->k = 1;
             search_params->nprobe = parent_->nlist();
-            search_params->recall_target = 1.0;
+            if (n > 10) {
+                search_params->batched_scan = true;
+            }
             auto parent_search_result = parent_->search(vectors, search_params);
             Tensor label_out = parent_search_result->ids;
             auto lbl_ptr = label_out.data_ptr<int64_t>();
@@ -222,10 +230,13 @@ void PartitionManager::add(
             }
         }
     }
+    auto e2 = std::chrono::high_resolution_clock::now();
+    timing_info->find_partition_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e2 - s2).count();
 
     //////////////////////////////////////////
     /// Add vectors to partitions
     //////////////////////////////////////////
+    auto s3 = std::chrono::high_resolution_clock::now();
     size_t code_size_bytes = partitions_->code_size;
     auto id_ptr = vector_ids.data_ptr<int64_t>();
     auto id_accessor = vector_ids.accessor<int64_t, 1>();
@@ -245,9 +256,15 @@ void PartitionManager::add(
             code_ptr + i * code_size_bytes
         );
     }
+    auto e3 = std::chrono::high_resolution_clock::now();
+    timing_info->modify_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e3 - s3).count();
+    return timing_info;
 }
 
-void PartitionManager::remove(const Tensor &ids) {
+shared_ptr<ModifyTimingInfo> PartitionManager::remove(const Tensor &ids) {
+
+    shared_ptr<ModifyTimingInfo> timing_info = std::make_shared<ModifyTimingInfo>();
+    auto s1 = std::chrono::high_resolution_clock::now();
     if (debug_) {
         std::cout << "[PartitionManager] remove: Removing " << ids.size(0) << " ids." << std::endl;
     }
@@ -258,7 +275,7 @@ void PartitionManager::remove(const Tensor &ids) {
         if (debug_) {
             std::cout << "[PartitionManager] remove: No ids provided. Exiting." << std::endl;
         }
-        return;
+        return timing_info;
     }
 
     if (check_uniques_) {
@@ -279,16 +296,27 @@ void PartitionManager::remove(const Tensor &ids) {
             resident_ids_.erase(id_val);
         }
     }
+    auto e1 = std::chrono::high_resolution_clock::now();
+    timing_info->input_validation_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e1 - s1).count();
 
+    auto s2 = std::chrono::high_resolution_clock::now();
     std::set<faiss::idx_t> to_remove;
     auto ptr = ids.data_ptr<int64_t>();
     for (int64_t i = 0; i < ids.size(0); i++) {
         to_remove.insert(static_cast<faiss::idx_t>(ptr[i]));
     }
+    auto e2 = std::chrono::high_resolution_clock::now();
+    timing_info->find_partition_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e2 - s2).count();
+
+    auto s3 = std::chrono::high_resolution_clock::now();
     partitions_->remove_vectors(to_remove);
     if (debug_) {
         std::cout << "[PartitionManager] remove: Completed removal." << std::endl;
     }
+    auto e3 = std::chrono::high_resolution_clock::now();
+    timing_info->modify_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e3 - s3).count();
+
+    return timing_info;
 }
 
 Tensor PartitionManager::get(const Tensor &ids) {
