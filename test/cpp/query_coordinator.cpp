@@ -522,9 +522,6 @@ TEST_F(WorkerTest, FlatWorkerScan) {
     auto search_params = std::make_shared<SearchParams>();
     search_params->k = 10;
 
-    // set number of omp threads to 1
-    omp_set_num_threads(1);
-
     vector<int64_t> num_workers = {0};
     // vector<int64_t> num_workers = {0};
     for (int64_t num_worker : num_workers) {

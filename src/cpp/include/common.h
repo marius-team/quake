@@ -46,10 +46,6 @@
 #include <faiss/gpu/GpuCloner.h>
 #endif
 
-#ifdef QUAKE_OMP
-#include <omp.h>
-#endif
-
 using torch::Tensor;
 using std::vector;
 using std::shared_ptr;
