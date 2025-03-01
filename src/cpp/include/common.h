@@ -176,6 +176,7 @@ struct SearchParams {
     int nprobe = DEFAULT_NPROBE;
     int k = DEFAULT_K;
     float recall_target = DEFAULT_RECALL_TARGET;
+    int num_threads = -1; // number of threads to use for search within a single worker
     float k_factor = 1.0f;
     bool use_precomputed = DEFAULT_PRECOMPUTED;
     bool batched_scan = DEFAULT_BATCHED_SCAN;

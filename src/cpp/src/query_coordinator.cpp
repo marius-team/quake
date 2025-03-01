@@ -535,7 +535,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
         // Retrieve the top-k results for query q.
         all_topk_dists[q] = topk_buf->get_topk();
         all_topk_ids[q] = topk_buf->get_topk_indices();
-    });
+    }, search_params->num_threads);
 
     // Aggregate per-query results into output tensors.
     auto ret_ids_accessor = ret_ids.accessor<int64_t, 2>();

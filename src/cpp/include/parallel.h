@@ -12,8 +12,10 @@
 #include <algorithm>
 
 template <typename IndexType, typename Function>
-void parallel_for(IndexType start, IndexType end, Function func) {
-    const auto num_threads = std::thread::hardware_concurrency();
+void parallel_for(IndexType start, IndexType end, Function func, int num_threads = -1) {
+    if (num_threads <= 0) {
+        num_threads = std::thread::hardware_concurrency();
+    }
     IndexType total = end - start;
     IndexType chunk = (total + num_threads - 1) / num_threads;
     std::vector<std::future<void>> futures;
