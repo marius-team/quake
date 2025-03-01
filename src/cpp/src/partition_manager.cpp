@@ -436,12 +436,12 @@ void PartitionManager::refine_partitions(const Tensor &partition_ids, int iterat
         Tensor new_centroids = torch::zeros_like(centroids);
         Tensor counts = torch::zeros({nclusters}, torch::kLong);
 
-        #pragma omp parallel
+        // #pragma omp parallel
         {
             Tensor local_centroids = torch::zeros_like(centroids);
             Tensor local_counts = torch::zeros({nclusters}, torch::kLong);
 
-            #pragma omp for nowait
+            // #pragma omp for nowait
             for (int64_t i = 0; i < nclusters; i++) {
                 Tensor vecs = selected_parts->vectors[i];
                 if (!vecs.defined() || !vecs.size(0)) continue;
@@ -460,7 +460,7 @@ void PartitionManager::refine_partitions(const Tensor &partition_ids, int iterat
                     local_counts[c] += 1;
                 }
             }
-            #pragma omp critical
+            // #pragma omp critical
             {
                 new_centroids += local_centroids;
                 counts += local_counts;

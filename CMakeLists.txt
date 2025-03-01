@@ -94,12 +94,10 @@ add_definitions(-DSIMSIMD_NATIVE_BF16=0)
 # ---------------------------------------------------------------
 find_package(Torch REQUIRED)
 find_package(Python3 COMPONENTS Development Interpreter REQUIRED)
-find_package(OpenMP REQUIRED)
 
 message(STATUS "Torch include dir: ${TORCH_INCLUDE_DIRS}")
 message(STATUS "Torch libraries: ${TORCH_LIBRARIES}")
 message(STATUS "Python include dir: ${Python3_INCLUDE_DIRS}")
-message(STATUS "OpenMP include dirs: ${OpenMP_CXX_INCLUDE_DIRS}")
 
 set(PYTHON_INCLUDE_DIR ${Python3_INCLUDE_DIRS})
 
@@ -122,7 +120,6 @@ target_include_directories(${PROJECT_NAME}
 )
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
-target_compile_options(${PROJECT_NAME} PRIVATE ${OpenMP_CXX_FLAGS})
 
 # ---------------------------------------------------------------
 # Set Up Link Libraries Conditionally
@@ -130,7 +127,6 @@ target_compile_options(${PROJECT_NAME} PRIVATE ${OpenMP_CXX_FLAGS})
 # Base libraries common to all platforms
 set(LINK_LIBS
         ${TORCH_LIBRARIES}
-        OpenMP::OpenMP_CXX
         -ffast-math
         -lpthread
         -fPIC
@@ -149,9 +145,6 @@ elseif(UNIX)
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
     endif()
-
-    # Add openmp flags
-    list(APPEND LINK_LIBS -liomp5)
 else()
     # unsupported platform
     message(FATAL_ERROR "Unsupported platform")
@@ -199,7 +192,6 @@ foreach(SOURCE ${BENCHMARK_SOURCES})
             faiss
     )
     target_compile_features(${EXECUTABLE_NAME} PRIVATE cxx_std_17)
-    target_compile_options(${EXECUTABLE_NAME} PRIVATE ${OpenMP_CXX_FLAGS})
 endforeach()
 
 # ---------------------------------------------------------------
