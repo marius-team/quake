@@ -91,6 +91,7 @@ window.addEventListener("load", () => mermaid.run());
  | <a href="#F"><strong>F</strong></a>
  | <a href="#G"><strong>G</strong></a>
  | <a href="#I"><strong>I</strong></a>
+ | <a href="#J"><strong>J</strong></a>
  | <a href="#K"><strong>K</strong></a>
  | <a href="#L"><strong>L</strong></a>
  | <a href="#M"><strong>M</strong></a>
@@ -134,6 +135,12 @@ window.addEventListener("load", () => mermaid.run());
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#quake.SearchParams.batched_scan">batched_scan (quake.SearchParams property)</a>
 </li>
+      <li><a href="api.html#quake.SearchTimingInfo.boundary_distance_time_ns">boundary_distance_time_ns (quake.SearchTimingInfo property)</a>
+</li>
+      <li><a href="api.html#quake.SearchTimingInfo.buffer_init_time_ns">buffer_init_time_ns (quake.SearchTimingInfo property)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#quake.index_wrappers.faiss_ivf.FaissIVF.build">build() (quake.index_wrappers.faiss_ivf.FaissIVF method)</a>
 
       <ul>
@@ -142,10 +149,6 @@ window.addEventListener("load", () => mermaid.run());
         <li><a href="api.html#quake.QuakeIndex.build">(quake.QuakeIndex method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#quake.workload_generator.WorkloadEvaluator.build_or_load_index">build_or_load_index() (quake.workload_generator.WorkloadEvaluator method)</a>
-</li>
       <li><a href="api.html#quake.BuildTimingInfo">BuildTimingInfo (class in quake)</a>
 </li>
   </ul></td>
@@ -240,8 +243,6 @@ window.addEventListener("load", () => mermaid.run());
 <h2 id="G">G</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#quake.workload_generator.generate_method_id">generate_method_id() (in module quake.workload_generator)</a>
-</li>
       <li><a href="api.html#quake.workload_generator.DynamicWorkloadGenerator.generate_workload">generate_workload() (quake.workload_generator.DynamicWorkloadGenerator method)</a>
 </li>
   </ul></td>
@@ -249,8 +250,6 @@ window.addEventListener("load", () => mermaid.run());
       <li><a href="api.html#quake.QuakeIndex.get">get() (quake.QuakeIndex method)</a>
 </li>
       <li><a href="api.html#quake.QuakeIndex.get_ids">get_ids() (quake.QuakeIndex method)</a>
-</li>
-      <li><a href="api.html#quake.workload_generator.get_index_class">get_index_class() (in module quake.workload_generator)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -266,6 +265,12 @@ window.addEventListener("load", () => mermaid.run());
         <li><a href="api.html#quake.index_wrappers.quake.QuakeWrapper.index">(quake.index_wrappers.quake.QuakeWrapper attribute)</a>
 </li>
       </ul></li>
+      <li><a href="api.html#quake.index_wrappers.faiss_ivf.FaissIVF.index_state">index_state() (quake.index_wrappers.faiss_ivf.FaissIVF method)</a>
+
+      <ul>
+        <li><a href="api.html#quake.index_wrappers.quake.QuakeWrapper.index_state">(quake.index_wrappers.quake.QuakeWrapper method)</a>
+</li>
+      </ul></li>
       <li><a href="api.html#quake.index_wrappers.faiss_ivf.FaissIVF.index_type">index_type (quake.index_wrappers.faiss_ivf.FaissIVF attribute)</a>
 </li>
       <li><a href="api.html#quake.IndexBuildParams">IndexBuildParams (class in quake)</a>
@@ -278,9 +283,13 @@ window.addEventListener("load", () => mermaid.run());
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#quake.workload_generator.DynamicWorkloadGenerator.initialize_clustered_index">initialize_clustered_index() (quake.workload_generator.DynamicWorkloadGenerator method)</a>
 </li>
+      <li><a href="api.html#quake.workload_generator.WorkloadEvaluator.initialize_index">initialize_index() (quake.workload_generator.WorkloadEvaluator method)</a>
+</li>
       <li><a href="api.html#quake.QuakeIndex.initialize_maintenance_policy">initialize_maintenance_policy() (quake.QuakeIndex method)</a>
 </li>
       <li><a href="api.html#quake.workload_generator.DynamicWorkloadGenerator.initialize_workload">initialize_workload() (quake.workload_generator.DynamicWorkloadGenerator method)</a>
+</li>
+      <li><a href="api.html#quake.ModifyTimingInfo.input_validation_time_us">input_validation_time_us (quake.ModifyTimingInfo property)</a>
 </li>
       <li><a href="api.html#quake.datasets.ann_datasets.Dataset.is_downloaded">is_downloaded() (quake.datasets.ann_datasets.Dataset method)</a>
 
@@ -291,6 +300,18 @@ window.addEventListener("load", () => mermaid.run());
       <li><a href="api.html#quake.index_wrappers.faiss_ivf.IndexType.IVF">IVF (quake.index_wrappers.faiss_ivf.IndexType attribute)</a>
 </li>
       <li><a href="api.html#quake.index_wrappers.faiss_ivf.IndexType.IVFPQ">IVFPQ (quake.index_wrappers.faiss_ivf.IndexType attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="J">J</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#quake.SearchTimingInfo.job_enqueue_time_ns">job_enqueue_time_ns (quake.SearchTimingInfo property)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#quake.SearchTimingInfo.job_wait_time_ns">job_wait_time_ns (quake.SearchTimingInfo property)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -350,9 +371,11 @@ window.addEventListener("load", () => mermaid.run());
 <h2 id="M">M</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#quake.index_wrappers.quake.QuakeWrapper.maintenance">maintenance() (quake.index_wrappers.quake.QuakeWrapper method)</a>
+      <li><a href="api.html#quake.index_wrappers.faiss_ivf.FaissIVF.maintenance">maintenance() (quake.index_wrappers.faiss_ivf.FaissIVF method)</a>
 
       <ul>
+        <li><a href="api.html#quake.index_wrappers.quake.QuakeWrapper.maintenance">(quake.index_wrappers.quake.QuakeWrapper method)</a>
+</li>
         <li><a href="api.html#quake.QuakeIndex.maintenance">(quake.QuakeIndex method)</a>
 </li>
       </ul></li>
@@ -372,10 +395,10 @@ window.addEventListener("load", () => mermaid.run());
       </ul></li>
       <li><a href="api.html#quake.index_wrappers.quake.QuakeWrapper.metric">metric() (quake.index_wrappers.quake.QuakeWrapper method)</a>
 </li>
-      <li><a href="api.html#quake.index_wrappers.faiss_ivf.metric_str_to_faiss">metric_str_to_faiss() (in module quake.index_wrappers.faiss_ivf)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#quake.index_wrappers.faiss_ivf.metric_str_to_faiss">metric_str_to_faiss() (in module quake.index_wrappers.faiss_ivf)</a>
+</li>
       <li><a href="api.html#quake.MaintenancePolicyParams.min_partition_size">min_partition_size (quake.MaintenancePolicyParams property)</a>
 </li>
       <li><a href="api.html#quake.MaintenancePolicyParams.modify_centroids">modify_centroids (quake.MaintenancePolicyParams property)</a>
@@ -517,6 +540,8 @@ window.addEventListener("load", () => mermaid.run());
         <li><a href="api.html#quake.QuakeIndex.remove">(quake.QuakeIndex method)</a>
 </li>
       </ul></li>
+      <li><a href="api.html#quake.SearchTimingInfo.result_aggregate_time_ns">result_aggregate_time_ns (quake.SearchTimingInfo property)</a>
+</li>
       <li><a href="api.html#quake.workload_generator.run_query">run_query() (in module quake.workload_generator)</a>
 </li>
   </ul></td>
