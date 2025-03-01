@@ -46,7 +46,7 @@ Run the example by executing the following command:
 
 .. code-block:: bash
 
-    python examples/basic_example.py
+    python examples/quickstart.py
 
 This program will:
 - Build an index from a sample dataset.
