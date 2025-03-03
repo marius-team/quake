@@ -82,7 +82,7 @@ inline Tensor compute_boundary_distances(const Tensor &query, const Tensor &cent
             float projected_distance = faiss::fvec_inner_product(residual_ptr, line_vector.data(), dimension);
             multiply_array_by_constant(line_vector.data(), projected_distance, projection.data(), dimension);
 
-            float distance_to_boundary_squared = faiss::fvec_L2sqr(residual_ptr, projection.data(), dimension);
+            float distance_to_boundary_squared = faiss::fvec_L2sqr(midpoint.data(), projection.data(), dimension);
             boundary_distances[j] = std::sqrt(distance_to_boundary_squared);
         }
     } else {

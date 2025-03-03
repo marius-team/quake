@@ -522,15 +522,64 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
         auto topk_buf = std::make_shared<TopkBuffer>(k, is_descending);
         const float* query_vec = x_ptr + q * dimension;
         int num_parts = partition_ids_to_scan.size(1);
-        // For each partition assigned to this query, scan and update the top-k buffer.
+
+        Tensor boundary_distances;
+        Tensor partition_probabilities;
+        float query_radius = 1000000.0;
+        if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+            query_radius = -1000000.0;
+        }
+
+        Tensor sort_args = torch::arange(partition_ids_to_scan.size(1), torch::kInt64);
+        Tensor partition_sizes = partition_manager_->get_partition_sizes(partition_ids_to_scan[q]);
+        if (use_aps) {
+            Tensor cluster_centroids = parent_->get(partition_ids_to_scan[q]);
+            boundary_distances = compute_boundary_distances(x[q],
+                                                            cluster_centroids,
+                                                            metric_ == faiss::METRIC_L2);
+
+            // sort order by boundary distance
+            sort_args = torch::argsort(boundary_distances, 0, false);
+        }
+        auto sort_args_accessor = sort_args.accessor<int64_t, 1>();
         for (int p = 0; p < num_parts; p++) {
-            int64_t pid = partition_ids_accessor[q][p];
-            if (pid == -1)
-                continue;
-            float* list_vectors = (float*) partition_manager_->partitions_->get_codes(pid);
-            int64_t* list_ids = (int64_t*) partition_manager_->partitions_->get_ids(pid);
-            int64_t list_size = partition_manager_->partitions_->list_size(pid);
-            scan_list(query_vec, list_vectors, list_ids, list_size, (int)dimension, *topk_buf, metric_);
+            int64_t pi = partition_ids_accessor[q][p];
+
+            if (pi == -1) {
+                continue; // Skip invalid partitions
+            }
+
+            start_time = std::chrono::high_resolution_clock::now();
+            float *list_vectors = (float *) partition_manager_->partitions_->get_codes(pi);
+            int64_t *list_ids = (int64_t *) partition_manager_->partitions_->get_ids(pi);
+            int64_t list_size = partition_manager_->partitions_->list_size(pi);
+
+            scan_list(query_vec,
+                      list_vectors,
+                      list_ids,
+                      partition_manager_->partitions_->list_size(pi),
+                      dimension,
+                      *topk_buf,
+                      metric_);
+
+            float curr_radius = topk_buf->get_kth_distance();
+            float percent_change = abs(curr_radius - query_radius) / curr_radius;
+
+            start_time = std::chrono::high_resolution_clock::now();
+            if (use_aps) {
+                if (percent_change > search_params->recompute_threshold) {
+                    query_radius = curr_radius;
+                    partition_probabilities = compute_recall_profile(boundary_distances,
+                                                                     query_radius,
+                                                                     dimension,
+                                                                     {},
+                                                                     search_params->use_precomputed,
+                                                                     metric_ == faiss::METRIC_L2).cumsum(0);
+                }
+                if (partition_probabilities[p].item<float>() >= search_params->recall_target) {
+                    break;
+                }
+            }
         }
         // Retrieve the top-k results for query q.
         all_topk_dists[q] = topk_buf->get_topk();

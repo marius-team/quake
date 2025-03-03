@@ -158,6 +158,8 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Number of partitions to probe. default = ") + std::to_string(DEFAULT_NPROBE)).c_str())
         .def_readwrite("recall_target", &SearchParams::recall_target,
              (std::string("Recall target. default = ") + std::to_string(DEFAULT_RECALL_TARGET)).c_str())
+        .def_readwrite("num_threads", &SearchParams::num_threads,
+             "Number of threads to use for search within a single worker.")
         .def_readwrite("batched_scan", &SearchParams::batched_scan,
              (std::string("Flag for batched scanning. default = ") + std::to_string(DEFAULT_BATCHED_SCAN)).c_str())
         .def_readwrite("use_precomputed", &SearchParams::use_precomputed,

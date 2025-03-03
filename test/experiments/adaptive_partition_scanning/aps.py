@@ -12,10 +12,9 @@ import logging
 import torch
 import time
 
-from src.python.utils import compute_recall, to_path
-from src.python.ann_datasets import load_dataset
-
-from _bindings import MaintenancePolicyParams, QuakeIndex, IndexBuildParams, SearchParams
+from quake.utils import compute_recall, to_path
+from quake.datasets.ann_datasets import load_dataset
+from quake import MaintenancePolicyParams, QuakeIndex, IndexBuildParams, SearchParams
 
 # Set up logging
 log = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ def get_dataset(cfg):
     return vectors, queries[:cfg.experiment.nq], gt[:cfg.experiment.nq]
 
 # Index Management
-def build_or_load_index(cfg, num_workers, gap_time):
+def build_or_load_index(cfg, num_workers):
     index_dir = get_original_cwd() / to_path(cfg.paths.index_dir)
     index_path = index_dir / f"{cfg.dataset.name}_dynamic_ivf{cfg.index.nc}.index"
     if not index_path.exists() or cfg.overwrite.index:
@@ -51,14 +50,14 @@ def build_or_load_index(cfg, num_workers, gap_time):
         num_workers
     )
 
-    log.info(f"Index loaded from {index_path} with {num_workers} workers and flush gap of {gap_time} uS")
+    log.info(f"Index loaded from {index_path} with {num_workers} workers")
 
     return index
 
 # Experiment Execution
 def run_single_experiment(args):
-    method, recall_target, recompute_ratio, use_precompute, cfg, action, n_workers, gap_time = args
-    index = build_or_load_index(cfg, n_workers, gap_time)
+    method, recall_target, recompute_ratio, use_precompute, cfg, action, n_workers = args
+    index = build_or_load_index(cfg, n_workers)
     _, queries, gt = get_dataset(cfg)
     k = cfg.experiment.k
     metric = cfg.index.metric
@@ -70,7 +69,7 @@ def run_single_experiment(args):
     print(f"Running experiment for {method} at recall {recall_target} with action {action}")
 
     if method == 'Oracle':
-        result_path = result_dir / f"recall_{recall_target:.2f}_{gap_time}.csv"
+        result_path = result_dir / f"recall_{recall_target:.2f}.csv"
 
         data_df = run_experiment_for_configuration(
             index=index,
@@ -84,7 +83,7 @@ def run_single_experiment(args):
         data_df.to_csv(result_path, index=False)
         log.info(f"Results saved to {result_path}")
     elif method == 'FixedNProbe':
-        result_path = result_dir / f"recall_{recall_target:.2f}_{gap_time}.csv"
+        result_path = result_dir / f"recall_{recall_target:.2f}.csv"
         if result_path.exists() and not cfg.overwrite.results:
             log.info(f"Results for {method} at recall {recall_target} already exist. Skipping.")
             return
@@ -101,7 +100,7 @@ def run_single_experiment(args):
         data_df.to_csv(result_path, index=False)
         log.info(f"Results saved to {result_path}")
     elif method.startswith('APS'):
-        result_path = result_dir / f"recall_{recall_target:.2f}_{gap_time}.csv"
+        result_path = result_dir / f"recall_{recall_target:.2f}.csv"
         if result_path.exists() and not cfg.overwrite.results:
             log.info(f"Results for {method} at recall {recall_target} already exist. Skipping.")
             return
@@ -124,18 +123,12 @@ def run_single_experiment(args):
 def collect_and_plot_results(cfg):
     methods = cfg.methods
     recall_targets = cfg.experiment.recall_targets
-    flush_gap_times = cfg.experiment.flush_gap_times_us
     all_data = []
 
     for method in methods:
         for recall_target in recall_targets:
-            for curr_flush_gap in flush_gap_times:
-                # Only consider multiple flush gaps for APS
-                if method != "APS" and curr_flush_gap != 50:
-                    continue
-
                 result_dir = cfg.paths.results_dir / method
-                result_path = result_dir / f"recall_{recall_target:.2f}_{curr_flush_gap}.csv"
+                result_path = result_dir / f"recall_{recall_target:.2f}.csv"
                 if not result_path.exists():
                     log.warning(f"Result file {result_path} does not exist. Skipping.")
                     continue
@@ -143,8 +136,6 @@ def collect_and_plot_results(cfg):
                 data_df['Recall Target'] = recall_target
 
                 complete_name = method
-                if complete_name == "APS":
-                    complete_name += " + " + str(curr_flush_gap) + "uS Flushes"
                 data_df['Method'] = complete_name
                 all_data.append(data_df)
 
@@ -160,13 +151,6 @@ def collect_and_plot_results(cfg):
 
     df_plot['Query Time (ms)'] = df_plot['total_time_ms']
     df_plot['Recall'] = df_plot['recall']
-
-#     'buffer_init_time_ms': buffer_init_time_ms,
-# 'job_enqueue_time_ms': job_enqueue_time_ms,
-# 'boundary_distance_time_ms': boundary_distance_time_ms,
-# 'job_wait_time_ms': job_wait_time_ms,
-# 'result_aggregate_time_ms': result_aggregate_time_ms,
-# 'total_time_ms': total_time_ms,
 
     # Compute stats
     grouped = df_plot.groupby(['Recall Target', 'Method'])
@@ -212,7 +196,7 @@ def collect_and_plot_results(cfg):
     plot_mean_line_plots(df_plot, stats, cfg.paths.plot_dir)
     plot_query_overheads(stats, cfg.paths.plot_dir)
 
-palette = {'Oracle': 'C0', 'APS': 'C1', 'APS + 50uS Flushes': 'C2', 'APS + 100uS Flushes': 'C3', 'FixedNProbe': 'C6', 'APS + 250uS Flushes' : 'C4', 'APS + 500uS Flushes' : 'C5'}
+palette = {'Oracle': 'C0', 'APS': 'C1'}
 def plot_recall_only(df_plot, stats, plot_dir):
     sns.set_style("whitegrid")
     sns.set_context("talk", font_scale=.8)
@@ -350,12 +334,6 @@ def plot_query_overheads(stats, plot_dir):
     import matplotlib.pyplot as plt
     import numpy as np
     from matplotlib.patches import Patch
-
-#     'buffer_init_time_ms': ['min', 'mean', 'max'],
-# 'job_enqueue_time_ms': ['min', 'mean', 'max'],
-# 'boundary_distance_time_ms': ['min', 'mean', 'max'],
-# 'job_wait_time_ms': ['min', 'mean', 'max'],
-# 'result_aggregate_time_ms': ['min', 'mean', 'max'],
 
     # Define the components and their labels
     components = [
@@ -608,9 +586,9 @@ def run_experiment_for_configuration(
         search_params.k = k
         search_params.initial_search_fraction = .1
         search_params.recall_target = recall_target
-        search_params.recompute_threshold = 0.05
+        search_params.recompute_threshold = 0.01
         search_params.use_precomputed = use_precompute
-        search_params.aps_flush_period_us = 25
+        search_params.num_threads = 1
 
         # debug print search params
         print(f"Search Params: {search_params.nprobe}, {search_params.k}, {search_params.recall_target}, {search_params.recompute_threshold}, {search_params.use_precomputed}")
@@ -673,22 +651,20 @@ def main(cfg: DictConfig):
         # Prepare experiment parameters
         methods = cfg.methods
         recall_targets = cfg.experiment.recall_targets
-        gap_times = cfg.experiment.flush_gap_times_us
         n_workers = cfg.experiment.n_workers
         experiment_args = []
         for method in methods:
             for recall_target in recall_targets:
-                for gap_time in gap_times:
-                    if method == 'Oracle':
-                        experiment_args.append((method, recall_target, .05, True, cfg, 'execute_queries', n_workers, gap_time))
-                    elif method == 'APS':
-                        experiment_args.append((method, recall_target, 0.0, True, cfg, 'execute_queries', n_workers, gap_time))
-                    elif method == 'APS-R':
-                        experiment_args.append((method, recall_target, -1, True, cfg, 'execute_queries', n_workers, gap_time))
-                    elif method == 'APS-RP':
-                        experiment_args.append((method, recall_target, -1, False, cfg, 'execute_queries', n_workers, gap_time))
-                    elif method == 'FixedNProbe':
-                        experiment_args.append((method, recall_target, -1, True, cfg, 'execute_queries', n_workers, gap_time))
+                if method == 'Oracle':
+                    experiment_args.append((method, recall_target, .05, True, cfg, 'execute_queries', n_workers))
+                elif method == 'APS':
+                    experiment_args.append((method, recall_target, 0.0, True, cfg, 'execute_queries', n_workers))
+                elif method == 'APS-R':
+                    experiment_args.append((method, recall_target, -1, True, cfg, 'execute_queries', n_workers))
+                elif method == 'APS-RP':
+                    experiment_args.append((method, recall_target, -1, False, cfg, 'execute_queries', n_workers))
+                elif method == 'FixedNProbe':
+                    experiment_args.append((method, recall_target, -1, True, cfg, 'execute_queries', n_workers))
 
         # Run experiments
         for args in experiment_args:
