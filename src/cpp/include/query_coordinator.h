@@ -20,7 +20,6 @@ struct ScanJob {
     int k;
     const float* query_vector; // Pointer to the query vector
     vector<int64_t> query_ids;
-
     bool is_batched = false;   // false = single-query job, true = multi-query job
     int64_t num_queries = 0;   // number of queries in batched mode
 };
@@ -32,18 +31,33 @@ public:
     shared_ptr<QuakeIndex> parent_;
     MetricType metric_;
 
-    vector<std::thread> worker_threads_;
-    int num_workers_;
+    // Structure representing per-core resources.
+    struct CoreResources {
+        int core_id;  // Logical core identifier.
+        // Pool of TopK buffers for queries assigned to this core.
+        vector<shared_ptr<TopkBuffer>> topk_buffer_pool;
+        // A per-core local aggregator for query results.
+        vector<std::byte> local_query_buffer;
+        // Job queue for this core.
+        moodycamel::BlockingConcurrentQueue<ScanJob> job_queue;
+    };
+
+    // One CoreResources per worker core.
+    vector<CoreResources> core_resources_;
+
+    // Worker threads. (A typical design might spawn one thread per core.)
     bool workers_initialized_ = false;
-    vector<moodycamel::BlockingConcurrentQueue<int>> jobs_queue_;
-    std::unordered_map<int, ScanJob> jobs_;
+    int num_workers_;
+    vector<std::thread> worker_threads_;
+    vector<int64_t> worker_job_counter_;
 
-    // Top-K Buffers
-    vector<shared_ptr<TopkBuffer>> query_topk_buffers_;
+    // Global aggregator that merges local results.
+    vector<shared_ptr<TopkBuffer>> global_topk_buffer_pool_;
 
-    // Synchronization
-    std::mutex result_mutex_;
-    std::atomic<bool> stop_workers_;
+    // Global synchronization for merging and job tracking.
+    std::mutex global_mutex_;
+    std::condition_variable global_cv_;
+    std::atomic<int> stop_workers_;
 
     bool debug_ = false;
 
@@ -71,6 +85,8 @@ public:
 
     shared_ptr<SearchResult> worker_scan(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
 
+private:
+    void allocate_core_resources(int core_idx, int num_queries, int k, int d);
     };
 
 #endif //QUERY_COORDINATOR_H

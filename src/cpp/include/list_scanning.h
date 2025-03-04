@@ -111,6 +111,7 @@ public:
                 topk_[i] = { std::numeric_limits<DistanceType>::max(), -1 };
             }
         }
+        partitions_scanned_.store(0, std::memory_order_relaxed);
     }
 
     void add(DistanceType distance, IdType index) {

@@ -54,6 +54,10 @@ using std::make_shared;
 using std::size_t;
 using std::string;
 using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::nanoseconds;
+using std::chrono::microseconds;
+using std::chrono::milliseconds;
 using faiss::idx_t;
 using faiss::MetricType;
 
