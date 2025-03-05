@@ -91,6 +91,7 @@ void QueryCoordinator::shutdown_workers() {
             thr.join();
     }
     worker_threads_.clear();
+    workers_initialized_ = false;
 }
 
 // Worker Thread Function
