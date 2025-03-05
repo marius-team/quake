@@ -630,27 +630,110 @@ TEST_F(IndexPartitionTest, ConcurrentFindIdTest) {
 
 #ifdef QUAKE_USE_NUMA
 #include <numa.h>
-TEST_F(IndexPartitionTest, NumaSetNodeTest) {
-    if (numa_available() == -1) {
-        GTEST_SKIP() << "NUMA not available on this system.";
+class IndexPartitionNumaTest : public ::testing::Test {
+protected:
+    int64_t initial_num_vectors = 10;
+    int64_t code_size = 16;  // bytes per code
+    IndexPartition* partition;
+
+    std::vector<uint8_t> initial_codes_vec_;
+    std::vector<idx_t> initial_ids_vec_;
+
+    virtual void SetUp() {
+        if (numa_available() == -1) {
+            GTEST_SKIP() << "NUMA not available on this system.";
+        }
+        // Prepare initial sequential IDs and codes.
+        generate_sequential_ids(initial_num_vectors, initial_ids_vec_, 1000);
+        generate_sequential_codes(initial_num_vectors, initial_codes_vec_, 0);
+
+        // Allocate temporary buffers and copy the data.
+        uint8_t* initial_codes = static_cast<uint8_t*>(std::malloc(initial_num_vectors * code_size));
+        idx_t* initial_ids = static_cast<idx_t*>(std::malloc(initial_num_vectors * sizeof(idx_t)));
+        std::memcpy(initial_codes, initial_codes_vec_.data(), initial_num_vectors * code_size);
+        std::memcpy(initial_ids, initial_ids_vec_.data(), initial_num_vectors * sizeof(idx_t));
+
+        // Construct the partition.
+        partition = new IndexPartition(initial_num_vectors, initial_codes, initial_ids, code_size);
+        std::free(initial_codes);
+        std::free(initial_ids);
     }
-    // Determine a target NUMA node.
-    int original_numa_node = partition->numa_node_;
+
+    virtual void TearDown() {
+        delete partition;
+    }
+
+    // Helper: generate sequential codes.
+    void generate_sequential_codes(size_t n, std::vector<uint8_t>& codes, unsigned int start_val = 0) {
+        codes.resize(n * code_size);
+        for (size_t i = 0; i < n * code_size; ++i) {
+            codes[i] = static_cast<uint8_t>((start_val + i) % 256);
+        }
+    }
+
+    // Helper: generate sequential IDs.
+    void generate_sequential_ids(size_t n, std::vector<idx_t>& ids, idx_t start_id = 0) {
+        ids.resize(n);
+        for (size_t i = 0; i < n; ++i) {
+            ids[i] = start_id + i;
+        }
+    }
+};
+
+// Verify that set_numa_node re-allocates memory on the target node while preserving data.
+// Also, check that the pointers change to indicate new allocation.
+TEST_F(IndexPartitionNumaTest, SetNumaNodeContentPreservation) {
+    EXPECT_EQ(partition->numa_node_, -1) << "Initial numa_node_ should be -1.";
+
+    // Save original pointer addresses.
+    uint8_t* orig_codes = partition->codes_;
+    idx_t* orig_ids = partition->ids_;
+
+    // Choose a target node (e.g. node 0).
+    int target_node = 0;
+    partition->set_numa_node(target_node);
+
+    EXPECT_EQ(partition->numa_node_, target_node);
+    EXPECT_NE(partition->codes_, orig_codes) << "Memory for codes should be reallocated on new NUMA node.";
+    EXPECT_NE(partition->ids_, orig_ids) << "Memory for ids should be reallocated on new NUMA node.";
+
+    // Verify that the stored data remains intact.
+    EXPECT_EQ(std::memcmp(partition->codes_, initial_codes_vec_.data(), partition->num_vectors_ * code_size), 0);
+    EXPECT_EQ(std::memcmp(partition->ids_, initial_ids_vec_.data(), partition->num_vectors_ * sizeof(idx_t)), 0);
+}
+
+// Verify that calling set_numa_node with the same node value is a no-op.
+TEST_F(IndexPartitionNumaTest, SetNumaNodeNoOp) {
+    int target_node = 0;
+    partition->set_numa_node(target_node);
+
+    uint8_t* codes_after_first = partition->codes_;
+    idx_t* ids_after_first = partition->ids_;
+
+    // Calling with the same node should not change pointers.
+    partition->set_numa_node(target_node);
+    EXPECT_EQ(partition->codes_, codes_after_first);
+    EXPECT_EQ(partition->ids_, ids_after_first);
+}
+
+// Verify that setting an invalid NUMA node value throws an exception.
+TEST_F(IndexPartitionNumaTest, SetNumaNodeInvalid) {
     int max_node = numa_max_node();
-    int target_node = (original_numa_node == -1) ? 0 : ((original_numa_node + 1) % (max_node + 1));
+    int invalid_node = max_node + 1;  // Should be invalid.
+    EXPECT_THROW(partition->set_numa_node(invalid_node), std::runtime_error);
+}
 
-    // Save a copy of current data.
-    std::vector<idx_t> original_ids(partition->num_vectors_);
-    std::vector<uint8_t> original_codes(partition->num_vectors_ * code_size);
-    std::memcpy(original_ids.data(), partition->ids_, partition->num_vectors_ * sizeof(idx_t));
-    std::memcpy(original_codes.data(), partition->codes_, partition->num_vectors_ * code_size);
+// After clearing the partition, setting the NUMA node should simply update the field
+// without reallocating memory (since no data exists).
+TEST_F(IndexPartitionNumaTest, SetNumaNodeAfterClear) {
+    partition->clear();
+    EXPECT_EQ(partition->codes_, nullptr);
+    EXPECT_EQ(partition->ids_, nullptr);
 
-    // Change the NUMA node.
+    int target_node = 1;
     partition->set_numa_node(target_node);
     EXPECT_EQ(partition->numa_node_, target_node);
-
-    // Verify that the content (IDs and codes) remains unchanged.
-    EXPECT_EQ(std::memcmp(partition->ids_, original_ids.data(), partition->num_vectors_ * sizeof(idx_t)), 0);
-    EXPECT_EQ(std::memcmp(partition->codes_, original_codes.data(), partition->num_vectors_ * code_size), 0);
+    EXPECT_EQ(partition->codes_, nullptr);
+    EXPECT_EQ(partition->ids_, nullptr);
 }
 #endif  // QUAKE_USE_NUMA
