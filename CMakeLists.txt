@@ -16,19 +16,9 @@ else()
     set(FAISS_ENABLE_GPU OFF)
 endif()
 
-# QUAKE_USE_NUMA: Enable NUMA support
-# Default: OFF
 if(QUAKE_USE_NUMA)
-    set(QUAKE_USE_NUMA ON)
+    add_compile_definitions(QUAKE_USE_NUMA)
 else()
-    set(QUAKE_USE_NUMA OFF)
-endif()
-
-if(QUAKE_USE_AVX512)
-    set(QUAKE_USE_AVX512 ON)
-else()
-    set(QUAKE_USE_AVX512 OFF)
-endif()
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
