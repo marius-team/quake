@@ -587,3 +587,70 @@ TEST_F(IndexPartitionTest, UpdateWithZeroEntriesTest) {
     verify_ids(partition->ids_, append_ids, initial_num_vectors);
     verify_codes(partition->codes_, append_codes, initial_num_vectors);
 }
+
+TEST_F(IndexPartitionTest, AppendStressTest) {
+    const size_t stress_count = 10000;
+    std::vector<uint8_t> stress_codes;
+    std::vector<idx_t> stress_ids;
+    generate_sequential_codes(stress_count, stress_codes, 200);
+    generate_sequential_ids(stress_count, stress_ids, 50000);
+
+    partition->append(stress_count, stress_ids.data(), stress_codes.data());
+
+    EXPECT_EQ(partition->num_vectors_, initial_num_vectors + stress_count);
+    // Verify that the very first appended entry is correct.
+    EXPECT_EQ(partition->ids_[initial_num_vectors], stress_ids[0]);
+}
+
+TEST_F(IndexPartitionTest, ConcurrentFindIdTest) {
+    const size_t thread_count = 8;
+    std::atomic<bool> error_found{false};
+
+    auto worker = [this, &error_found]() {
+        for (int iter = 0; iter < 1000; iter++) {
+            // For each initial ID, verify that find_id returns the expected index.
+            for (size_t j = 0; j < initial_ids_vec_.size(); j++) {
+                int64_t idx = partition->find_id(initial_ids_vec_[j]);
+                if (idx != static_cast<int64_t>(j)) {
+                    error_found = true;
+                }
+            }
+        }
+    };
+
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < thread_count; i++) {
+        threads.emplace_back(worker);
+    }
+    for (auto& t : threads) {
+        t.join();
+    }
+    EXPECT_FALSE(error_found);
+}
+
+#ifdef QUAKE_USE_NUMA
+#include <numa.h>
+TEST_F(IndexPartitionExtraTest, NumaSetNodeTest) {
+    if (numa_available() == -1) {
+        GTEST_SKIP() << "NUMA not available on this system.";
+    }
+    // Determine a target NUMA node.
+    int original_numa_node = partition->numa_node_;
+    int max_node = numa_max_node();
+    int target_node = (original_numa_node == -1) ? 0 : ((original_numa_node + 1) % (max_node + 1));
+
+    // Save a copy of current data.
+    std::vector<idx_t> original_ids(partition->num_vectors_);
+    std::vector<uint8_t> original_codes(partition->num_vectors_ * code_size);
+    std::memcpy(original_ids.data(), partition->ids_, partition->num_vectors_ * sizeof(idx_t));
+    std::memcpy(original_codes.data(), partition->codes_, partition->num_vectors_ * code_size);
+
+    // Change the NUMA node.
+    partition->set_numa_node(target_node);
+    EXPECT_EQ(partition->numa_node_, target_node);
+
+    // Verify that the content (IDs and codes) remains unchanged.
+    EXPECT_EQ(std::memcmp(partition->ids_, original_ids.data(), partition->num_vectors_ * sizeof(idx_t)), 0);
+    EXPECT_EQ(std::memcmp(partition->codes_, original_codes.data(), partition->num_vectors_ * code_size), 0);
+}
+#endif  // QUAKE_USE_NUMA
