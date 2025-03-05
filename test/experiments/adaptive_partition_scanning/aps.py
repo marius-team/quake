@@ -196,7 +196,7 @@ def collect_and_plot_results(cfg):
     plot_mean_line_plots(df_plot, stats, cfg.paths.plot_dir)
     plot_query_overheads(stats, cfg.paths.plot_dir)
 
-palette = {'Oracle': 'C0', 'APS': 'C1', 'APS-R': 'C2', 'APS-RP': 'C3', 'FixedNProbe': 'C4'}
+palette = {'Oracle': 'C0', 'APS': 'C1'}
 def plot_recall_only(df_plot, stats, plot_dir):
     sns.set_style("whitegrid")
     sns.set_context("talk", font_scale=.8)
@@ -588,19 +588,13 @@ def run_experiment_for_configuration(
         search_params.recall_target = recall_target
         search_params.recompute_threshold = 0.01
         search_params.use_precomputed = use_precompute
-        search_params.aps_flush_period_us = 25
         search_params.num_threads = 1
 
         # debug print search params
         print(f"Search Params: {search_params.nprobe}, {search_params.k}, {search_params.recall_target}, {search_params.recompute_threshold}, {search_params.use_precomputed}")
 
-        q_id = 0
         for query in queries:
-            q_id += 1
-            start = time.time()
             search_result = index.search(query.unsqueeze(0), search_params)
-            end = time.time()
-            print(f"Query {q_id} took {(end - start) * 1000.0}ms")
             ids, dist, timing_info = search_result.ids, search_result.distances, search_result.timing_info
             all_ids.append(ids)
             all_dists.append(dist)
