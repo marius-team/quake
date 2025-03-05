@@ -529,7 +529,7 @@ int DynamicInvertedLists::get_numa_node(size_t list_no) {
     if (it == partitions_.end()) {
         throw std::runtime_error("List does not exist in get_numa_node");
     }
-    return it->second.numa_node_;
+    return it->second->numa_node_;
 }
 
 void DynamicInvertedLists::set_numa_node(size_t list_no, int new_numa_node, bool interleaved) {
@@ -537,15 +537,15 @@ void DynamicInvertedLists::set_numa_node(size_t list_no, int new_numa_node, bool
     if (it == partitions_.end()) {
         throw std::runtime_error("List does not exist in set_numa_node");
     }
-    it->second.set_numa_node(new_numa_node);
+    it->second->set_numa_node(new_numa_node);
 }
 
-std::set<size_t> DynamicInvertedLists::get_unassigned_clusters() {
+set<size_t> DynamicInvertedLists::get_unassigned_clusters() {
     // Now we need a way to track unassigned clusters.
     // If you consider "unassigned" as numa_node_ = -1:
     std::set<size_t> result;
     for (auto &kv : partitions_) {
-        if (kv.second.numa_node_ == -1) {
+        if (kv.second->numa_node_ == -1) {
             result.insert(kv.first);
         }
     }
@@ -557,7 +557,7 @@ int DynamicInvertedLists::get_thread(size_t list_no) {
     if (it == partitions_.end()) {
         throw std::runtime_error("List does not exist in get_thread");
     }
-    return it->second.thread_id_;
+    return it->second->thread_id_;
 }
 
 void DynamicInvertedLists::set_thread(size_t list_no, int new_thread_id) {
@@ -565,7 +565,7 @@ void DynamicInvertedLists::set_thread(size_t list_no, int new_thread_id) {
     if (it == partitions_.end()) {
         throw std::runtime_error("List does not exist in set_thread");
     }
-    it->second.thread_id_ = new_thread_id;
+    it->second->thread_id_ = new_thread_id;
 }
 
 #endif
