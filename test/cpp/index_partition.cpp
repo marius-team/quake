@@ -630,7 +630,7 @@ TEST_F(IndexPartitionTest, ConcurrentFindIdTest) {
 
 #ifdef QUAKE_USE_NUMA
 #include <numa.h>
-TEST_F(IndexPartitionExtraTest, NumaSetNodeTest) {
+TEST_F(IndexPartitionTest, NumaSetNodeTest) {
     if (numa_available() == -1) {
         GTEST_SKIP() << "NUMA not available on this system.";
     }
