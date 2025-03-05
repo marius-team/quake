@@ -9,11 +9,13 @@
 
 #include <future>
 #include <vector>
-#ifdef __LINUX__
+
+#ifdef __linux__
 #include <pthread.h>
 #include <sched.h>
 #include <unistd.h>
 #include <iostream>
+
 
 inline bool set_affinity_linux(int core_id) {
     cpu_set_t cpuset;
@@ -22,6 +24,7 @@ inline bool set_affinity_linux(int core_id) {
     int ret = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
     return ret == 0;
 }
+
 #endif
 
 inline bool set_thread_affinity(int core_id) {
