@@ -540,7 +540,7 @@ void DynamicInvertedLists::set_numa_node(size_t list_no, int new_numa_node, bool
     it->second->set_numa_node(new_numa_node);
 }
 
-set<size_t> DynamicInvertedLists::get_unassigned_clusters() {
+std::set<size_t> DynamicInvertedLists::get_unassigned_clusters() {
     // Now we need a way to track unassigned clusters.
     // If you consider "unassigned" as numa_node_ = -1:
     std::set<size_t> result;
