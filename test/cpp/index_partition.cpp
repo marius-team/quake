@@ -630,6 +630,16 @@ TEST_F(IndexPartitionTest, ConcurrentFindIdTest) {
 
 #ifdef QUAKE_USE_NUMA
 #include <numa.h>
+
+bool verify_numa(void *ptr, int target_node) {
+    int node = -1;
+    int ret = get_mempolicy(&node, nullptr, 0, ptr, MPOL_F_NODE | MPOL_F_ADDR);
+    if (ret < 0) {
+        return false;
+    }
+    return (node == target_node);
+}
+
 class IndexPartitionNumaTest : public ::testing::Test {
 protected:
     int64_t initial_num_vectors = 10;
@@ -681,7 +691,7 @@ protected:
 };
 
 // Verify that set_numa_node re-allocates memory on the target node while preserving data.
-// Also, check that the pointers change to indicate new allocation.
+// We also check that the memory is actually bound to the target node via verify_numa.
 TEST_F(IndexPartitionNumaTest, SetNumaNodeContentPreservation) {
     EXPECT_EQ(partition->numa_node_, -1) << "Initial numa_node_ should be -1.";
 
@@ -697,12 +707,19 @@ TEST_F(IndexPartitionNumaTest, SetNumaNodeContentPreservation) {
     EXPECT_NE(partition->codes_, orig_codes) << "Memory for codes should be reallocated on new NUMA node.";
     EXPECT_NE(partition->ids_, orig_ids) << "Memory for ids should be reallocated on new NUMA node.";
 
+    // Verify that the allocated memory is bound to the target node.
+    EXPECT_TRUE(verify_numa(partition->codes_, target_node))
+        << "Codes memory not bound to target node " << target_node;
+    EXPECT_TRUE(verify_numa(partition->ids_, target_node))
+        << "IDs memory not bound to target node " << target_node;
+
     // Verify that the stored data remains intact.
     EXPECT_EQ(std::memcmp(partition->codes_, initial_codes_vec_.data(), partition->num_vectors_ * code_size), 0);
     EXPECT_EQ(std::memcmp(partition->ids_, initial_ids_vec_.data(), partition->num_vectors_ * sizeof(idx_t)), 0);
 }
 
 // Verify that calling set_numa_node with the same node value is a no-op.
+// The pointers should remain unchanged, and the binding should still be correct.
 TEST_F(IndexPartitionNumaTest, SetNumaNodeNoOp) {
     int target_node = 0;
     partition->set_numa_node(target_node);
@@ -714,8 +731,11 @@ TEST_F(IndexPartitionNumaTest, SetNumaNodeNoOp) {
     partition->set_numa_node(target_node);
     EXPECT_EQ(partition->codes_, codes_after_first);
     EXPECT_EQ(partition->ids_, ids_after_first);
+    EXPECT_TRUE(verify_numa(partition->codes_, target_node));
+    EXPECT_TRUE(verify_numa(partition->ids_, target_node));
 }
 
+//
 // Verify that setting an invalid NUMA node value throws an exception.
 TEST_F(IndexPartitionNumaTest, SetNumaNodeInvalid) {
     int max_node = numa_max_node();
@@ -723,7 +743,7 @@ TEST_F(IndexPartitionNumaTest, SetNumaNodeInvalid) {
     EXPECT_THROW(partition->set_numa_node(invalid_node), std::runtime_error);
 }
 
-// After clearing the partition, setting the NUMA node should simply update the field
+// After clearing the partition, setting the NUMA node should update the field
 // without reallocating memory (since no data exists).
 TEST_F(IndexPartitionNumaTest, SetNumaNodeAfterClear) {
     partition->clear();
@@ -735,5 +755,33 @@ TEST_F(IndexPartitionNumaTest, SetNumaNodeAfterClear) {
     EXPECT_EQ(partition->numa_node_, target_node);
     EXPECT_EQ(partition->codes_, nullptr);
     EXPECT_EQ(partition->ids_, nullptr);
+}
+
+// Cycle through multiple NUMA nodes and verify that each call updates the binding.
+// We iterate through several nodes (using target_node = i % (max_node+1)) and check that the pointers change
+// (after the first iteration) and that the binding is correct.
+TEST_F(IndexPartitionNumaTest, SetNumaNodeMultipleTest) {
+    int max_node = numa_max_node();
+    const int iterations = 3;  // Test with three different node values.
+    for (int i = 0; i < iterations; ++i) {
+        int target_node = i % (max_node + 1);
+        // Save current pointer values to compare later.
+        uint8_t* prev_codes = partition->codes_;
+        idx_t* prev_ids = partition->ids_;
+
+        partition->set_numa_node(target_node);
+
+        EXPECT_EQ(partition->numa_node_, target_node);
+        EXPECT_TRUE(verify_numa(partition->codes_, target_node))
+            << "Codes memory not bound to target node " << target_node;
+        EXPECT_TRUE(verify_numa(partition->ids_, target_node))
+            << "IDs memory not bound to target node " << target_node;
+
+        // For subsequent iterations, verify that new pointers are allocated.
+        if (i > 0) {
+            EXPECT_NE(prev_codes, partition->codes_) << "Codes pointer should change when switching NUMA nodes.";
+            EXPECT_NE(prev_ids, partition->ids_) << "IDs pointer should change when switching NUMA nodes.";
+        }
+    }
 }
 #endif  // QUAKE_USE_NUMA
