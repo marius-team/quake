@@ -18,7 +18,7 @@ endif()
 
 if(QUAKE_USE_NUMA)
     add_compile_definitions(QUAKE_USE_NUMA)
-else()
+endif()
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
