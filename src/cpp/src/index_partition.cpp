@@ -229,13 +229,19 @@ void IndexPartition::ensure_capacity(int64_t required) {
 
 template <typename T>
 T* IndexPartition::allocate_memory(size_t num_elements, int numa_node) {
+    size_t total_bytes = num_elements * sizeof(T);
+    T* ptr = nullptr;
 #ifdef QUAKE_USE_NUMA
     if (numa_node == -1) {
-        return reinterpret_cast<T*>(std::malloc(num_elements * sizeof(T)));
+        ptr = reinterpret_cast<T*>(std::malloc(total_bytes));
     } else {
-        return reinterpret_cast<T*>(numa_alloc_onnode(num_elements * sizeof(T), numa_node));
+        ptr = reinterpret_cast<T*>(numa_alloc_onnode(total_bytes, numa_node));
     }
 #else
-    return reinterpret_cast<T*>(std::malloc(num_elements * sizeof(T)));
+    ptr = reinterpret_cast<T*>(std::malloc(total_bytes));
 #endif
+    if (!ptr) {
+        throw std::bad_alloc();
+    }
+    return ptr;
 }
