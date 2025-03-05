@@ -11,5 +11,7 @@ Quake Documentation
    install
    development_guide
    api
+   architecture
+
 
 * :ref:`genindex`
