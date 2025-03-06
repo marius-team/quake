@@ -1,0 +1,236 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IndexPartition &mdash; Quake 0.0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/modify.css?v=fab1bd98" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=d45e8c67"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
+      <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
+      <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs";mermaid.registerLayoutLoaders(elkLayouts);mermaid.initialize({startOnLoad:false});</script>
+      <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+      <script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
+window.addEventListener("load", () => mermaid.run());
+</script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Python API" href="../api.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Quake
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../development_guide.html">Development Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">Python API</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">IndexPartition</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#key-responsibilities">Key Responsibilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#public-interface">Public Interface</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#usage-considerations">Usage Considerations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#indexpartition-layout">IndexPartition Layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#conclusion">Conclusion</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Quake</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">IndexPartition</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/index_partition.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="indexpartition">
+<h1>IndexPartition<a class="headerlink" href="#indexpartition" title="Link to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">IndexPartition</span></code> class is a core component in partitioned index.
+It is responsible for managing a contiguous block of memory that stores encoded vector data
+(codes) alongside their corresponding vector IDs. The class provides dynamic memory management
+for vector storage—including adding, updating, and removing vectors, and support for optional
+NUMA-aware memory allocation.</p>
+</section>
+<section id="key-responsibilities">
+<h2>Key Responsibilities<a class="headerlink" href="#key-responsibilities" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Memory Management:</strong>
+Allocates, reallocates, and frees memory for vector codes and IDs. The class dynamically resizes
+its internal buffer to accommodate new vectors.</p></li>
+<li><p><strong>Dynamic Updates:</strong>
+Provides methods to append new vectors, update existing ones, and remove entries (using a swap‐with‐last
+strategy, so order is not preserved).</p></li>
+<li><p><strong>Lookup:</strong>
+Implements a linear search via <code class="docutils literal notranslate"><span class="pre">find_id()</span></code> to locate vectors by their ID.</p></li>
+<li><p><strong>NUMA Support (Optional):</strong>
+If compiled with NUMA support (<code class="docutils literal notranslate"><span class="pre">QUAKE_USE_NUMA</span></code> defined), it can reassign its memory to a specified NUMA node.</p></li>
+</ul>
+</section>
+<section id="public-interface">
+<h2>Public Interface<a class="headerlink" href="#public-interface" title="Link to this heading"></a></h2>
+<p>Developers using this class should pay attention to the following methods:</p>
+<ul class="simple">
+<li><p><strong>set_code_size(int64_t code_size):</strong>
+Sets the size (in bytes) of each vector code. This must be done before any vectors are added.</p></li>
+<li><p><strong>append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes):</strong>
+Appends new vector entries to the partition. The method automatically ensures that there is enough
+capacity by resizing if necessary.</p></li>
+<li><p><strong>update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes):</strong>
+Updates existing entries in place starting from a given offset. It will throw an exception if the
+specified range is out of bounds.</p></li>
+<li><p><strong>remove(int64_t index):</strong>
+Removes a vector at the given index by swapping in the last vector. This operation does not preserve
+the original order of vectors.</p></li>
+<li><p><strong>resize(int64_t new_capacity):</strong>
+Resizes the partition’s internal buffer. If the new capacity is lower than the current number of vectors,
+the partition will be truncated.</p></li>
+<li><p><strong>clear():</strong>
+Frees all allocated memory and resets the partition’s state.</p></li>
+<li><p><strong>find_id(idx_t id) const:</strong>
+Searches for a vector by its ID using a linear scan and returns its index or -1 if not found.</p></li>
+<li><p><strong>reallocate_memory(int64_t new_capacity):</strong>
+Forces a reallocation of the internal memory buffer, copying over existing data.</p></li>
+</ul>
+</section>
+<section id="usage-considerations">
+<h2>Usage Considerations<a class="headerlink" href="#usage-considerations" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Removal Semantics:</strong>
+The removal method uses a swap-with-last strategy. This is efficient but does not preserve the order of vectors.</p></li>
+<li><p><strong>Exceptions:</strong>
+Methods such as <code class="docutils literal notranslate"><span class="pre">set_code_size()</span></code> and <code class="docutils literal notranslate"><span class="pre">update()</span></code> enforce that certain conditions are met
+(e.g., no vectors exist yet or the update range is valid), throwing exceptions otherwise.</p></li>
+<li><p><strong>NUMA Considerations:</strong>
+When NUMA support is enabled, the developer may assign the partition to a specific NUMA node to improve performance on multi-socket systems.</p></li>
+<li><p><strong>Memory Efficiency:</strong>
+The partition grows by doubling its capacity when necessary, ensuring amortized constant time for appends.</p></li>
+<li><p><strong>Thread Safety:</strong>
+This class is not internally synchronized. In multi-threaded environments, external synchronization
+must be applied when concurrently modifying the same partition.</p></li>
+</ul>
+</section>
+<section id="indexpartition-layout">
+<h2>IndexPartition Layout<a class="headerlink" href="#indexpartition-layout" title="Link to this heading"></a></h2>
+<pre  class="mermaid">
+        %%{
+  init: {
+    &quot;theme&quot;: &quot;default&quot;,
+    &quot;themeVariables&quot;: {
+      &quot;fontSize&quot;: &quot;14px&quot;,
+      &quot;fontFamily&quot;: &quot;Courier New&quot;,
+        &quot;fontWeight&quot;: &quot;bold&quot;
+    }
+  }
+}%%
+flowchart LR
+
+    subgraph IP[&quot;IndexPartition&quot;]
+        direction TB
+         MD[&quot;buffer_size_
+            num_vectors_
+            code_size_
+            numa_node_
+            core_id_&quot;]
+        CDPTR[&quot;codes_ (uint8_t*)&quot;]
+        IDPTR[&quot;ids_ (int64_t*)&quot;]
+    end
+
+    subgraph ML[&quot;Memory Layout&quot;]
+        direction TB
+        CA[&quot;Vector Buffer&lt;br/&gt;size = buffer_size_ × code_size_&quot;]
+        IA[&quot;ID Buffer&lt;br/&gt;size = buffer_size_ x sizeof(int64_t)&quot;]
+    end
+
+    CDPTR --&gt; CA
+    IDPTR --&gt; IA
+    </pre></section>
+<section id="conclusion">
+<h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">IndexPartition</span></code> class is a low-level container for managing partitions of an index.
+It encapsulates memory management, dynamic updates, and (optionally) NUMA-aware operations.
+By understanding its public interface and internal design, developers can effectively integrate
+and extend the partitioned index system.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../api.html" class="btn btn-neutral float-left" title="Python API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Jason Mohoney.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
