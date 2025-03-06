@@ -477,6 +477,85 @@ TEST_F(DynamicInvertedListTest, ResizeTest) {
     EXPECT_EQ(invlists->code_size, code_size);
 }
 
+// ConcurrentReadsTest: Spawns multiple threads to repeatedly read from a partition and checks for consistency.
+TEST_F(DynamicInvertedListTest, ConcurrentReadsTest) {
+    size_t list_no = 2;
+    size_t n_entries = 50;
+    std::vector<uint8_t> codes;
+    std::vector<idx_t> ids;
+    generate_random_codes(n_entries, codes);
+    generate_sequential_ids(n_entries, ids, 5000);
+    invlists->add_entries(list_no, n_entries, ids.data(), codes.data());
+
+    const int num_threads = 10;
+    std::vector<std::thread> threads;
+    std::atomic<bool> error(false);
+
+    for (int i = 0; i < num_threads; i++) {
+        threads.emplace_back([this, list_no, n_entries, &error]() {
+            try {
+                for (int iter = 0; iter < 1000; iter++) {
+                    size_t size = invlists->list_size(list_no);
+                    if (size != n_entries) {
+                        error = true;
+                    }
+                    const idx_t* stored_ids = invlists->get_ids(list_no);
+                    for (size_t j = 1; j < size; j++) {
+                        if (stored_ids[j] < stored_ids[j - 1]) {
+                            error = true;
+                        }
+                    }
+                }
+            } catch (...) {
+                error = true;
+            }
+        });
+    }
+    for (auto &t : threads) {
+        t.join();
+    }
+    EXPECT_FALSE(error);
+}
+
+// Test function: SerializationTest
+TEST_F(DynamicInvertedListTest, SerializationTest) {
+    // Add entries to each partition.
+    for (size_t list_no = 0; list_no < nlist; ++list_no) {
+        size_t n_entries = list_no + 1;
+        std::vector<uint8_t> codes;
+        std::vector<idx_t> ids;
+        generate_random_codes(n_entries, codes);
+        generate_sequential_ids(n_entries, ids);
+        invlists->add_entries(list_no, n_entries, ids.data(), codes.data());
+    }
+    // Save to a temporary file.
+    std::string filename = "temp_invlist.dat";
+    EXPECT_NO_THROW(invlists->save(filename));
+
+    // Load from the temporary file into a new DynamicInvertedLists instance.
+    DynamicInvertedLists* loaded = nullptr;
+    EXPECT_NO_THROW({
+        loaded = new DynamicInvertedLists(0, 0);
+        loaded->load(filename);
+    });
+    // Verify that the partition data matches.
+    for (size_t list_no = 0; list_no < nlist; ++list_no) {
+        size_t orig_size = invlists->list_size(list_no);
+        size_t loaded_size = loaded->list_size(list_no);
+        EXPECT_EQ(orig_size, loaded_size);
+        const uint8_t* orig_codes = invlists->get_codes(list_no);
+        const uint8_t* loaded_codes = loaded->get_codes(list_no);
+        EXPECT_EQ(std::memcmp(orig_codes, loaded_codes, orig_size * code_size), 0);
+        const idx_t* orig_ids = invlists->get_ids(list_no);
+        const idx_t* loaded_ids = loaded->get_ids(list_no);
+        for (size_t i = 0; i < orig_size; ++i) {
+            EXPECT_EQ(orig_ids[i], loaded_ids[i]);
+        }
+    }
+    delete loaded;
+    remove(filename.c_str());
+}
+
 // NUMA related tests (only if QUAKE_USE_NUMA is defined)
 #ifdef QUAKE_USE_NUMA
 TEST_F(DynamicInvertedListTest, NumaTests) {
