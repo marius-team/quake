@@ -165,3 +165,122 @@ TEST_F(PartitionManagerTest, RefinePartitions) {
   ASSERT_EQ(partition_manager_->ntotal(), n_total);
   ASSERT_EQ(partition_manager_->nlist(), n_list);
 }
+
+// Test: Verify that add_partitions correctly adds new partitions.
+TEST_F(PartitionManagerTest, AddPartitionsTest) {
+  // Initialize with a base clustering containing 3 empty partitions.
+  auto base_clustering = std::make_shared<Clustering>();
+  base_clustering->partition_ids = torch::tensor({0, 1, 2}, torch::kInt64);
+  base_clustering->centroids = torch::rand({3, dim_}, torch::kFloat32);
+  base_clustering->vectors = {torch::empty({0, dim_}, torch::kFloat32),
+                              torch::empty({0, dim_}, torch::kFloat32),
+                              torch::empty({0, dim_}, torch::kFloat32)};
+  base_clustering->vector_ids = {torch::empty({0}, torch::kInt64),
+                                  torch::empty({0}, torch::kInt64),
+                                  torch::empty({0}, torch::kInt64)};
+  parent_->build(base_clustering->centroids, base_clustering->partition_ids, std::make_shared<IndexBuildParams>());
+  partition_manager_->init_partitions(parent_, base_clustering);
+
+  // Create new clustering for adding partitions.
+  auto clustering = std::make_shared<Clustering>();
+  clustering->partition_ids = torch::tensor({3, 4}, torch::kInt64);
+  clustering->centroids = torch::tensor({{3.0f, 3.0f, 3.0f, 3.0f},
+                                          {4.0f, 4.0f, 4.0f, 4.0f}}, torch::kFloat32);
+  clustering->vectors = {
+    torch::tensor({{3.1f, 3.1f, 3.1f, 3.1f}}, torch::kFloat32),
+    torch::tensor({{4.1f, 4.1f, 4.1f, 4.1f}}, torch::kFloat32)
+  };
+  clustering->vector_ids = {
+    torch::tensor({31}, torch::kInt64),
+    torch::tensor({41}, torch::kInt64)
+  };
+
+  partition_manager_->add_partitions(clustering);
+  // Base clustering had 3 partitions; now 2 more are added.
+  EXPECT_EQ(partition_manager_->nlist(), 3 + 2);
+  Tensor p_ids = partition_manager_->get_partition_ids();
+  auto p_ids_acc = p_ids.accessor<int64_t,1>();
+  EXPECT_EQ(partition_manager_->partitions_->list_size(3), 1);
+  EXPECT_EQ(partition_manager_->partitions_->list_size(4), 1);
+}
+
+// Test: Verify that select_partitions returns the expected data.
+TEST_F(PartitionManagerTest, SelectPartitionsTest) {
+  // Initialize with a base clustering containing 3 partitions.
+  auto base_clustering = std::make_shared<Clustering>();
+  base_clustering->partition_ids = torch::tensor({0, 1, 2}, torch::kInt64);
+  base_clustering->centroids = torch::rand({3, dim_}, torch::kFloat32);
+  base_clustering->vectors = {torch::rand({10, dim_}, torch::kFloat32),
+                              torch::rand({8, dim_}, torch::kFloat32),
+                              torch::rand({12, dim_}, torch::kFloat32)};
+  base_clustering->vector_ids = {torch::arange(10, torch::kInt64),
+                                  torch::arange(10, 18, torch::kInt64),
+                                  torch::arange(18, 30, torch::kInt64)};
+  parent_->build(base_clustering->centroids, base_clustering->partition_ids, std::make_shared<IndexBuildParams>());
+  partition_manager_->init_partitions(parent_, base_clustering);
+
+  Tensor p_ids = partition_manager_->get_partition_ids();
+  auto selected = partition_manager_->select_partitions(p_ids, true);
+  Tensor parent_centroids = parent_->get(p_ids);
+  EXPECT_TRUE(torch::allclose(selected->centroids, parent_centroids));
+}
+
+// Test: Verify that get_partition_sizes returns correct sizes.
+TEST_F(PartitionManagerTest, GetPartitionSizesTest) {
+  // Initialize with a base clustering containing 3 partitions.
+  auto base_clustering = std::make_shared<Clustering>();
+  base_clustering->partition_ids = torch::tensor({0, 1, 2}, torch::kInt64);
+  base_clustering->centroids = torch::rand({3, dim_}, torch::kFloat32);
+  base_clustering->vectors = {torch::rand({5, dim_}, torch::kFloat32),
+                              torch::rand({7, dim_}, torch::kFloat32),
+                              torch::rand({9, dim_}, torch::kFloat32)};
+  base_clustering->vector_ids = {torch::arange(5, torch::kInt64),
+                                  torch::arange(5, 12, torch::kInt64),
+                                  torch::arange(12, 21, torch::kInt64)};
+  parent_->build(base_clustering->centroids, base_clustering->partition_ids, std::make_shared<IndexBuildParams>());
+  partition_manager_->init_partitions(parent_, base_clustering);
+
+  Tensor p_ids = partition_manager_->get_partition_ids();
+  Tensor sizes = partition_manager_->get_partition_sizes(p_ids);
+  auto p_ids_acc = p_ids.accessor<int64_t,1>();
+  auto sizes_acc = sizes.accessor<int64_t,1>();
+  for (int i = 0; i < p_ids.size(0); i++) {
+    EXPECT_EQ(sizes_acc[i], partition_manager_->partitions_->list_size(p_ids_acc[i]));
+  }
+}
+
+// Test: Save and load roundtrip.
+TEST_F(PartitionManagerTest, SaveLoadRoundTripTest) {
+  // Initialize with a base clustering containing 3 partitions.
+  auto base_clustering = std::make_shared<Clustering>();
+  base_clustering->partition_ids = torch::tensor({0, 1, 2}, torch::kInt64);
+  base_clustering->centroids = torch::rand({3, dim_}, torch::kFloat32);
+  base_clustering->vectors = {torch::rand({5, dim_}, torch::kFloat32),
+                              torch::rand({7, dim_}, torch::kFloat32),
+                              torch::rand({9, dim_}, torch::kFloat32)};
+  base_clustering->vector_ids = {torch::arange(5, torch::kInt64),
+                                  torch::arange(5, 12, torch::kInt64),
+                                  torch::arange(12, 21, torch::kInt64)};
+  parent_->build(base_clustering->centroids, base_clustering->partition_ids, std::make_shared<IndexBuildParams>());
+  partition_manager_->init_partitions(parent_, base_clustering);
+
+  std::string filename = "temp_partmgr.dat";
+  EXPECT_NO_THROW(partition_manager_->save(filename));
+
+  auto new_mgr = std::make_unique<PartitionManager>();
+  EXPECT_NO_THROW(new_mgr->load(filename));
+
+  EXPECT_EQ(new_mgr->ntotal(), partition_manager_->ntotal());
+  EXPECT_EQ(new_mgr->nlist(), partition_manager_->nlist());
+
+  Tensor old_ids = partition_manager_->get_partition_ids();
+  Tensor new_ids = new_mgr->get_partition_ids();
+
+  // sort the ids, they may be in different order
+  old_ids = std::get<0>(torch::sort(old_ids));
+  new_ids = std::get<0>(torch::sort(new_ids));
+
+  EXPECT_TRUE(torch::allclose(old_ids, new_ids));
+
+  remove(filename.c_str());
+}
