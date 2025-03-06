@@ -39,9 +39,8 @@ namespace faiss {
          *
          * @param nlist Number of partitions to initialize.
          * @param code_size Size in bytes for each code.
-         * @param use_map_for_ids Currently unused; reserved for compatibility.
          */
-        DynamicInvertedLists(size_t nlist, size_t code_size, bool use_map_for_ids = false);
+        DynamicInvertedLists(size_t nlist, size_t code_size);
 
         /**
          * @brief Destructor.
