@@ -48,6 +48,7 @@
 
 using torch::Tensor;
 using std::vector;
+using std::unordered_map;
 using std::shared_ptr;
 using std::tuple;
 using std::make_shared;

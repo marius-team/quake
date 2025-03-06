@@ -39,7 +39,7 @@ namespace faiss {
     }
 
 
-    DynamicInvertedLists::DynamicInvertedLists(size_t nlist, size_t code_size, bool use_map_for_ids)
+    DynamicInvertedLists::DynamicInvertedLists(size_t nlist, size_t code_size)
         : InvertedLists(nlist, code_size) {
         d_ = code_size / sizeof(float);
         code_size_ = code_size;
