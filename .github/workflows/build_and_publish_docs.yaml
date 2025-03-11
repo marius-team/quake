@@ -3,8 +3,8 @@ name: Build and Publish Docs
 on:
   push:
     branches: [ main ]
-#  pull_request:
-#    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build_docs:
@@ -26,7 +26,9 @@ jobs:
 
       - name: Build Sphinx Documentation
         working-directory: docs
-        run: conda run -n quake-env sphinx-build -b html . _build/html
+        run: | 
+          apt install -y graphviz
+          conda run -n quake-env sphinx-build -b html . _build/html
 
       - name: Deploy Documentation to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
