@@ -11,8 +11,6 @@ Quake Documentation
    install
    development_guide
    api
-   architecture/index_partition
-   architecture/dynamic_inverted_list
-   architecture/partition_manager
+   architecture/architecture
 
 * :ref:`genindex`

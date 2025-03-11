@@ -23,6 +23,7 @@ extensions = [
     'sphinx.ext.napoleon',    # Support for Google and NumPy style docstrings
     'sphinx.ext.viewcode',    # Add links to highlighted source code
     'sphinxcontrib.mermaid',  # Add support for Mermaid diagrams
+    'sphinx.ext.graphviz',    # Add support for Graphviz diagrams
 ]
 
 templates_path = ['_templates']

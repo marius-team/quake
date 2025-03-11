@@ -3,7 +3,7 @@ Development Guide
 
 Quake is a high‑performance vector search engine written in C++ with Python bindings. It supports adaptive, real‑time updates and query‑adaptive search—letting you specify a recall target so that the index automatically adjusts its search scope. This guide will help you rapidly understand our design, coding standards and contribution workflow.
 
-Overview of the Architecture
+Codebase Overview
 ----------------------------
 Quake’s design is split into two major layers:
 
@@ -24,59 +24,9 @@ Quake’s design is split into two major layers:
 2. **The Python Layer**
    Provides user-friendly wrappers, dataset loaders, and utility functions for integrating with PyTorch and other ML workflows. It is located in the ``src/python/`` directory and uses Sphinx (with autodoc) to extract docstrings from our Python code.
 
-Below shows a flowchart of how the main components and classes of Quake interact.
 
-.. mermaid::
+See the :doc:`architecture/architecture` for a detailed breakdown of the components and their interactions.
 
-    flowchart TD
-        subgraph C++_Core["C++ Core"]
-            QI[QuakeIndex]
-            PM[PartitionManager]
-            MP["MaintenancePolicy"]
-            QC[QueryCoordinator]
-            DIL[DynamicInvertedLists]
-            IP[IndexPartition]
-            B["Bindings (pybind11)"]
-
-            MO[MaintenancePolicyParams]
-            SO[SearchParams]
-            IB[IndexBuildParams]
-        end
-
-        subgraph Python_Layer["Python Layer"]
-            PA["Quake Python API"]
-            UT["Utility Modules & Helpers"]
-            DS["Dataset Loaders"]
-            WG["Workload Generator"]
-        end
-
-        %% Connections within C++ Core
-        QI --> PM
-        QI --> MP
-        QI --> QC
-        PM --> DIL
-        DIL --> IP
-
-        B --> QI
-        B --> MO
-        B --> SO
-        B --> IB
-
-        %% Expose C++ Core to Python
-        PA --> B
-
-        %% Python Layer structure
-        PA --> UT
-        PA --> DS
-        PA --> WG
-
-        %% Define custom styles
-        classDef coreStyle fill:#f9f,stroke:#333,stroke-width:2px;
-        classDef pythonStyle fill:#bbf,stroke:#333,stroke-width:2px;
-
-        %% Assign styles to nodes
-        class QI,PM,MP,QC,DIL,IP,MO,SO,IB coreStyle;
-        class PA,UT,DS,WG pythonStyle;
 
 Directory Structure
 -------------------
