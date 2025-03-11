@@ -150,7 +150,7 @@ the actual encoded vectors and their IDs. The figure below shows a toy 3-level Q
 per level and 27 base vectors. Although this example uses uniform partition sizes, real-world sizes vary based
 on data distribution.</p>
 <figure class="align-default" id="fig-quake-index">
- digraph QuakeIndex {
+<div class="graphviz"><img src="../_images/graphviz-2cc54dbca9b5d003b152246bd996b25cf6b83095.png" alt="digraph QuakeIndex {
      rankdir=TB;
      // Global node defaults: using HTML labels so shape is none
      node [shape=none, style=filled, fontname=Helvetica, fontsize=18];
@@ -433,7 +433,8 @@ on data distribution.</p>
      midP2:f0 -&gt; baseP6;
      midP2:f1 -&gt; baseP7;
      midP2:f2 -&gt; baseP8;
- }<figcaption>
+ }" class="graphviz" /></div>
+<figcaption>
 <p><span class="caption-text">Example with 3 levels and 3 partitions per level and 27 base vectors.</span><a class="headerlink" href="#fig-quake-index" title="Link to this image"></a></p>
 </figcaption>
 </figure>
@@ -446,7 +447,7 @@ This continues until the base level is reached, where the actual vectors are com
 below illustrates a 3-level Quake Index example. Scanned partitions are shown in full color, while non-scanned
 partitions are faded.</p>
 <figure class="align-default" id="fig-quake-index-query">
- digraph QuakeIndexQueryVector {
+<div class="graphviz"><img src="../_images/graphviz-cda400c34ff8d3643e69a6ee440a8d5b5af624ea.png" alt="digraph QuakeIndexQueryVector {
      rankdir=TB;
      node [shape=none, style=filled, fontname=Helvetica, fontsize=18];
 
@@ -720,7 +721,8 @@ partitions are faded.</p>
      midP2:f0 -&gt; baseP6 [dir=none;penwidth=0];
      midP2:f1 -&gt; baseP7;
      midP2:f2 -&gt; baseP8;
- }<figcaption>
+ }" class="graphviz" /></div>
+<figcaption>
 <p><span class="caption-text">Query Processing Example (3-Level Quake Index)</span><a class="headerlink" href="#fig-quake-index-query" title="Link to this image"></a></p>
 </figcaption>
 </figure>
@@ -732,7 +734,7 @@ Partitions in each NUMA node’s memory region are pinned to specific CPUs, enab
 partitions are shown in green, Level-1 in blue, and Level-0 in purple. In order to distribute the top-level,
 the single top-level partition is sharded across NUMA nodes.</p>
 <figure class="align-default" id="fig-hw-layout-distributed">
- digraph QuakeHW {
+<div class="graphviz"><img src="../_images/graphviz-c798fc8f2f95b1a7acbd1f13005fd3b8897cb7c7.png" alt="digraph QuakeHW {
      compound=true;
      // Lay out nodes left-to-right
      rankdir=&quot;same&quot;;
@@ -895,7 +897,8 @@ the single top-level partition is sharded across NUMA nodes.</p>
          cpu0_0 -&gt; cpu1_0 [ style=invis];
          cpu1_0 -&gt; cpu2_0 [ style=invis];
      }
- }<figcaption>
+ }" class="graphviz" /></div>
+<figcaption>
 <p><span class="caption-text">Hardware Layout: Index Distributed Across 3 NUMA Nodes (each with 3 CPUs)</span><a class="headerlink" href="#fig-hw-layout-distributed" title="Link to this image"></a></p>
 </figcaption>
 </figure>
