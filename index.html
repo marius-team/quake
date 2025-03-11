@@ -9,6 +9,7 @@
   <title>Quake Documentation &mdash; Quake 0.0.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="_static/css/modify.css?v=fab1bd98" />
 
   
@@ -48,9 +49,7 @@
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development_guide.html">Development Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">Python API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/index_partition.html">IndexPartition</a></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/dynamic_inverted_list.html">DynamicInvertedLists Class Design</a></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/partition_manager.html">PartitionManager Class Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/architecture.html">Quake Index Architecture</a></li>
 </ul>
 
         </div>
@@ -96,7 +95,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="development_guide.html">Development Guide</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="development_guide.html#overview-of-the-architecture">Overview of the Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="development_guide.html#codebase-overview">Codebase Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="development_guide.html#directory-structure">Directory Structure</a></li>
 <li class="toctree-l2"><a class="reference internal" href="development_guide.html#contribution-workflow-coding-standards">Contribution Workflow &amp; Coding Standards</a></li>
 <li class="toctree-l2"><a class="reference internal" href="development_guide.html#workflow">Workflow</a></li>
@@ -110,26 +109,13 @@
 <li class="toctree-l2"><a class="reference internal" href="api.html#module-quake.index_wrappers.quake">Index Wrappers</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/index_partition.html">IndexPartition</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="architecture/index_partition.html#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/index_partition.html#key-responsibilities">Key Responsibilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/index_partition.html#public-interface">Public Interface</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/index_partition.html#usage-considerations">Usage Considerations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/index_partition.html#indexpartition-layout">IndexPartition Layout</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/index_partition.html#conclusion">Conclusion</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/dynamic_inverted_list.html">DynamicInvertedLists Class Design</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="architecture/dynamic_inverted_list.html#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/dynamic_inverted_list.html#key-responsibilities">Key Responsibilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/dynamic_inverted_list.html#limitations">Limitations</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/partition_manager.html">PartitionManager Class Documentation</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="architecture/partition_manager.html#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/partition_manager.html#key-responsibilities">Key Responsibilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/partition_manager.html#differences-from-dynamicinvertedlists">Differences from DynamicInvertedLists</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture/partition_manager.html#usage">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/architecture.html">Quake Index Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="architecture/architecture.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/architecture.html#quakeindex-class-components">QuakeIndex Class Components</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/architecture.html#detailed-components">Detailed Components</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/architecture.html#data-layout">Data Layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/architecture.html#query-processing-example">Query Processing Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture/architecture.html#index-memory-layout">Index Memory Layout</a></li>
 </ul>
 </li>
 </ul>

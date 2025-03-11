@@ -1,4 +1,4 @@
-DynamicInvertedLists Class Design
+DynamicInvertedLists
 ===================================
 
 Overview

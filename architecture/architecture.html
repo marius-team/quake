@@ -1,0 +1,936 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quake Index Architecture &mdash; Quake 0.0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/modify.css?v=fab1bd98" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=d45e8c67"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="PartitionManager" href="partition_manager.html" />
+    <link rel="prev" title="Python API" href="../api.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Quake
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../development_guide.html">Development Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">Python API</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Quake Index Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#quakeindex-class-components">QuakeIndex Class Components</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#detailed-components">Detailed Components</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="partition_manager.html">PartitionManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dynamic_inverted_list.html">DynamicInvertedLists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="index_partition.html">IndexPartition</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#data-layout">Data Layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#query-processing-example">Query Processing Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#index-memory-layout">Index Memory Layout</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Quake</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Quake Index Architecture</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/architecture.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="quake-index-architecture">
+<h1>Quake Index Architecture<a class="headerlink" href="#quake-index-architecture" title="Link to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The Quake Index is an adaptive, hierarchical indexing system for vector search. It uses a partitioned
+index design in which the dataset is recursively clustered into a multi-level structure. The <strong>QuakeIndex</strong>
+class coordinates index construction, query processing, and maintenance. Underneath, a <strong>DynamicInvertedLists</strong>
+object stores multiple <strong>IndexPartition</strong> instances, each representing a subset of vectors. A <strong>PartitionManager</strong>
+controls how vectors are assigned to partitions, while a <strong>QueryCoordinator</strong> manages query execution.
+Finally, a <strong>MaintenancePolicy</strong> adapts the index to evolving data and query patterns over time.</p>
+</section>
+<section id="quakeindex-class-components">
+<h2>QuakeIndex Class Components<a class="headerlink" href="#quakeindex-class-components" title="Link to this heading"></a></h2>
+<p>The diagram below illustrates the main components of the QuakeIndex class and the primary operations each is responsible for:</p>
+<ul class="simple">
+<li><p><strong>PartitionManager</strong>: Handles modifications of vectors and partitions. Responsible for <cite>add()</cite> and <cite>remove()</cite></p></li>
+<li><p><strong>QueryCoordinator</strong>: Manages search operations. Used in <cite>search()</cite> and <cite>add()</cite>.</p></li>
+<li><p><strong>CentroidIndex</strong>: A QuakeIndex over the centroids for efficient searching of centroids.</p></li>
+<li><p><strong>MaintenancePolicy</strong>: Maintains partition access counts and oversees periodic index maintenance.</p></li>
+</ul>
+<a class="reference internal image-reference" href="../_images/quake_arch_diagram.png"><img alt="Architecture Diagram" src="../_images/quake_arch_diagram.png" style="width: 1600px;" />
+</a>
+</section>
+<section id="detailed-components">
+<h2>Detailed Components<a class="headerlink" href="#detailed-components" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="partition_manager.html">PartitionManager</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="partition_manager.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="partition_manager.html#key-responsibilities">Key Responsibilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="partition_manager.html#differences-from-dynamicinvertedlists">Differences from DynamicInvertedLists</a></li>
+<li class="toctree-l2"><a class="reference internal" href="partition_manager.html#usage">Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dynamic_inverted_list.html">DynamicInvertedLists</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamic_inverted_list.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamic_inverted_list.html#key-responsibilities">Key Responsibilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamic_inverted_list.html#limitations">Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="index_partition.html">IndexPartition</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="index_partition.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index_partition.html#key-responsibilities">Key Responsibilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index_partition.html#public-interface">Public Interface</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index_partition.html#usage-considerations">Usage Considerations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index_partition.html#indexpartition-layout">IndexPartition Layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index_partition.html#conclusion">Conclusion</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="data-layout">
+<h2>Data Layout<a class="headerlink" href="#data-layout" title="Link to this heading"></a></h2>
+<p>The index is organized hierarchically. Each level uses centroids to summarize the partitions of the next level.
+Every centroid corresponds to a cluster that can be recursively subdivided. At the base level, partitions store
+the actual encoded vectors and their IDs. The figure below shows a toy 3-level Quake Index with three partitions
+per level and 27 base vectors. Although this example uses uniform partition sizes, real-world sizes vary based
+on data distribution.</p>
+<figure class="align-default" id="fig-quake-index">
+ digraph QuakeIndex {
+     rankdir=TB;
+     // Global node defaults: using HTML labels so shape is none
+     node [shape=none, style=filled, fontname=Helvetica, fontsize=18];
+
+     // =============================
+     // Level 2 (Top Level)
+     // =============================
+     subgraph cluster_level2 {
+         label = &quot;Level 2 - Partition 0&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         topP [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;&lt;FONT POINT-SIZE=&quot;18&quot;&gt;C&lt;sup&gt;2&lt;/sup&gt;&lt;sub&gt;0&lt;/sub&gt;&lt;/FONT&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;&lt;FONT POINT-SIZE=&quot;18&quot;&gt;C&lt;sup&gt;2&lt;/sup&gt;&lt;sub&gt;1&lt;/sub&gt;&lt;/FONT&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;&lt;FONT POINT-SIZE=&quot;18&quot;&gt;C&lt;sup&gt;2&lt;/sup&gt;&lt;sub&gt;2&lt;/sub&gt;&lt;/FONT&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#45b594&quot;];
+         { rank=same; topP }
+     }
+
+     // =============================
+     // Level 1 (Middle Level)
+     // =============================
+     // Partition 0 of Level 1
+     subgraph cluster_level1_0 {
+         label = &quot;Level 1 - Partition 0&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         midP0 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;0&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;1&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;2&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#5aaed5&quot;];
+         { rank=same; midP0 }
+     }
+     // Partition 1 of Level 1
+     subgraph cluster_level1_1 {
+         label = &quot;Level 1 - Partition 1&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         midP1 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;3&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;4&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;5&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#5aaed5&quot;];
+         { rank=same; midP1 }
+     }
+     // Partition 2 of Level 1
+     subgraph cluster_level1_2 {
+         label = &quot;Level 1 - Partition 2&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         midP2 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;6&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;7&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;8&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#5aaed5&quot;];
+         { rank=same; midP2 }
+     }
+
+     // =============================
+     // Level 0 (Base Level)
+     // =============================
+     // Partition 0 of Level 0
+     subgraph cluster_level0_0 {
+         label = &quot;Level 0 - Partition 0&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         baseP0 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;0&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;1&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;2&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];
+         { rank=same; baseP0 }
+     }
+     // Partition 1 of Level 0
+     subgraph cluster_level0_1 {
+         label = &quot;Level 0 - Partition 1&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         baseP1 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;3&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;4&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;5&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];
+         { rank=same; baseP1 }
+     }
+     // Partition 2 of Level 0
+     subgraph cluster_level0_2 {
+         label = &quot;Level 0 - Partition 2&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         baseP2 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;6&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;7&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;8&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];
+         { rank=same; baseP2 }
+     }
+     // Partition 3 of Level 0
+     subgraph cluster_level0_3 {
+         label = &quot;Level 0 - Partition 3&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         baseP3 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;9&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;10&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;11&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];
+         { rank=same; baseP3 }
+     }
+     // Partition 4 of Level 0
+     subgraph cluster_level0_4 {
+         label = &quot;Level 0 - Partition 4&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         baseP4 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;12&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;13&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;14&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];
+         { rank=same; baseP4 }
+     }
+     // Partition 5 of Level 0
+     subgraph cluster_level0_5 {
+         label = &quot;Level 0 - Partition 5&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         baseP5 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;15&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;16&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;17&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];
+         { rank=same; baseP5 }
+     }
+     // Partition 6 of Level 0
+     subgraph cluster_level0_6 {
+         label = &quot;Level 0 - Partition 6&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         baseP6 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;18&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;19&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;20&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];
+         { rank=same; baseP6 }
+     }
+     // Partition 7 of Level 0
+     subgraph cluster_level0_7 {
+         label = &quot;Level 0 - Partition 7&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         baseP7 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;21&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;22&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;23&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];
+         { rank=same; baseP7 }
+     }
+     // Partition 8 of Level 0
+     subgraph cluster_level0_8 {
+         label = &quot;Level 0 - Partition 8&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         baseP8 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;24&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;25&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;26&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];
+         { rank=same; baseP8 }
+     }
+
+     // =============================
+     // Edges: Connect parents to children.
+     // =============================
+     // Top-level -&gt; Middle-level
+     topP:f0 -&gt; midP0;
+     topP:f1 -&gt; midP1;
+     topP:f2 -&gt; midP2;
+
+     // Middle-level -&gt; Base-level
+     midP0:f0 -&gt; baseP0;
+     midP0:f1 -&gt; baseP1;
+     midP0:f2 -&gt; baseP2;
+
+     midP1:f0 -&gt; baseP3;
+     midP1:f1 -&gt; baseP4;
+     midP1:f2 -&gt; baseP5;
+
+     midP2:f0 -&gt; baseP6;
+     midP2:f1 -&gt; baseP7;
+     midP2:f2 -&gt; baseP8;
+ }<figcaption>
+<p><span class="caption-text">Example with 3 levels and 3 partitions per level and 27 base vectors.</span><a class="headerlink" href="#fig-quake-index" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+</section>
+<section id="query-processing-example">
+<h2>Query Processing Example<a class="headerlink" href="#query-processing-example" title="Link to this heading"></a></h2>
+<p>When a query is issued, it descends the index hierarchy from the top level to the base level where vectors are
+stored. At each level, the query vector is compared against centroids to determine which partitions to scan next.
+This continues until the base level is reached, where the actual vectors are compared with the query. The figure
+below illustrates a 3-level Quake Index example. Scanned partitions are shown in full color, while non-scanned
+partitions are faded.</p>
+<figure class="align-default" id="fig-quake-index-query">
+ digraph QuakeIndexQueryVector {
+     rankdir=TB;
+     node [shape=none, style=filled, fontname=Helvetica, fontsize=18];
+
+     // Query vector node: use soft red color. hex = #fa4251
+     query [label=&quot;Query Vector&quot;, shape=rectangle, style=filled, fillcolor=&quot;#fa4251&quot;];
+
+     // =============================
+     // Level 2 (Top Level) - Fully scanned
+     // =============================
+     subgraph cluster_level2 {
+         label = &quot;Level 2 - Partition 0&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         topP [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;&lt;FONT POINT-SIZE=&quot;18&quot;&gt;C&lt;sup&gt;2&lt;/sup&gt;&lt;sub&gt;0&lt;/sub&gt;&lt;/FONT&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;&lt;FONT POINT-SIZE=&quot;18&quot;&gt;C&lt;sup&gt;2&lt;/sup&gt;&lt;sub&gt;1&lt;/sub&gt;&lt;/FONT&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;&lt;FONT POINT-SIZE=&quot;18&quot;&gt;C&lt;sup&gt;2&lt;/sup&gt;&lt;sub&gt;2&lt;/sub&gt;&lt;/FONT&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#45b594&quot;];
+         { rank=same; topP }
+     }
+
+     { rank=same; query, topP }
+
+     // =============================
+     // Level 1 (Middle Level)
+     // Only 2 of 3 partitions are scanned.
+     // Here, Partition 1 and Partition 2 are scanned, Partition 0 is faded.
+     // =============================
+     subgraph cluster_level1_0 {
+         label = &quot;Level 1 - Partition 0&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         midP0 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;0&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;1&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;2&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#f5f5f5&quot;];  // faded
+         { rank=same; midP0 }
+     }
+     subgraph cluster_level1_1 {
+         label = &quot;Level 1 - Partition 1&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         midP1 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;3&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;4&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;5&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#5aaed5&quot;];  // full color
+         { rank=same; midP1 }
+     }
+     subgraph cluster_level1_2 {
+         label = &quot;Level 1 - Partition 2&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         midP2 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;6&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;7&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;C&lt;sup&gt;1&lt;/sup&gt;&lt;sub&gt;8&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#5aaed5&quot;];  // full color
+         { rank=same; midP2 }
+     }
+
+     // =============================
+     // Level 0 (Base Level)
+     // 9 partitions total; only 4 are scanned.
+     // Partitions under non-scanned middle (Partition 0) are faded.
+     // For Partition 1 (child of midP1): scan 2 out of 3 base partitions.
+     // For Partition 2 (child of midP2): scan 2 out of 3 base partitions.
+     // =============================
+     // Base partitions for middle level Partition 0 (faded)
+     subgraph cluster_level0_0 {
+         label = &quot;Level 0 - Partition 0&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         baseP0 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;0&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;1&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;2&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#f5f5f5&quot;];  // faded
+         { rank=same; baseP0 }
+     }
+     subgraph cluster_level0_1 {
+         label = &quot;Level 0 - Partition 1&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         baseP1 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;3&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;4&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;5&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#f5f5f5&quot;];  // faded
+         { rank=same; baseP1 }
+     }
+     subgraph cluster_level0_2 {
+         label = &quot;Level 0 - Partition 2&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         baseP2 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;6&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;7&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;8&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#f5f5f5&quot;];  // faded
+         { rank=same; baseP2 }
+     }
+     // Base partitions for middle level Partition 1 (scanned: 2 of 3)
+     subgraph cluster_level0_3 {
+         label = &quot;Level 0 - Partition 3&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         baseP3 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;9&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;10&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;11&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];  // scanned
+         { rank=same; baseP3 }
+     }
+     subgraph cluster_level0_4 {
+         label = &quot;Level 0 - Partition 4&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         baseP4 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;12&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;13&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;14&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];  // scanned
+         { rank=same; baseP4 }
+     }
+     subgraph cluster_level0_5 {
+         label = &quot;Level 0 - Partition 5&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         baseP5 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;15&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;16&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;17&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#f5f5f5&quot;];  // faded
+         { rank=same; baseP5 }
+     }
+     // Base partitions for middle level Partition 2 (scanned: 2 of 3)
+     subgraph cluster_level0_6 {
+         label = &quot;Level 0 - Partition 6&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         baseP6 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;18&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;19&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;20&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#f5f5f5&quot;];  // faded
+         { rank=same; baseP6 }
+     }
+     subgraph cluster_level0_7 {
+         label = &quot;Level 0 - Partition 7&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         baseP7 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;21&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;22&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;23&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];  // scanned
+         { rank=same; baseP7 }
+     }
+     subgraph cluster_level0_8 {
+         label = &quot;Level 0 - Partition 8&quot;;
+         style=&quot;rounded&quot;;
+         color=&quot;gray&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+         baseP8 [label=&lt;
+           &lt;TABLE BORDER=&quot;0&quot; CELLBORDER=&quot;1&quot; CELLSPACING=&quot;0&quot;&gt;
+             &lt;TR&gt;
+               &lt;TD PORT=&quot;f0&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;24&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f1&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;25&lt;/sub&gt;&lt;/TD&gt;
+               &lt;TD PORT=&quot;f2&quot;&gt;V&lt;sup&gt;0&lt;/sup&gt;&lt;sub&gt;26&lt;/sub&gt;&lt;/TD&gt;
+             &lt;/TR&gt;
+           &lt;/TABLE&gt;
+         &gt;, fillcolor=&quot;#7173f9&quot;];  // scanned
+         { rank=same; baseP8 }
+     }
+
+     // =============================
+     // Edges: Connect query -&gt; top level -&gt; middle level -&gt; base level.
+     // =============================
+     query -&gt; topP;
+
+     // Top-level -&gt; Middle-level
+     topP:f0 -&gt; midP0 [dir=none;penwidth=0];
+     topP:f1 -&gt; midP1;
+     topP:f2 -&gt; midP2;
+
+     // Middle-level -&gt; Base-level
+     midP0:f0 -&gt; baseP0 [dir=none;penwidth=0];
+     midP0:f1 -&gt; baseP1 [dir=none;penwidth=0];
+     midP0:f2 -&gt; baseP2 [dir=none;penwidth=0];
+
+     midP1:f0 -&gt; baseP3;
+     midP1:f1 -&gt; baseP4;
+     midP1:f2 -&gt; baseP5 [dir=none;penwidth=0];
+
+     midP2:f0 -&gt; baseP6 [dir=none;penwidth=0];
+     midP2:f1 -&gt; baseP7;
+     midP2:f2 -&gt; baseP8;
+ }<figcaption>
+<p><span class="caption-text">Query Processing Example (3-Level Quake Index)</span><a class="headerlink" href="#fig-quake-index-query" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+</section>
+<section id="index-memory-layout">
+<h2>Index Memory Layout<a class="headerlink" href="#index-memory-layout" title="Link to this heading"></a></h2>
+<p>The following figure demonstrates how the index can be distributed across three NUMA nodes, each with three CPUs.
+Partitions in each NUMA node’s memory region are pinned to specific CPUs, enabling efficient local access. Level-2
+partitions are shown in green, Level-1 in blue, and Level-0 in purple. In order to distribute the top-level,
+the single top-level partition is sharded across NUMA nodes.</p>
+<figure class="align-default" id="fig-hw-layout-distributed">
+ digraph QuakeHW {
+     compound=true;
+     // Lay out nodes left-to-right
+     rankdir=&quot;same&quot;;
+     fontsize=18;
+     node [fontname=Helvetica, style=filled];
+
+     // =============================
+     // Entire System
+     // =============================
+     subgraph cluster_system {
+         label=&quot;Hardware: 3 NUMA Nodes, each with 3 CPUs&quot;;
+         style=&quot;bold,rounded&quot;;
+         color=&quot;black&quot;;
+         labelloc=&quot;t&quot;;
+         labeljust=&quot;c&quot;;
+
+         // =============================
+         // NUMA Node 0
+         // =============================
+         subgraph cluster_node0 {
+             label=&quot;NUMA Node 0&quot;;
+             style=&quot;rounded&quot;;
+             color=&quot;gray&quot;;
+             labelloc=&quot;t&quot;;
+             labeljust=&quot;c&quot;;
+
+             // Place memory (left) and CPU (right) side by side
+             rankdir=&quot;same&quot;;
+
+             // ---------- Memory Sub-Cluster ----------
+             subgraph cluster_mem0 {
+                 label=&quot;&quot;;
+                 style=&quot;rounded&quot;;
+                 color=&quot;lightgray&quot;;
+
+                 // One Level 2 partition
+                 p2_0 [label=&quot;Partition 0\n(Level 2)&quot;, shape=box, fillcolor=&quot;#45b594&quot;];
+                 // One Level 1 partition
+                 p1_0 [label=&quot;Partition 0\n(Level 1)&quot;, shape=box, fillcolor=&quot;#5aaed5&quot;];
+                 // Three Level 0 (base) partitions
+                 p0_0 [label=&quot;Partition 0\n(Level 0)&quot;, shape=box, fillcolor=&quot;#7173f9&quot;];
+                 p0_1 [label=&quot;Partition 1\n(Level 0)&quot;, shape=box, fillcolor=&quot;#7173f9&quot;];
+                 p0_2 [label=&quot;Partition 2\n(Level 0)&quot;, shape=box, fillcolor=&quot;#7173f9&quot;];
+             }
+
+             // ---------- CPU Sub-Cluster ----------
+             subgraph cluster_cpus0 {
+                 label=&quot;&quot;;
+                 style=&quot;rounded&quot;;
+                 color=&quot;lightgray&quot;;
+
+                 cpu0_0 [label=&quot;CPU 0&quot;, shape=box, fillcolor=&quot;#ffffff&quot;];
+                 cpu0_1 [label=&quot;CPU 1&quot;, shape=box, fillcolor=&quot;#ffffff&quot;];
+                 cpu0_2 [label=&quot;CPU 2&quot;, shape=box, fillcolor=&quot;#ffffff&quot;];
+             }
+
+             // ---------- Pinned Edges ----------
+             // Example: pin top-level partition to CPU0_0, mid-level to CPU0_1, base-levels to CPU0_2
+             p2_0 -&gt; cpu0_0 [dir=None, constraint=false];
+             p1_0 -&gt; cpu0_1 [dir=None, constraint=false];
+             p0_0 -&gt; cpu0_1 [dir=None, constraint=true];
+             p0_1 -&gt; cpu0_2 [dir=None, constraint=false];
+             p0_2 -&gt; cpu0_2 [dir=None, constraint=false];
+         }
+
+         // =============================
+         // NUMA Node 1
+         // =============================
+         subgraph cluster_node1 {
+             label=&quot;NUMA Node 1&quot;;
+             style=&quot;rounded&quot;;
+             color=&quot;gray&quot;;
+             labelloc=&quot;t&quot;;
+             labeljust=&quot;c&quot;;
+
+             rankdir=&quot;same&quot;;
+
+             // ---------- Memory Sub-Cluster ----------
+             subgraph cluster_mem1 {
+                 label=&quot;&quot;;
+                 style=&quot;rounded&quot;;
+                 color=&quot;lightgray&quot;;
+
+                 // One Level 2 partition
+                 p2_1 [label=&quot;Partition 1\n(Level 2)&quot;, shape=box, fillcolor=&quot;#45b594&quot;];
+                 // One Level 1 partition
+                 p1_1 [label=&quot;Partition 1\n(Level 1)&quot;, shape=box, fillcolor=&quot;#5aaed5&quot;];
+                 // Three Level 0 (base) partitions
+                 p0_3 [label=&quot;Partition 3\n(Level 0)&quot;, shape=box, fillcolor=&quot;#7173f9&quot;];
+                 p0_4 [label=&quot;Partition 4\n(Level 0)&quot;, shape=box, fillcolor=&quot;#7173f9&quot;];
+                 p0_5 [label=&quot;Partition 5\n(Level 0)&quot;, shape=box, fillcolor=&quot;#7173f9&quot;];
+             }
+
+             // ---------- CPU Sub-Cluster ----------
+             subgraph cluster_cpus1 {
+                 label=&quot;&quot;;
+                 style=&quot;rounded&quot;;
+                 color=&quot;lightgray&quot;;
+
+                 cpu1_0 [label=&quot;CPU 0&quot;, shape=box, fillcolor=&quot;#ffffff&quot;];
+                 cpu1_1 [label=&quot;CPU 1&quot;, shape=box, fillcolor=&quot;#ffffff&quot;];
+                 cpu1_2 [label=&quot;CPU 2&quot;, shape=box, fillcolor=&quot;#ffffff&quot;];
+             }
+
+             // ---------- Pinned Edges ----------
+             p2_1 -&gt; cpu1_0 [dir=None, constraint=false];
+             p1_1 -&gt; cpu1_1 [dir=None, constraint=false];
+             p0_3 -&gt; cpu1_1 [dir=None, constraint=true];
+             p0_4 -&gt; cpu1_2 [dir=None, constraint=false];
+             p0_5 -&gt; cpu1_2 [dir=None, constraint=false];
+         }
+
+         // =============================
+         // NUMA Node 2
+         // =============================
+         subgraph cluster_node2 {
+             label=&quot;NUMA Node 2&quot;;
+             style=&quot;rounded&quot;;
+             color=&quot;gray&quot;;
+             labelloc=&quot;t&quot;;
+             labeljust=&quot;c&quot;;
+
+             rankdir=&quot;same&quot;;
+
+             // ---------- Memory Sub-Cluster ----------
+             subgraph cluster_mem2 {
+                 label=&quot;&quot;;
+                 style=&quot;rounded&quot;;
+                 color=&quot;lightgray&quot;;
+
+                 // One Level 2 partition
+                 p2_2 [label=&quot;Partition 2\n(Level 2)&quot;, shape=box, fillcolor=&quot;#45b594&quot;];
+                 // One Level 1 partition
+                 p1_2 [label=&quot;Partition 2\n(Level 1)&quot;, shape=box, fillcolor=&quot;#5aaed5&quot;];
+                 // Three Level 0 (base) partitions
+                 p0_6 [label=&quot;Partition 6\n(Level 0)&quot;, shape=box, fillcolor=&quot;#7173f9&quot;];
+                 p0_7 [label=&quot;Partition 7\n(Level 0)&quot;, shape=box, fillcolor=&quot;#7173f9&quot;];
+                 p0_8 [label=&quot;Partition 8\n(Level 0)&quot;, shape=box, fillcolor=&quot;#7173f9&quot;];
+             }
+
+             // ---------- CPU Sub-Cluster ----------
+             subgraph cluster_cpus2 {
+                 label=&quot;&quot;;
+                 style=&quot;rounded&quot;;
+                 color=&quot;lightgray&quot;;
+
+                 cpu2_0 [label=&quot;CPU 0&quot;, shape=box, fillcolor=&quot;#ffffff&quot;];
+                 cpu2_1 [label=&quot;CPU 1&quot;, shape=box, fillcolor=&quot;#ffffff&quot;];
+                 cpu2_2 [label=&quot;CPU 2&quot;, shape=box, fillcolor=&quot;#ffffff&quot;];
+             }
+
+             // ---------- Pinned Edges ----------
+             p2_2 -&gt; cpu2_0 [dir=None, constraint=false];
+             p1_2 -&gt; cpu2_1 [dir=None, constraint=false];
+             p0_6 -&gt; cpu2_1 [dir=None, constraint=true];
+             p0_7 -&gt; cpu2_2 [dir=None, constraint=false];
+             p0_8 -&gt; cpu2_2 [dir=None, constraint=false];
+         }
+         edge[constraint=false, style=solid];
+         cpu0_0 -&gt; cpu1_0 [ style=invis];
+         cpu1_0 -&gt; cpu2_0 [ style=invis];
+     }
+ }<figcaption>
+<p><span class="caption-text">Hardware Layout: Index Distributed Across 3 NUMA Nodes (each with 3 CPUs)</span><a class="headerlink" href="#fig-hw-layout-distributed" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../api.html" class="btn btn-neutral float-left" title="Python API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="partition_manager.html" class="btn btn-neutral float-right" title="PartitionManager" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Jason Mohoney.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

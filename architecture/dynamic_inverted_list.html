@@ -6,9 +6,10 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DynamicInvertedLists Class Design &mdash; Quake 0.0.1 documentation</title>
+  <title>DynamicInvertedLists &mdash; Quake 0.0.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="../_static/css/modify.css?v=fab1bd98" />
 
   
@@ -20,8 +21,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="PartitionManager Class Documentation" href="partition_manager.html" />
-    <link rel="prev" title="IndexPartition" href="index_partition.html" /> 
+    <link rel="next" title="IndexPartition" href="index_partition.html" />
+    <link rel="prev" title="PartitionManager" href="partition_manager.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -49,14 +50,25 @@
 <li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../development_guide.html">Development Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../api.html">Python API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="index_partition.html">IndexPartition</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">DynamicInvertedLists Class Design</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#key-responsibilities">Key Responsibilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#limitations">Limitations</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="architecture.html">Quake Index Architecture</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#quakeindex-class-components">QuakeIndex Class Components</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="architecture.html#detailed-components">Detailed Components</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="partition_manager.html">PartitionManager</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">DynamicInvertedLists</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#key-responsibilities">Key Responsibilities</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#limitations">Limitations</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="partition_manager.html">PartitionManager Class Documentation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="index_partition.html">IndexPartition</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#data-layout">Data Layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#query-processing-example">Query Processing Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#index-memory-layout">Index Memory Layout</a></li>
+</ul>
+</li>
 </ul>
 
         </div>
@@ -73,7 +85,8 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">DynamicInvertedLists Class Design</li>
+          <li class="breadcrumb-item"><a href="architecture.html">Quake Index Architecture</a></li>
+      <li class="breadcrumb-item active">DynamicInvertedLists</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/architecture/dynamic_inverted_list.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -83,8 +96,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="dynamicinvertedlists-class-design">
-<h1>DynamicInvertedLists Class Design<a class="headerlink" href="#dynamicinvertedlists-class-design" title="Link to this heading"></a></h1>
+  <section id="dynamicinvertedlists">
+<h1>DynamicInvertedLists<a class="headerlink" href="#dynamicinvertedlists" title="Link to this heading"></a></h1>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">DynamicInvertedLists</span></code> class provides a dynamic, NUMA-aware inverted list implementation
@@ -126,8 +139,8 @@ inefficient for very large partitions.</p></li>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="index_partition.html" class="btn btn-neutral float-left" title="IndexPartition" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="partition_manager.html" class="btn btn-neutral float-right" title="PartitionManager Class Documentation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="partition_manager.html" class="btn btn-neutral float-left" title="PartitionManager" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="index_partition.html" class="btn btn-neutral float-right" title="IndexPartition" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

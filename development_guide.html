@@ -9,6 +9,7 @@
   <title>Development Guide &mdash; Quake 0.0.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
       <link rel="stylesheet" type="text/css" href="_static/css/modify.css?v=fab1bd98" />
 
   
@@ -17,14 +18,6 @@
       <script src="_static/documentation_options.js?v=d45e8c67"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-      <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
-      <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
-      <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs";mermaid.registerLayoutLoaders(elkLayouts);mermaid.initialize({startOnLoad:false});</script>
-      <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-      <script type="module">
-import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
-window.addEventListener("load", () => mermaid.run());
-</script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -56,7 +49,7 @@ window.addEventListener("load", () => mermaid.run());
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Development Guide</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#overview-of-the-architecture">Overview of the Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#codebase-overview">Codebase Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#directory-structure">Directory Structure</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#contribution-workflow-coding-standards">Contribution Workflow &amp; Coding Standards</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#git-workflow-prs">Git Workflow &amp; PRs</a></li>
@@ -69,9 +62,7 @@ window.addEventListener("load", () => mermaid.run());
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">Python API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/index_partition.html">IndexPartition</a></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/dynamic_inverted_list.html">DynamicInvertedLists Class Design</a></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/partition_manager.html">PartitionManager Class Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture/architecture.html">Quake Index Architecture</a></li>
 </ul>
 
         </div>
@@ -101,8 +92,8 @@ window.addEventListener("load", () => mermaid.run());
   <section id="development-guide">
 <h1>Development Guide<a class="headerlink" href="#development-guide" title="Link to this heading"></a></h1>
 <p>Quake is a high‑performance vector search engine written in C++ with Python bindings. It supports adaptive, real‑time updates and query‑adaptive search—letting you specify a recall target so that the index automatically adjusts its search scope. This guide will help you rapidly understand our design, coding standards and contribution workflow.</p>
-<section id="overview-of-the-architecture">
-<h2>Overview of the Architecture<a class="headerlink" href="#overview-of-the-architecture" title="Link to this heading"></a></h2>
+<section id="codebase-overview">
+<h2>Codebase Overview<a class="headerlink" href="#codebase-overview" title="Link to this heading"></a></h2>
 <p>Quake’s design is split into two major layers:</p>
 <ol class="arabic simple">
 <li><p><strong>The C++ Core</strong>
@@ -123,58 +114,8 @@ C++ functionality is exposed to Python via pybind11 (located in <code class="doc
 <li><p><strong>The Python Layer</strong>
 Provides user-friendly wrappers, dataset loaders, and utility functions for integrating with PyTorch and other ML workflows. It is located in the <code class="docutils literal notranslate"><span class="pre">src/python/</span></code> directory and uses Sphinx (with autodoc) to extract docstrings from our Python code.</p></li>
 </ol>
-<p>Below shows a flowchart of how the main components and classes of Quake interact.</p>
-<pre  class="mermaid">
-        flowchart TD
-    subgraph C++_Core[&quot;C++ Core&quot;]
-        QI[QuakeIndex]
-        PM[PartitionManager]
-        MP[&quot;MaintenancePolicy&quot;]
-        QC[QueryCoordinator]
-        DIL[DynamicInvertedLists]
-        IP[IndexPartition]
-        B[&quot;Bindings (pybind11)&quot;]
-
-        MO[MaintenancePolicyParams]
-        SO[SearchParams]
-        IB[IndexBuildParams]
-    end
-
-    subgraph Python_Layer[&quot;Python Layer&quot;]
-        PA[&quot;Quake Python API&quot;]
-        UT[&quot;Utility Modules &amp; Helpers&quot;]
-        DS[&quot;Dataset Loaders&quot;]
-        WG[&quot;Workload Generator&quot;]
-    end
-
-    %% Connections within C++ Core
-    QI --&gt; PM
-    QI --&gt; MP
-    QI --&gt; QC
-    PM --&gt; DIL
-    DIL --&gt; IP
-
-    B --&gt; QI
-    B --&gt; MO
-    B --&gt; SO
-    B --&gt; IB
-
-    %% Expose C++ Core to Python
-    PA --&gt; B
-
-    %% Python Layer structure
-    PA --&gt; UT
-    PA --&gt; DS
-    PA --&gt; WG
-
-    %% Define custom styles
-    classDef coreStyle fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef pythonStyle fill:#bbf,stroke:#333,stroke-width:2px;
-
-    %% Assign styles to nodes
-    class QI,PM,MP,QC,DIL,IP,MO,SO,IB coreStyle;
-    class PA,UT,DS,WG pythonStyle;
-    </pre></section>
+<p>See the <a class="reference internal" href="architecture/architecture.html"><span class="doc">Quake Index Architecture</span></a> for a detailed breakdown of the components and their interactions.</p>
+</section>
 <section id="directory-structure">
 <h2>Directory Structure<a class="headerlink" href="#directory-structure" title="Link to this heading"></a></h2>
 <p>Familiarize yourself with the layout of the repository:</p>
