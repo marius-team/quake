@@ -10,6 +10,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # -----------------------------
 # Install system dependencies
 # -----------------------------
+RUN add-apt-repository universe
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       wget \
@@ -20,6 +22,7 @@ RUN apt-get update && \
       git \
       libomp5 \
       libomp-dev \
+      graphviz \
     && rm -rf /var/lib/apt/lists/*
 
 
