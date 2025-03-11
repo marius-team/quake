@@ -10,8 +10,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 # -----------------------------
 # Install system dependencies
 # -----------------------------
-RUN add-apt-repository universe
-
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       wget \
