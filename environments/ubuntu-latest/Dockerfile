@@ -20,6 +20,7 @@ RUN apt-get update && \
       git \
       libomp5 \
       libomp-dev \
+      graphviz \
     && rm -rf /var/lib/apt/lists/*
 
 
