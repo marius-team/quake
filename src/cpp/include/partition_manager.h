@@ -9,6 +9,7 @@
 
 #include <common.h>
 #include <dynamic_inverted_list.h>
+#include <arrow/api.h>
 
 class QuakeIndex;
 

@@ -103,6 +103,7 @@ target_include_directories(${PROJECT_NAME}
         ${TORCH_INCLUDE_DIRS}
         ${project_INCLUDE_DIR}
         ${project_THIRD_PARTY_DIR}/concurrentqueue/
+        ${project_THIRD_PARTY_DIR}/arrow/cpp/src
         faiss
 )
 

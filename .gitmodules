@@ -7,3 +7,6 @@
 [submodule "src/cpp/third_party/concurrentqueue"]
 	path = src/cpp/third_party/concurrentqueue
 	url = https://github.com/cameron314/concurrentqueue.git
+[submodule "src/cpp/third_party/arrow"]
+	path = src/cpp/third_party/arrow
+	url = https://github.com/apache/arrow.git

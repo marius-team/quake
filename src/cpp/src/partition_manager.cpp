@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <iostream>
 #include "quake_index.h"
+#include <arrow/api.h>
 
 using std::runtime_error;
 
