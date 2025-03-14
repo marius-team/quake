@@ -377,7 +377,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     // 3) WAIT FOR WORKERS
     // ============================
     start_time = std::chrono::high_resolution_clock::now();
-    vector<Tensor> boundary_distances = vector<Tensor>(num_queries);
+    vector<vector<float>> boundary_distances(num_queries);
     if (use_aps) {
         for (int64_t q = 0; q < num_queries; q++) {
             Tensor cluster_centroids = parent_->get(partition_ids[q]);
@@ -393,33 +393,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     start_time = std::chrono::high_resolution_clock::now();
     while (true) {
         {
-            int time_since_last_flush_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::high_resolution_clock::now() - last_flush_time).count();
-            if (use_aps && time_since_last_flush_us > search_params->aps_flush_period_us) {
-                for (int64_t q = 0; q < num_queries; q++) {
-                    shared_ptr<TopkBuffer> curr_buffer = query_topk_buffers_[q];
-                    Tensor curr_boundary_distances = boundary_distances[q];
-
-                    int partitions_scanned = curr_buffer->get_num_partitions_scanned();
-                    if (curr_buffer->currently_processing_query() && partitions_scanned > 0 && partitions_scanned <
-                        curr_boundary_distances.size(0)) {
-                        float query_radius = curr_buffer->get_kth_distance();
-                        Tensor partition_probabilities = compute_recall_profile(curr_boundary_distances,
-                            query_radius,
-                            dimension,
-                            {},
-                            search_params->use_precomputed,
-                            metric_ == faiss::METRIC_L2);
-                        Tensor recall_profile = torch::cumsum(partition_probabilities, 0);
-                        last_flush_time = std::chrono::high_resolution_clock::now();
-                        if (recall_profile[partitions_scanned - 1].item<float>() > search_params->recall_target) {
-                            curr_buffer->set_processing_query(false);
-                            break;
-                        }
-                    }
-                }
-            }
-
             std::lock_guard<std::mutex> lock(result_mutex_);
             if (jobs_.empty()) {
                 break; // all jobs done
@@ -523,8 +496,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
         const float* query_vec = x_ptr + q * dimension;
         int num_parts = partition_ids_to_scan.size(1);
 
-        Tensor boundary_distances;
-        Tensor partition_probabilities;
+        vector<float> boundary_distances;
         float query_radius = 1000000.0;
         if (metric_ == faiss::METRIC_INNER_PRODUCT) {
             query_radius = -1000000.0;
@@ -539,11 +511,15 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                                                             metric_ == faiss::METRIC_L2);
 
             // sort order by boundary distance
-            sort_args = torch::argsort(boundary_distances, 0, false);
+            sort_args = torch::argsort(torch::tensor(boundary_distances), 0, false);
         }
+
         auto sort_args_accessor = sort_args.accessor<int64_t, 1>();
+
+        vector<int64_t> hit_partition_ids_vec;
         for (int p = 0; p < num_parts; p++) {
             int64_t pi = partition_ids_accessor[q][p];
+            hit_partition_ids_vec.push_back(pi);
 
             if (pi == -1) {
                 continue; // Skip invalid partitions
@@ -567,20 +543,35 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
 
             start_time = std::chrono::high_resolution_clock::now();
             if (use_aps) {
-                if (percent_change > search_params->recompute_threshold) {
-                    query_radius = curr_radius;
-                    partition_probabilities = compute_recall_profile(boundary_distances,
-                                                                     query_radius,
-                                                                     dimension,
-                                                                     {},
-                                                                     search_params->use_precomputed,
-                                                                     metric_ == faiss::METRIC_L2).cumsum(0);
-                }
-                if (partition_probabilities[p].item<float>() >= search_params->recall_target) {
-                    break;
-                }
-            }
+                 float recall_estimate = 0.0;
+                 if (percent_change > search_params->recompute_threshold) {
+                     query_radius = curr_radius;
+
+                     vector<float> partition_probs = compute_recall_profile(boundary_distances,
+                                                                      query_radius,
+                                                                      dimension,
+                                                                      {},
+                                                                      search_params->use_precomputed,
+                                                                      metric_ == faiss::METRIC_L2);
+
+                     recall_estimate = 0.0;
+                     for (int i = 0; i < p; i++) {
+                         recall_estimate += partition_probs[i];
+                     }
+                 }
+                 if (recall_estimate >= search_params->recall_target) {
+                     std::cout << "Recall target reached." << std::endl;
+                     std::cout << "Recall estimate: " << recall_estimate << std::endl;
+                     std::cout << "Scanned " << p << " partitions." << std::endl;
+                     break;
+                 }
+             }
         }
+
+        if (maintenance_policy_ != nullptr) {
+            maintenance_policy_->record_query_hits(hit_partition_ids_vec);
+        }
+
         // Retrieve the top-k results for query q.
         all_topk_dists[q] = topk_buf->get_topk();
         all_topk_ids[q] = topk_buf->get_topk_indices();
@@ -647,15 +638,6 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
         auto parent_search_result = parent_->search(x, parent_search_params);
         partition_ids_to_scan = parent_search_result->ids;
         parent_timing_info = parent_search_result->timing_info;
-
-        // if (maintenance_policy_ != nullptr) {
-        //     for (int i = 0; i < partition_ids_to_scan.size(0); i++) {
-        //         vector<int64_t> hit_partition_ids_vec = vector<int64_t>(partition_ids_to_scan[i].data_ptr<int64_t>(),
-        //                                                                 partition_ids_to_scan[i].data_ptr<int64_t>() +
-        //                                                                 partition_ids_to_scan[i].size(0));
-        //         maintenance_policy_->increment_hit_count(hit_partition_ids_vec);
-        //     }
-        // }
     }
 
     auto search_result = scan_partitions(x, partition_ids_to_scan, search_params);

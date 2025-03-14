@@ -137,6 +137,18 @@ public:
     Tensor get_partition_sizes(Tensor partition_ids = Tensor());
 
     /**
+     * @brief Get the partition size.
+     * @param partition_ids Vector of partition IDs.
+     */
+     vector<int64_t> get_partition_sizes(vector<int64_t> partition_ids);
+
+    /**
+     * @brief Get the partition size.
+     * @param partition_id The ID of the partition.
+     */
+    int64_t get_partition_size(int64_t partition_id);
+
+    /**
      * @brief Get the partition IDs.
      */
     Tensor get_partition_ids();

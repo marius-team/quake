@@ -87,13 +87,17 @@ constexpr int DEFAULT_MIN_PARTITION_SIZE = 32;         ///< Default minimum allo
 constexpr float DEFAULT_ALPHA = 0.9f;                  ///< Default alpha parameter for maintenance.
 constexpr bool DEFAULT_ENABLE_SPLIT_REJECTION = true;  ///< Default flag to enable rejection of splits.
 constexpr bool DEFAULT_ENABLE_DELETE_REJECTION = true; ///< Default flag to enable rejection of deletions.
-constexpr float DEFAULT_DELETE_THRESHOLD_NS = 20.0f;   ///< Default threshold in nanoseconds for deletion decisions.
-constexpr float DEFAULT_SPLIT_THRESHOLD_NS = 20.0f;    ///< Default threshold in nanoseconds for split decisions.
+constexpr float DEFAULT_DELETE_THRESHOLD_NS = 10.0f;   ///< Default threshold in nanoseconds for deletion decisions.
+constexpr float DEFAULT_SPLIT_THRESHOLD_NS = 10.0f;    ///< Default threshold in nanoseconds for split decisions.
 constexpr int DEFAULT_K_LARGE = 50;                    ///< Default "large" k value (used in de-drift maintenance).
 constexpr int DEFAULT_K_SMALL = 50;                    ///< Default "small" k value (used in de-drift maintenance).
 constexpr bool DEFAULT_MODIFY_CENTROIDS = true;        ///< Default flag to modify centroids during maintenance.
 constexpr int DEFAULT_TARGET_PARTITION_SIZE = 1000;    ///< Default target partition size.
 constexpr float DEFAULT_MAX_PARTITION_RATIO = 2.0f;    ///< Default maximum allowed partition ratio.
+
+const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_N = {1, 2, 4, 16, 64, 256, 1024, 4096, 16384, 65536};   ///< Default range of n values for latency estimator.
+const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_K = {1, 4, 16, 64, 256};                                ///< Default range of k values for latency estimator.
+constexpr int DEFAULT_LATENCY_ESTIMATOR_NTRIALS = 5;                                                          ///< Default number of trials for latency estimator.
 
 // macros
 #define DEBUG_PRINT(x) std::cout << #x << " = " << x << std::endl;

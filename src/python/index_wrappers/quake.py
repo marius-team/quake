@@ -136,7 +136,7 @@ class QuakeWrapper(IndexWrapper):
         """
         self.index.save(str(filename))
 
-    def load(self, filename: str, n_workers: int = 1, use_numa: bool = False, verbose: bool = False,
+    def load(self, filename: str, n_workers: int = 0, use_numa: bool = False, verbose: bool = False,
              verify_numa: bool = False, same_core: bool = True, use_centroid_workers: bool = False, use_adaptive_n_probe : bool = False):
         """
         Load the index from a file.
@@ -146,7 +146,7 @@ class QuakeWrapper(IndexWrapper):
         print(
             f"Loading index from {filename}, with {n_workers} workers, use_numa={use_numa}, verbose={verbose}, verify_numa={verify_numa}, same_core={same_core}, use_centroid_workers={use_centroid_workers}")
         self.index = QuakeIndex()
-        self.index.load(str(filename), True)
+        self.index.load(str(filename), n_workers)
 
     def centroids(self) -> torch.Tensor:
         """

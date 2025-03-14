@@ -1,12 +1,8 @@
-//
-// Created by Jason on 12/16/24.
-// Prompt for GitHub Copilot:
-// - Conform to the google style guide
-// - Use descriptive variable names
-//
-
-#include "latency_estimation.h"
-#include "list_scanning.h"
+#include "maintenance_cost_estimator.h"
+#include <list_scanning.h>
+#include <stdexcept>
+#include <iostream>
+#include <fstream>
 
 // A simple helper to split a string by delimiter.
 // You can replace this with any library function if you wish.
@@ -366,4 +362,73 @@ bool ListScanLatencyEstimator::load_latency_profile(const std::string &filename)
     // Assign to our model
     scan_latency_model_ = std::move(file_latency_model);
     return true;
+}
+
+
+MaintenanceCostEstimator::MaintenanceCostEstimator(int d, float alpha, int k)
+    : d_(d), alpha_(alpha), k_(k) {
+    if (k_ <= 0) {
+        throw std::invalid_argument("k must be positive");
+    }
+    if (alpha_ <= 0.0f) {
+        throw std::invalid_argument("alpha must be positive");
+    }
+
+    latency_estimator_ = make_shared<ListScanLatencyEstimator>(
+        d_,
+        DEFAULT_LATENCY_ESTIMATOR_RANGE_N,
+        DEFAULT_LATENCY_ESTIMATOR_RANGE_K,
+        DEFAULT_LATENCY_ESTIMATOR_NTRIALS);
+}
+
+float MaintenanceCostEstimator::compute_split_delta(int partition_size, float hit_rate, int total_partitions) const {
+    // Compute overhead incurred by adding one more partition.
+    float delta_overhead = latency_estimator_->estimate_scan_latency(total_partitions + 1, k_) -
+                             latency_estimator_->estimate_scan_latency(total_partitions, k_);
+    // Cost before splitting.
+    float old_cost = latency_estimator_->estimate_scan_latency(partition_size, k_) * hit_rate;
+    // Cost after splitting: assume the partition is split in half and cost doubles due to two partitions,
+    // scaled by the alpha factor.
+    float new_cost = latency_estimator_->estimate_scan_latency(partition_size / 2, k_) * hit_rate * (2.0f * alpha_);
+    return delta_overhead + new_cost - old_cost;
+}
+
+float MaintenanceCostEstimator::compute_delete_delta(int partition_size,
+                                                       float hit_rate,
+                                                       int total_partitions,
+                                                       float current_scan_fraction) const {
+    // Ensure that there are at least 2 partitions; deletion is undefined otherwise.
+    if (total_partitions <= 1) {
+        return 0.0f;
+    }
+
+    // Let T = total_partitions, n = partition_size, and p = hit_rate.
+    // Compute the structural benefit: the reduction in overhead when one partition is removed.
+    float latency_T = latency_estimator_->estimate_scan_latency(total_partitions, k_);
+    float latency_T_minus_1 = latency_estimator_->estimate_scan_latency(total_partitions - 1, k_);
+    float delta_overhead = latency_T_minus_1 - latency_T;
+
+    // Compute the merging penalty.
+    // After deletion, the n vectors of the deleted partition are redistributed among (T-1) partitions.
+    // Under an even-distribution assumption, each remaining partition gets an extra n/(T-1) vectors.
+    // The new cost for queries that originally hit this partition becomes:
+    // L(n + n/(T-1), k) instead of L(n, k). The extra cost is:
+    float merged_partition_size = partition_size + partition_size / static_cast<float>(total_partitions - 1);
+    float latency_merged = latency_estimator_->estimate_scan_latency(merged_partition_size, k_);
+    float latency_original = latency_estimator_->estimate_scan_latency(partition_size, k_);
+    float delta_merge = latency_merged - latency_original;
+
+    float delta_reassign = current_scan_fraction * latency_original;
+
+    // Total delta cost is the sum of the structural benefit and the merging penalty scaled by the hit rate.
+    float delta = delta_overhead + hit_rate * delta_merge + delta_reassign;
+    return delta;
+}
+
+shared_ptr<ListScanLatencyEstimator> MaintenanceCostEstimator::get_latency_estimator() const {
+    return latency_estimator_;
+}
+
+int MaintenanceCostEstimator::get_k() const {
+    return k_;
 }

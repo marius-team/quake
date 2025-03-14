@@ -54,7 +54,7 @@ inline void print_array(const float *array, int dimension) {
     std::cout << std::endl << std::endl;
 }
 
-inline Tensor compute_boundary_distances(const Tensor &query, const Tensor &centroids, bool euclidean = true) {
+inline vector<float> compute_boundary_distances(const Tensor &query, const Tensor &centroids, bool euclidean = true) {
     Tensor nearest_centroid = centroids[0];
     int dimension = query.size(0);
 
@@ -64,14 +64,14 @@ inline Tensor compute_boundary_distances(const Tensor &query, const Tensor &cent
     const float *nearest_centroid_ptr = nearest_centroid.data_ptr<float>();
     const float *centroids_ptr = centroids.data_ptr<float>();
 
-    std::vector<float> line_vector(dimension);
-    std::vector<float> midpoint(dimension);
-    std::vector<float> projection(dimension);
+    vector<float> line_vector(dimension);
+    vector<float> midpoint(dimension);
+    vector<float> projection(dimension);
+    vector<float> residual(dimension);
 
     // used for euclidean distance
     if (euclidean) {
-        Tensor residual = query - nearest_centroid;
-        const float *residual_ptr = residual.data_ptr<float>();
+        subtract_arrays(query_ptr, nearest_centroid_ptr, residual.data(), dimension);
         for (int j = 1; j < centroids.size(0); j++) {
             subtract_arrays(centroids_ptr + (dimension * j), nearest_centroid_ptr, line_vector.data(), dimension);
             divide_array_by_constant(line_vector.data(), 2.0f, midpoint.data(), dimension);
@@ -79,7 +79,7 @@ inline Tensor compute_boundary_distances(const Tensor &query, const Tensor &cent
             float norm = std::sqrt(faiss::fvec_inner_product(line_vector.data(), line_vector.data(), dimension));
             divide_array_by_constant(line_vector.data(), norm, line_vector.data(), dimension);
 
-            float projected_distance = faiss::fvec_inner_product(residual_ptr, line_vector.data(), dimension);
+            float projected_distance = faiss::fvec_inner_product(residual.data(), line_vector.data(), dimension);
             multiply_array_by_constant(line_vector.data(), projected_distance, projection.data(), dimension);
 
             float distance_to_boundary_squared = faiss::fvec_L2sqr(midpoint.data(), projection.data(), dimension);
@@ -101,7 +101,7 @@ inline Tensor compute_boundary_distances(const Tensor &query, const Tensor &cent
         }
     }
 
-    return torch::tensor(boundary_distances).clone();
+    return boundary_distances;
 }
 
 inline double incomplete_beta(double a, double b, double x) {
@@ -334,24 +334,23 @@ inline Tensor compute_variance_in_direction_of_query(Tensor query, Tensor centro
     return torch::tensor(variances).clone();
 }
 
-inline Tensor compute_recall_profile(const Tensor &boundary_distances, float query_radius, int dimension,
+inline vector<float> compute_recall_profile(vector<float> boundary_distances, float query_radius, int dimension,
                                      const Tensor &partition_sizes = {}, bool use_precomputed = true,
                                      bool euclidean = true) {
 
     // boundary_distances shape is (num_partitions,) and num_partitions must be greater than 1
-    if (boundary_distances.size(0) < 2) {
+    if (boundary_distances.size() < 2) {
         throw std::runtime_error("Boundary distances must have at least 2 partitions to create an estimate.");
     }
 
-    auto boundary_distances_ptr = boundary_distances.data_ptr<float>();
-    int num_partitions = boundary_distances.size(0);
-    std::vector<double> partition_probabilities(num_partitions, 0.0f);
+    int num_partitions = boundary_distances.size();
+    vector<float> partition_probabilities(num_partitions, 0.0f);
 
     double total_volume = 0.0;
     bool weigh_using_partition_sizes = partition_sizes.defined();
 
     for (int j = 1; j < num_partitions; j++) {
-        float boundary_distance = boundary_distances_ptr[j];
+        float boundary_distance = boundary_distances[j];
 
         if (boundary_distance >= query_radius) {
             partition_probabilities[j] = 0.0;
@@ -372,28 +371,26 @@ inline Tensor compute_recall_profile(const Tensor &boundary_distances, float que
     partition_probabilities[0] = 2.0 * partition_probabilities[1];
     // partition_probabilities[0] = 1 - partition_probabilities[1];
 
-    Tensor probabilities_tensor = torch::from_blob(partition_probabilities.data(),
-        {num_partitions},
-        torch::kDouble).
-            clone();
-
-    if (weigh_using_partition_sizes) {
-        probabilities_tensor *= partition_sizes;
-    }
-
     // Ensure the probabilities sum to 1
-    double sum_probabilities = probabilities_tensor.sum().item<double>();
+
+    double sum_probabilities = 0.0;
+    for (int j = 0; j < num_partitions; j++) {
+        sum_probabilities += partition_probabilities[j];
+    }
     if (sum_probabilities > 0.0f) {
-        probabilities_tensor /= sum_probabilities;
+        for (int j = 0; j < num_partitions; j++) {
+            partition_probabilities[j] /= sum_probabilities;
+        }
     } else {
-        probabilities_tensor.fill_(0.0);
-        probabilities_tensor[0] = 1.0;
+        for (int j = 0; j < num_partitions; j++) {
+            partition_probabilities[j] = 1.0 / num_partitions;
+        }
     }
 
     // Compute the recall profile
     // Tensor recall_profile = torch::cumsum(probabilities_tensor, 0);
 
-    return probabilities_tensor;
+    return partition_probabilities;
 }
 
 inline float compute_intersection_volume_one(float boundary_distance, float query_radius, int dimension) {

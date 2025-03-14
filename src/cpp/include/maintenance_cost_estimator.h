@@ -1,14 +1,17 @@
 //
-// Created by Jason on 12/16/24.
+// Created by Jason on 3/13/25.
 // Prompt for GitHub Copilot:
 // - Conform to the google style guide
 // - Use descriptive variable names
 
-#ifndef LATENCY_ESTIMATION_H
-#define LATENCY_ESTIMATION_H
+#ifndef MAINTENANCE_COST_ESTIMATOR_H
+#define MAINTENANCE_COST_ESTIMATOR_H
 
-#include <common.h>
-#include <fstream>
+#include <memory>
+#include <vector>
+
+using std::vector;
+using std::shared_ptr;
 
 // 2D function that estimates the scan latency of a list given it's size and the number of elements to retrieve
 // l(n, k) = latency
@@ -74,4 +77,43 @@ private:
 };
 
 
-#endif //LATENCY_ESTIMATION_H
+/// @brief MaintenanceCostEstimator computes cost deltas for maintenance actions such as splitting and deletion.
+/// It uses a latency estimation model and parameters (e.g. alpha and k) to compute the cost differences.
+class MaintenanceCostEstimator {
+public:
+    /// @brief Constructor.
+    /// @param d Dimension of the vectors.
+    /// @param alpha Alpha parameter used to scale split costs.
+    /// @param k Parameter k used in latency estimation.
+    /// @param latencyEstimator A shared pointer to a latency estimator.
+    MaintenanceCostEstimator(int d, float alpha, int k);
+
+    /// @brief Compute the delta cost for splitting a partition.
+    /// @param partition_size Size of the partition to split.
+    /// @param hit_rate Hit rate (fraction) of the partition.
+    /// @param total_partitions Total number of partitions before the split.
+    /// @return The computed split delta.
+    float compute_split_delta(int partition_size, float hit_rate, int total_partitions) const;
+
+    /// @brief Compute the delta cost for deleting a partition.
+    /// @param partition_size Size of the partition to delete.
+    /// @param hit_rate Hit rate (fraction) of the partition.
+    /// @param total_partitions Total number of partitions before deletion.
+    /// @param current_scan_fraction Current overall scan fraction.
+    /// @return The computed delete delta.
+    float compute_delete_delta(int partition_size, float hit_rate, int total_partitions, float current_scan_fraction) const;
+
+    /// @brief Get the latency estimator.
+    shared_ptr<ListScanLatencyEstimator> get_latency_estimator() const;
+
+    /// @brief Get the k parameter.
+    int get_k() const;
+
+private:
+    float alpha_;
+    int k_;
+    int d_;
+    shared_ptr<ListScanLatencyEstimator> latency_estimator_;
+};
+
+#endif // MAINTENANCE_COST_ESTIMATOR_H

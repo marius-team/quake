@@ -728,6 +728,14 @@ Tensor PartitionManager::get_ids() {
     return torch::cat(ids, 0);
 }
 
+vector<int64_t> PartitionManager::get_partition_sizes(vector<int64_t> partition_ids) {
+    vector<int64_t> partition_sizes;
+    for (int64_t partition_id : partition_ids) {
+        partition_sizes.push_back(partitions_->list_size(partition_id));
+    }
+    return partition_sizes;
+}
+
 Tensor PartitionManager::get_partition_sizes(Tensor partition_ids) {
     if (debug_) {
         std::cout << "[PartitionManager] get_partition_sizes: Getting sizes for partitions." << std::endl;
@@ -752,6 +760,11 @@ Tensor PartitionManager::get_partition_sizes(Tensor partition_ids) {
     }
     return partition_sizes;
 }
+
+int64_t PartitionManager::get_partition_size(int64_t partition_id) {
+    return partitions_->list_size(partition_id);
+}
+
 
 bool PartitionManager::validate() {
     if (debug_) {
