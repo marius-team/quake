@@ -31,7 +31,7 @@ def main():
     delete_ratio = 0.0
     query_ratio = 1.0
     update_batch_size = 10000
-    query_batch_size = 10
+    query_batch_size = 100
     number_of_operations = 1000
     initial_size = 1000000
     cluster_size = int(math.sqrt(base_vectors.shape[0]))
@@ -85,7 +85,8 @@ def main():
 
     nc = 1000
     build_params = {"nc": nc, "metric": "l2"}
-    search_params = {"recall_target": .9, "k": search_k}
+    # search_params = {"nprobe": 20, "k": search_k}
+    search_params = {"k": search_k, "recall_target": .9}
 
     index = QuakeWrapper()
 

@@ -421,6 +421,15 @@ class WorkloadEvaluator:
                 mean_time = total_time / len(timing_infos)
                 print(f"Query Time: {mean_time:.2f} ns, Recall: {mean_recall:.2f}")
 
+                boundary_distance_time_ns = sum([ti.boundary_distance_time_ns for ti in timing_infos])
+                scan_time_ns = sum([ti.job_wait_time_ns for ti in timing_infos])
+                recall_model_time_ns = sum([ti.result_aggregate_time_ns for ti in timing_infos])
+                hits_tracking_time_ns = sum([ti.job_enqueue_time_ns for ti in timing_infos])
+                print(f"Boundary Distance Time: {boundary_distance_time_ns:.2f} ns")
+                print(f"Scan Time: {scan_time_ns:.2f} ns")
+                print(f"Recall Model Time: {recall_model_time_ns:.2f} ns")
+                print(f"Hits Tracking Time: {hits_tracking_time_ns:.2f} ns")
+
             if do_maintenance:
                 index.maintenance()
 

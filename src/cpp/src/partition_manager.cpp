@@ -336,6 +336,11 @@ Tensor PartitionManager::get(const Tensor &ids) {
     return vectors;
 }
 
+vector<float *> PartitionManager::get_vectors(vector<int64_t> ids) {
+    return partitions_->get_vectors_by_id(ids);
+}
+
+
 shared_ptr<Clustering> PartitionManager::select_partitions(const Tensor &select_ids, bool copy) {
     if (debug_) {
         std::cout << "[PartitionManager] select_partitions: Selecting partitions from provided ids." << std::endl;

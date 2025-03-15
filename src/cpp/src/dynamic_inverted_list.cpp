@@ -244,11 +244,6 @@ namespace faiss {
             shared_ptr<IndexPartition> old_part = old_it->second;
             // remove vectors that moved
             for (auto &kv: vectors_for_new_partition) {
-                // kv.first = new partition, kv.second = vector indices
-                // We must identify vector IDs from old_partition and remove them.
-                // However, the provided arrays (new_vectors, new_vector_ids) presumably correspond
-                // to vectors that were part of old_vector_partition originally.
-                // We can remove by IDs directly:
                 for (int idx: kv.second) {
                     idx_t old_id = (idx_t) new_vector_ids[idx];
                     int64_t pos = old_part->find_id(old_id);
@@ -266,6 +261,7 @@ namespace faiss {
             // Already doesn't exist
             return;
         }
+
         partitions_.erase(it);
         nlist--;
     }
@@ -290,10 +286,6 @@ namespace faiss {
     }
 
     bool DynamicInvertedLists::get_vector_for_id(idx_t id, float *vector_values) {
-        // This assumes that the stored codes are actually floats or float-like data.
-        // If codes_ are PQ codes or compressed, you'd need decompression.
-        // If they are raw float vectors, this works.
-
         for (auto &kv: partitions_) {
             shared_ptr<IndexPartition> part = kv.second;
             int64_t pos = part->find_id(id);
@@ -305,6 +297,27 @@ namespace faiss {
             }
         }
         return false;
+    }
+
+    vector<float *> DynamicInvertedLists::get_vectors_by_id(vector<int64_t> ids) {
+
+        vector<float *> ret;
+        for (int64_t id : ids) {
+            bool found = false;
+            for (auto &kv: partitions_) {
+                shared_ptr<IndexPartition> part = kv.second;
+                int64_t pos = part->find_id(id);
+                if (pos != -1) {
+                    ret.push_back(reinterpret_cast<float *>(part->codes_ + pos * part->code_size_));
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                throw std::runtime_error("ID not found in any partition");
+            }
+        }
+        return ret;
     }
 
     size_t DynamicInvertedLists::get_new_list_id() {

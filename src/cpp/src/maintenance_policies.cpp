@@ -5,6 +5,8 @@
 #include <numeric>
 #include <torch/torch.h>
 
+#include "quake_index.h"
+
 using std::chrono::steady_clock;
 using std::chrono::microseconds;
 using std::chrono::duration_cast;
@@ -230,5 +232,16 @@ vector<int64_t> MaintenancePolicy::check_partitions_for_splitting() {
 //
 void MaintenancePolicy::local_refinement(const torch::Tensor &partition_ids) {
     return;
-    // partition_manager_->refine_partitions(partition_ids, params_->refinement_radius);
+    // Tensor centroids = partition_manager_->get(partition_ids);
+    // auto search_params = make_shared<SearchParams>();
+    // search_params->k = params_->refinement_radius;
+    // auto search_result = partition_manager_->parent_->search(centroids, search_params);
+    //
+    // Tensor curr_partition_ids = torch::cat({search_result->ids.flatten(0, 1), partition_ids});
+    // Tensor unique_partitions = std::get<0>(torch::_unique(curr_partition_ids));
+    //
+    // // ignore -1 partition id
+    // unique_partitions = unique_partitions.masked_select(unique_partitions >= 0);
+    //
+    // partition_manager_->refine_partitions(unique_partitions, params_->refinement_iterations);
 }

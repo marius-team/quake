@@ -73,15 +73,15 @@ constexpr int DEFAULT_K = 1;                             ///< Default number of 
 constexpr int DEFAULT_NPROBE = 1;                        ///< Default number of partitions to probe during search.
 constexpr float DEFAULT_RECALL_TARGET = -1.0f;           ///< Default recall target (a negative value means no adaptive search).
 constexpr bool DEFAULT_BATCHED_SCAN = false;             ///< Default flag for batched scanning.
-constexpr bool DEFAULT_PRECOMPUTED = false;              ///< Default flag to use precomputed incomplete beta fn for APS.
-constexpr float DEFAULT_INITIAL_SEARCH_FRACTION = 0.2f;  ///< Default initial fraction of partitions to search.
-constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.01f;     ///< Default threshold to trigger recomputation of search parameters.
+constexpr bool DEFAULT_PRECOMPUTED = true;               ///< Default flag to use precomputed incomplete beta fn for APS.
+constexpr float DEFAULT_INITIAL_SEARCH_FRACTION = 0.02f; ///< Default initial fraction of partitions to search.
+constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.001f;    ///< Default threshold to trigger recomputation of search parameters.
 constexpr int DEFAULT_APS_FLUSH_PERIOD_US = 100;         ///< Default period (in microseconds) for flushing the APS buffer.
 
 // Default constants for maintenance policy parameters
 constexpr const char* DEFAULT_MAINTENANCE_POLICY = "query_cost"; ///< Default maintenance policy type.
 constexpr int DEFAULT_WINDOW_SIZE = 1000;              ///< Default window size for measuring hit rates.
-constexpr int DEFAULT_REFINEMENT_RADIUS = 100;         ///< Default radius for local partition refinement.
+constexpr int DEFAULT_REFINEMENT_RADIUS = 25;         ///< Default radius for local partition refinement.
 constexpr int DEFAULT_REFINEMENT_ITERATIONS = 3;       ///< Default number of iterations for refinement.
 constexpr int DEFAULT_MIN_PARTITION_SIZE = 32;         ///< Default minimum allowed partition size.
 constexpr float DEFAULT_ALPHA = 0.9f;                  ///< Default alpha parameter for maintenance.
@@ -181,7 +181,7 @@ struct SearchParams {
     int nprobe = DEFAULT_NPROBE;
     int k = DEFAULT_K;
     float recall_target = DEFAULT_RECALL_TARGET;
-    int num_threads = -1; // number of threads to use for search within a single worker
+    int num_threads = 1; // number of threads to use for search within a single worker
     float k_factor = 1.0f;
     bool use_precomputed = DEFAULT_PRECOMPUTED;
     bool batched_scan = DEFAULT_BATCHED_SCAN;

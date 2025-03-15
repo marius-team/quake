@@ -71,8 +71,14 @@ public:
     Tensor get(const Tensor &ids);
 
     /**
+     * @brief No copy version of get
+     * @param ids Vector of IDs.
+     */
+     vector<float *> get_vectors(vector<int64_t> ids);
+
+    /**
      * @brief Split a given partition into multiple smaller ones.
-     * @param partition_id The ID/index of the partition to split.
+     * @param partition_ids The partition IDs to split.
      */
     shared_ptr<Clustering> split_partitions(const Tensor &partition_ids);
 

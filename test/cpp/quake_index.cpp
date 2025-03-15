@@ -451,7 +451,7 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
     // Repeatedly search, add, remove, and perform maintenance to see if the index remains consistent.
 
     int64_t dimension = 16;
-    int64_t num_vectors = 10000;
+    int64_t num_vectors = 100000;
     int64_t num_queries = 100;
     int64_t batch_size = 10;
 
