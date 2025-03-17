@@ -42,6 +42,29 @@ static Tensor generate_ids(int64_t num, int64_t start = 0) {
     return torch::arange(start, start + num, torch::kInt64);
 }
 
+static std::vector<std::shared_ptr<arrow::Table>> generate_data_frame(int64_t num_vectors) {
+    arrow::MemoryPool* pool = arrow::default_memory_pool();
+    std::vector<std::shared_ptr<arrow::Table>> tables;
+
+    for (int64_t i = 0; i < num_vectors; i++) {
+        arrow::DoubleBuilder price_builder(pool);
+        price_builder.Append(static_cast<double>(i) * 1.5);
+
+        std::shared_ptr<arrow::Array> price_array;
+        price_builder.Finish(&price_array);
+
+        std::vector<std::shared_ptr<arrow::Field>> schema_vector = {
+            arrow::field("price", arrow::float64())
+        };
+
+        auto schema = std::make_shared<arrow::Schema>(schema_vector);
+        auto table = arrow::Table::Make(schema, {price_array});
+        tables.push_back(table);
+    }
+
+    return tables;
+}
+
 //
 // ===== Quake BENCHMARK FIXTURES =====
 //
@@ -52,14 +75,16 @@ protected:
     std::shared_ptr<QuakeIndex> index_;
     Tensor data_;
     Tensor ids_;
+    std::vector<std::shared_ptr<arrow::Table>> data_frame_;
     void SetUp() override {
         data_ = generate_data(NUM_VECTORS, DIM);
         ids_ = generate_ids(NUM_VECTORS);
+        data_frame_ = generate_data_frame(NUM_VECTORS);
         index_ = std::make_shared<QuakeIndex>();
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = 1;      // flat index
         build_params->metric = "l2";
-        index_->build(data_, ids_, build_params);
+        index_->build(data_, ids_, build_params, data_frame_);
     }
 };
 
@@ -69,16 +94,18 @@ class QuakeWorkerFlatBenchmark : public ::testing::Test {
     std::shared_ptr<QuakeIndex> index_;
     Tensor data_;
     Tensor ids_;
+    std::vector<std::shared_ptr<arrow::Table>> data_frame_;
     void SetUp() override {
         data_ = generate_data(NUM_VECTORS, DIM);
         ids_ = generate_ids(NUM_VECTORS);
+        data_frame_ = generate_data_frame(NUM_VECTORS);
         index_ = std::make_shared<QuakeIndex>();
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = 1;      // flat index
         build_params->metric = "l2";
         // Use as many workers as hardware concurrency
         build_params->num_workers = std::thread::hardware_concurrency();
-        index_->build(data_, ids_, build_params);
+        index_->build(data_, ids_, build_params, data_frame_);
     }
 };
 
@@ -89,15 +116,17 @@ protected:
     std::shared_ptr<QuakeIndex> index_;
     Tensor data_;
     Tensor ids_;
+    std::vector<std::shared_ptr<arrow::Table>> data_frame_;
     void SetUp() override {
         data_ = generate_data(NUM_VECTORS, DIM);
         ids_ = generate_ids(NUM_VECTORS);
+        data_frame_ = generate_data_frame(NUM_VECTORS);
         index_ = std::make_shared<QuakeIndex>();
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = N_LIST;     // IVF index
         build_params->metric = "l2";
         build_params->niter = 3;
-        index_->build(data_, ids_, build_params);
+        index_->build(data_, ids_, build_params, data_frame_);
     }
 };
 
@@ -107,9 +136,11 @@ protected:
     std::shared_ptr<QuakeIndex> index_;
     Tensor data_;
     Tensor ids_;
+    std::vector<std::shared_ptr<arrow::Table>> data_frame_;
     void SetUp() override {
         data_ = generate_data(NUM_VECTORS, DIM);
         ids_ = generate_ids(NUM_VECTORS);
+        data_frame_ = generate_data_frame(NUM_VECTORS);
         index_ = std::make_shared<QuakeIndex>();
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = N_LIST;     // IVF index
@@ -117,7 +148,7 @@ protected:
         build_params->niter = 3;
         // Use as many workers as hardware concurrency
         build_params->num_workers = std::thread::hardware_concurrency();
-        index_->build(data_, ids_, build_params);
+        index_->build(data_, ids_, build_params, data_frame_);
     }
 };
 
