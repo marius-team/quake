@@ -7,6 +7,12 @@
 #include <gtest/gtest.h>
 #include "quake_index.h"
 #include <torch/torch.h>
+#include <arrow/api.h>
+#include <arrow/array.h>
+#include <arrow/table.h>
+#include <arrow/type.h>
+#include <arrow/chunked_array.h>
+#include <random>
 
 // Helper functions for random data
 static torch::Tensor generate_random_data(int64_t num_vectors, int64_t dim) {
@@ -15,6 +21,29 @@ static torch::Tensor generate_random_data(int64_t num_vectors, int64_t dim) {
 
 static torch::Tensor generate_sequential_ids(int64_t count, int64_t start = 0) {
     return torch::arange(start, start + count, torch::kInt64);
+}
+
+std::vector<std::shared_ptr<arrow::Table>> generate_data_frame(int64_t num_vectors) {
+    arrow::MemoryPool* pool = arrow::default_memory_pool();
+    std::vector<std::shared_ptr<arrow::Table>> tables;
+
+    for (int64_t i = 0; i < num_vectors; i++) {
+        arrow::DoubleBuilder price_builder(pool);
+        price_builder.Append(static_cast<double>(i) * 1.5);
+
+        std::shared_ptr<arrow::Array> price_array;
+        price_builder.Finish(&price_array);
+
+        std::vector<std::shared_ptr<arrow::Field>> schema_vector = {
+            arrow::field("price", arrow::float64())
+        };
+
+        auto schema = std::make_shared<arrow::Schema>(schema_vector);
+        auto table = arrow::Table::Make(schema, {price_array});
+        tables.push_back(table);
+    }
+
+    return tables;
 }
 
 class QuakeIndexTest : public ::testing::Test {
@@ -32,6 +61,9 @@ protected:
     // Query vectors
     torch::Tensor query_vectors_;
 
+    // Arrow data
+    std::vector<std::shared_ptr<arrow::Table>> data_frames_;
+
     void SetUp() override {
         // Generate random data
         data_vectors_ = generate_random_data(num_vectors_, dimension_);
@@ -40,6 +72,9 @@ protected:
 
         // Queries
         query_vectors_ = generate_random_data(num_queries_, dimension_);
+
+        // Arrow data
+        data_frames_ = generate_data_frame(num_vectors_);
     }
 };
 
@@ -64,7 +99,7 @@ TEST_F(QuakeIndexTest, BuildTest) {
     build_params->metric = "l2";
     build_params->niter = 5;           // small kmeans iteration
 
-    auto timing_info = index.build(data_vectors_, data_ids_, build_params);
+    auto timing_info = index.build(data_vectors_, data_ids_, build_params, data_frames_);
 
     // Check that we created partition_manager_, parent_, etc.
     EXPECT_NE(index.partition_manager_, nullptr);
@@ -260,6 +295,7 @@ TEST(QuakeIndexStressTest, LargeBuildTest) {
     int64_t num_vectors = 1e6;   // 1 million vectors
     auto data_vectors = generate_random_data(num_vectors, dimension);
     auto data_ids = generate_sequential_ids(num_vectors, 0);
+    auto data_frames = generate_data_frame(num_vectors);
 
     QuakeIndex index;
 
@@ -270,7 +306,7 @@ TEST(QuakeIndexStressTest, LargeBuildTest) {
     build_params->niter = 5;
 
     auto t0 = std::chrono::high_resolution_clock::now();
-    auto timing_info = index.build(data_vectors, data_ids, build_params);
+    auto timing_info = index.build(data_vectors, data_ids, build_params, data_frames);
     auto t1 = std::chrono::high_resolution_clock::now();
 
     // Check that the build completed and that we didn't crash
@@ -297,6 +333,7 @@ TEST(QuakeIndexStressTest, RepeatedBuildSearchTest) {
     // Pre-generate data
     auto data_vectors = generate_random_data(num_vectors, dimension);
     auto data_ids = generate_sequential_ids(num_vectors, 1000);
+    auto data_frames = generate_data_frame(num_vectors);
     auto query_vectors = generate_random_data(num_queries, dimension);
 
     for (int i = 0; i < iteration_count; i++) {
@@ -307,7 +344,7 @@ TEST(QuakeIndexStressTest, RepeatedBuildSearchTest) {
         build_params->niter = 3;
 
         // Build index
-        index.build(data_vectors, data_ids, build_params);
+        index.build(data_vectors, data_ids, build_params, data_frames);
 
         // Query index
         auto search_params = std::make_shared<SearchParams>();
@@ -421,6 +458,7 @@ TEST(QuakeIndexStressTest, HighDimensionTest) {
     int64_t num_vectors = 5000;
     auto data_vectors = generate_random_data(num_vectors, dimension);
     auto data_ids = generate_sequential_ids(num_vectors);
+    auto data_frames = generate_data_frame(num_vectors);
 
     QuakeIndex index;
     auto build_params = std::make_shared<IndexBuildParams>();
@@ -430,7 +468,7 @@ TEST(QuakeIndexStressTest, HighDimensionTest) {
     build_params->niter = 3;
 
     // If your system doesn’t have enough memory for bigger tests, reduce num_vectors or dimension.
-    auto timing_info = index.build(data_vectors, data_ids, build_params);
+    auto timing_info = index.build(data_vectors, data_ids, build_params, data_frames);
     ASSERT_NE(timing_info, nullptr);
     EXPECT_EQ(index.ntotal(), num_vectors);
 
