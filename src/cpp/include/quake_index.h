@@ -47,7 +47,7 @@ public:
      * @param build_params Parameters for building the index.
      * @return Timing information for the build.
      */
-    shared_ptr<BuildTimingInfo> build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params);
+    shared_ptr<BuildTimingInfo> build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params, std::vector<std::shared_ptr<arrow::Table>> data_frame = {});
 
     /**
      * @brief Search for vectors in the index.

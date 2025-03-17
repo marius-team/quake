@@ -13,6 +13,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
                               int n_clusters,
                               MetricType metric_type,
                               int niter,
+                              std::vector<std::shared_ptr<arrow::Table>> data_frames,
                               Tensor /* initial_centroids */) {
     // Ensure enough vectors are available and sizes match.
     assert(vectors.size(0) >= n_clusters * 2);
@@ -52,10 +53,19 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     // Partition vectors and ids by cluster.
     vector<Tensor> cluster_vectors(n_clusters);
     vector<Tensor> cluster_ids(n_clusters);
+    vector<vector<shared_ptr<arrow::Table>>> cluster_data_frames(n_clusters);
+    
+
     for (int i = 0; i < n_clusters; i++) {
-        cluster_vectors[i] = vectors.index({assignments == i});
-        cluster_ids[i] = ids.index({assignments == i});
+        auto mask = (assignments == i);
+        cluster_vectors[i] = vectors.index({mask});
+        cluster_ids[i] = ids.index({mask});
     }
+    for(int j=0;j<data_frames.size();j++) {
+        int cluster_id = assignments[j].item<int>();
+        cluster_data_frames[cluster_id].push_back(data_frames[j]);
+    }
+
     Tensor partition_ids = torch::arange(n_clusters, torch::kInt64);
 
     shared_ptr<Clustering> clustering = std::make_shared<Clustering>();
@@ -63,6 +73,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     clustering->partition_ids = partition_ids;
     clustering->vectors = cluster_vectors;
     clustering->vector_ids = cluster_ids;
+    clustering->data_frames = cluster_data_frames;
 
     delete index_ptr;
     return clustering;
