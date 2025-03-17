@@ -512,6 +512,10 @@ class WorkloadEvaluator:
             ax.text(0.5, 0.5, 'No query recall info', ha='center', va='center')
             ax.axis('off')
         plt.tight_layout()
+
+        # create output directory if it doesn't exist
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
         plot_path = self.output_dir / "evaluation_plots.png"
         plt.savefig(plot_path)
         print(f"Saved evaluation plots to {plot_path}")
