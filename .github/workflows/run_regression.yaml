@@ -25,9 +25,10 @@ jobs:
           pip install .
 
       - name: Get Baseline Artifacts
-        uses: actions/download-artifact@v4
+        uses: dawidd6/action-download-artifact@v9
         with:
           name: baseline-artifacts
+          workflow: regression_baseline.yaml
 
       - name: Run Regression Tests
         run: |
