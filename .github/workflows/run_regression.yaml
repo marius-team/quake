@@ -5,26 +5,16 @@ on:
     branches: [ main ]
 
 jobs:
-  determine-container:
-    runs-on: ubuntu-latest
-    outputs:
-      container_image: ${{ steps.determine.outputs.container_image }}
-    steps:
-      - name: Determine and Build Container
-        id: determine
-        uses: ./.github/actions/determine-container
-        with:
-          event-before: ${{ github.event.before }}
-          sha: ${{ github.sha }}
+  setup-env:
+    uses: ./.github/workflows/setup-environment.yaml
 
   regression-test:
-    needs: determine-container
+    needs: setup-env
     runs-on: ubuntu-latest
     container:
-      image: ${{ needs.determine-container.outputs.container_image }}
+      image: ${{ needs.setup-env.outputs.container_image }}
     steps:
-      - name: Setup Environment
-        uses: ./.github/actions/setup-env
+      - uses: ./.github/workflows/setup_environment.yaml
       - name: Build Quake for Regression
         uses: ./.github/actions/build-quake
         with:
@@ -34,5 +24,5 @@ jobs:
           target: "bindings quake_tests"
       - name: Run Regression Tests
         run: |
-          # Run your driver script that organizes regression test operations.
+          # Execute test suite (e.g. run driver script)
           python ../run_all_workloads.py --name "PR-${{ github.event.number }}"

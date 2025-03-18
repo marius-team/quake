@@ -5,13 +5,15 @@ on:
     branches: [ main ]
 
 jobs:
+  setup-env:
+    uses: ./.github/workflows/setup-environment.yaml
+
   build_docs:
+    needs: setup-env
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+    outputs:
+      container_image: ${{ steps.setup-env.outputs.container_image }}
     steps:
-      - name: Setup Environment
-        uses: ./.github/actions/setup-env
       - name: Build Quake for Docs
         uses: ./.github/actions/build-quake
         with:

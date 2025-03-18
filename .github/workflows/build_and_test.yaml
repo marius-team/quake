@@ -7,39 +7,33 @@ on:
     branches: [ main ]
 
 jobs:
-  determine-container:
-    runs-on: ubuntu-latest
-    outputs:
-      container_image: ${{ steps.determine.outputs.container_image }}
-    steps:
-      - name: Determine and Build Container
-        id: determine
-        uses: ./.github/actions/determine-container
-        with:
-          event-before: ${{ github.event.before }}
-          sha: ${{ github.sha }}
+  setup-env:
+    uses: ./.github/workflows/setup-environment.yaml
 
   build_and_test:
-    needs: determine-container
+    needs: setup-env
     runs-on: ubuntu-latest
-    container:
-      image: ${{ needs.determine-container.outputs.container_image }}
+    outputs:
+      container_image: ${{ steps.setup-env.outputs.container_image }}
     steps:
-      - name: Setup Environment
-        uses: ./.github/actions/setup-env
-      - name: Build Quake for Testing
+      - name: Build C++
         uses: ./.github/actions/build-quake
         with:
           build_method: "cmake"
           build_type: "Debug"
           cmake_options: "-DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF -DBUILD_TESTS=ON"
-          target: "bindings quake_tests"
+          target: "quake_tests"
+      - name: Build Python
+        uses: ./.github/actions/build-quake
+        with:
+          build_method: "python"
+          build_type: "Release"
       - name: Run C++ Tests
+        shell: bash
         run: |
-          cd build
-          test/cpp/quake_tests
+          ./build/test/cpp/quake_tests
       - name: Run Python Tests
+        shell: bash
         run: |
-          pip install .
           pip install pytest
           python -m pytest test/python
