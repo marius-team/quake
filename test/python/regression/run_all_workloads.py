@@ -11,23 +11,17 @@ def run_workload(config: Path, results_dir: Path, run_name: str, overwrite: bool
     output_dir = results_dir / config.stem / run_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Execute the regression test script with the given configuration and run name.
-    # This assumes run_workload.py has been modified to accept a --name parameter.
+    subprocess_args = [
+        "python", "run_workload.py",
+        "--config", str(config),
+        "--output", str(output_dir),
+        "--name", run_name
+    ]
     if overwrite:
-        result = subprocess.run([
-            "python", "run_workload.py",
-            "--config", str(config),
-            "--output", str(output_dir),
-            "--name", run_name,
-            "--overwrite"
-        ])
-    else:
-        result = subprocess.run([
-            "python", "run_workload.py",
-            "--config", str(config),
-            "--output", str(output_dir),
-            "--name", run_name,
-        ])
+        subprocess_args.append("--overwrite")
+
+    result = subprocess.run(subprocess_args)
+
     if result.returncode != 0:
         sys.exit(f"Error running workload: {config}")
 
@@ -38,7 +32,6 @@ def main():
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
-    # List your workload configuration files.
     configs = [
         Path("configs/sift1m_balanced.yaml"),
         Path("configs/sift1m_insert_heavy.yaml"),
@@ -53,7 +46,6 @@ def main():
     for config in configs:
         run_workload(config, results_dir, args.name, args.overwrite)
 
-    # Once all workloads are complete, call the comparison script.
     compare_cmd = [
         "python", "compare_results.py",
         "--results_dir", str(results_dir),
