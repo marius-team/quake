@@ -19,14 +19,13 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Confirm Conda Environment
-        shell: bash
+      - name: Set up Conda
         run: |
           git config --global --add safe.directory '*'
-          # Run a login shell to load .bashrc so that quake-env is activated.
-          bash -l -c 'conda info --envs'
-          # Optionally, verify the current environment
-          bash -l -c 'echo $CONDA_DEFAULT_ENV'
+          export PATH="/opt/miniconda/bin:$PATH"
+          eval "$(/opt/miniconda/bin/conda shell.bash hook)"
+          conda info --envs
+          conda activate quake-env
 
       - name: Build C++ Targets
         uses: ./.github/actions/build-quake
