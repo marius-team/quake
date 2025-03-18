@@ -4,15 +4,17 @@ on:
   workflow_dispatch:
 
 jobs:
-  setup-env:
-    uses: ./.github/workflows/setup_environment.yaml
+  setup-container:
+    uses: ./.github/workflows/container_setup.yaml
 
   generate-baseline:
-    needs: setup-env
+    needs: setup-container
     runs-on: ubuntu-latest
     container:
-      image: ${{ needs.setup-env.outputs.container_image }}
+      image: ${{ needs.setup-container.outputs.container_image }}
     steps:
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
       - name: Build Quake for Baseline
         uses: ./.github/actions/build-quake
         with:
@@ -22,7 +24,8 @@ jobs:
           target: "bindings quake_tests"
       - name: Run Baseline Driver Script
         run: |
-          python ../run_all_workloads.py --overwrite --name baseline
+          cd tests/python/regression
+          python run_all_workloads.py --overwrite --name baseline
       - name: Upload Baseline Artifacts
         uses: actions/upload-artifact@v4
         with:

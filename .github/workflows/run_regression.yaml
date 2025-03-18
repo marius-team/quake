@@ -5,15 +5,17 @@ on:
     branches: [ main ]
 
 jobs:
-  setup-env:
-    uses: ./.github/workflows/setup_environment.yaml
+  setup-container:
+    uses: ./.github/workflows/container_setup.yaml
 
   regression-test:
-    needs: setup-env
+    needs: setup-container
     runs-on: ubuntu-latest
     container:
-      image: ${{ needs.setup-env.outputs.container_image }}
+      image: ${{ needs.setup-container.outputs.container_image }}
     steps:
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
       - name: Build Quake for Regression
         uses: ./.github/actions/build-quake
         with:
@@ -23,5 +25,5 @@ jobs:
           target: "bindings quake_tests"
       - name: Run Regression Tests
         run: |
-          # Execute test suite (e.g. run driver script)
-          python ../run_all_workloads.py --name "PR-${{ github.event.number }}"
+          cd tests/python/regression
+          python run_all_workloads.py --name "PR-${{ github.event.number }}"

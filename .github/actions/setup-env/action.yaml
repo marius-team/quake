@@ -1,10 +1,18 @@
 name: Setup Environment
 description: "Checks out code and sets up the common conda environment."
-inputs:
-  extra-commands:
-    description: "Optional extra shell commands to run after setup"
-    required: false
-    default: ""
+on:
+  workflow_call:
+    inputs:
+      env-name:
+        description: "Name of the conda environment to activate"
+        required: false
+        type: string
+        default: "quake-env"
+      extra-commands:
+        description: "Optional extra shell commands to run after setup"
+        required: false
+        type: string
+        default: ""
 runs:
   using: "composite"
   steps:
@@ -13,12 +21,19 @@ runs:
       with:
         submodules: true
         fetch-depth: 0
+
     - name: Setup Conda Environment
       shell: bash
       run: |
+        # Ensure GitHub's safe.directory is set (needed on some runners)
         git config --global --add safe.directory '*'
-        eval "$(conda shell.bash hook)"
-        conda activate quake-env
+        # Source conda's initialization script.
+        source /opt/miniconda/etc/profile.d/conda.sh
+        # Activate the specified conda environment.
+        conda activate ${{ inputs.env-name }}
+        # Install any common Python dependencies.
+        pip install pyyaml
+
     - name: Run Extra Commands
       if: ${{ inputs.extra-commands != '' }}
       shell: bash

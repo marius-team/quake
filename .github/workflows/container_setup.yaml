@@ -1,0 +1,27 @@
+name: Setup Container
+
+on:
+  workflow_call:
+    inputs:
+      extra-commands:
+        description: "Optional extra shell commands to run after the environment is set up"
+        required: false
+        type: string
+        default: ""
+jobs:
+  determine-container:
+    runs-on: ubuntu-latest
+    outputs:
+      container_image: ${{ steps.determine.outputs.container_image }}
+    steps:
+      - name: Checkout Code (for container determination)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+      - name: Determine and Build Container
+        id: determine
+        uses: ./.github/actions/determine-container
+        with:
+          event-before: ${{ github.event.before }}
+          sha: ${{ github.sha }}
