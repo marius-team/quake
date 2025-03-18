@@ -16,9 +16,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Environment
-        uses: ./.github/actions/setup-env
-
       - name: Build Quake for Baseline
         uses: ./.github/actions/build-quake
         with:
