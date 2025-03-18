@@ -23,7 +23,7 @@ jobs:
           eval "$(conda shell.bash hook)"
           conda activate quake-env
           conda install conda-forge::hydra-core
-          conda install anaconda::pyyaml
+          python3 -m pip install pyyaml
           pip install .
 
       - name: Download Baseline Artifacts
@@ -41,4 +41,5 @@ jobs:
 
       - name: Run Regression Tests
         run: |
-          python run_all_workloads.py --name pr_regression
+          cd test/python/regression
+          python3 run_all_workloads.py --name pr_regression

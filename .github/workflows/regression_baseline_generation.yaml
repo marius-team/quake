@@ -24,13 +24,13 @@ jobs:
           eval "$(conda shell.bash hook)"
           conda activate quake-env
           conda install conda-forge::hydra-core
-          conda install anaconda::pyyaml
+          python3 -m pip install pyyaml
           pip install .
 
       - name: Generate Workload and Results
         run: |
           cd test/python/regression
-          python run_all_workloads.py --overwrite --name baseline
+          python3 run_all_workloads.py --overwrite --name baseline
 
       - name: Upload Baseline Artifacts
         uses: actions/upload-artifact@v4
