@@ -14,11 +14,19 @@ jobs:
     outputs:
       container_image: ${{ steps.determine.outputs.container_image }}
     steps:
-      - name: Checkout Code (for container determination)
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Determine and Build Container
         id: determine
         uses: ./.github/actions/determine-container
