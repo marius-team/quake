@@ -13,13 +13,21 @@ def run_workload(config: Path, results_dir: Path, run_name: str, overwrite: bool
 
     # Execute the regression test script with the given configuration and run name.
     # This assumes run_workload.py has been modified to accept a --name parameter.
-    result = subprocess.run([
-        "python", "run_workload.py",
-        "--config", str(config),
-        "--output", str(output_dir),
-        "--name", run_name,
-        "--overwrite" if overwrite else ""
-    ])
+    if overwrite:
+        result = subprocess.run([
+            "python", "run_workload.py",
+            "--config", str(config),
+            "--output", str(output_dir),
+            "--name", run_name,
+            "--overwrite"
+        ])
+    else:
+        result = subprocess.run([
+            "python", "run_workload.py",
+            "--config", str(config),
+            "--output", str(output_dir),
+            "--name", run_name,
+        ])
     if result.returncode != 0:
         sys.exit(f"Error running workload: {config}")
 
