@@ -13,29 +13,32 @@ jobs:
   build_and_test:
     needs: setup-container
     runs-on: ubuntu-latest
-    outputs:
-      container_image: ${{ steps.setup-container.outputs.container_image }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
       - name: Setup Environment
         uses: ./.github/actions/setup-env
-      - name: Build C++
+
+      - name: Build C++ Targets
         uses: ./.github/actions/build-quake
         with:
           build_method: "cmake"
           build_type: "Debug"
           cmake_options: "-DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF -DBUILD_TESTS=ON"
           target: "quake_tests"
-      - name: Build Python
+
+      - name: Build Python Package
         uses: ./.github/actions/build-quake
         with:
-          build_method: "python"
+          build_method: "pip"
           build_type: "Release"
+
       - name: Run C++ Tests
         shell: bash
         run: |
           ./build/test/cpp/quake_tests
+
       - name: Run Python Tests
         shell: bash
         run: |
