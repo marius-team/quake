@@ -16,6 +16,8 @@ jobs:
     outputs:
       container_image: ${{ steps.setup-container.outputs.container_image }}
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
       - name: Setup Environment
         uses: ./.github/actions/setup-env
       - name: Build C++
