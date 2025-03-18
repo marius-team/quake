@@ -12,7 +12,7 @@ jobs:
 
   build_and_test:
     needs: setup-container
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     container:
       image: ${{ needs.setup-container.outputs.container_image }}
     steps:
