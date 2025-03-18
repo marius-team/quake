@@ -3,6 +3,9 @@ name: Container Setup
 on:
   workflow_call:
 
+outputs:
+  container_image: ${{ jobs.determine-and-build.outputs.container_image }}
+
 jobs:
   determine-and-build:
     runs-on: ubuntu-latest
