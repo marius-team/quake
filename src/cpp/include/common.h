@@ -262,7 +262,7 @@ struct Clustering {
     Tensor partition_ids;
     vector<Tensor> vectors;
     vector<Tensor> vector_ids;
-    vector<vector<shared_ptr<arrow::Table>>> data_frames;
+    vector<shared_ptr<arrow::Table>> attributes_tables;
 
     int64_t ntotal() const {
         int64_t n = 0;

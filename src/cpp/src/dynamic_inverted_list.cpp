@@ -153,7 +153,7 @@ namespace faiss {
         size_t n_entry,
         const idx_t *ids,
         const uint8_t *codes,
-        std::vector<std::shared_ptr<arrow::Table>> data_frames
+        shared_ptr<arrow::Table> attributes_table
     )  {
         if (n_entry == 0) {
             return 0;
@@ -170,7 +170,7 @@ namespace faiss {
             part->set_code_size(static_cast<int64_t>(code_size));
         }
 
-        part->append((int64_t) n_entry, ids, codes, data_frames);
+        part->append((int64_t) n_entry, ids, codes, attributes_table);
         return n_entry;
     }
 

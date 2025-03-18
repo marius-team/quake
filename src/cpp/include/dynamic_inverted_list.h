@@ -144,7 +144,7 @@ namespace faiss {
             size_t n_entry,
             const idx_t *ids,
             const uint8_t *codes,
-            std::vector<std::shared_ptr<arrow::Table>> data_frames
+            std::shared_ptr<arrow::Table> attributes_table
         );
 
         /**

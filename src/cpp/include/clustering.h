@@ -14,7 +14,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
                               int n_clusters,
                               MetricType metric_type,
                               int niter = 5,
-                              std::vector<std::shared_ptr<arrow::Table>> data_frames = {},
+                              std::shared_ptr<arrow::Table> attributes_table = nullptr,
                               Tensor initial_centroids = Tensor()
                               );
 

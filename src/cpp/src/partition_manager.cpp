@@ -78,7 +78,7 @@ void PartitionManager::init_partitions(
     for (int64_t i = 0; i < nlist; i++) {
         Tensor v = clustering->vectors[i];
         Tensor id = clustering->vector_ids[i];
-        std::vector<std::shared_ptr<arrow::Table>> data_frames = clustering->data_frames[i];
+        std::shared_ptr<arrow::Table> attributes_table = clustering->attributes_tables[i];
         if (v.size(0) != id.size(0)) {
             throw runtime_error("[PartitionManager] init_partitions: mismatch in v.size(0) vs id.size(0).");
         }
@@ -106,7 +106,7 @@ void PartitionManager::init_partitions(
                 count,
                 id.data_ptr<int64_t>(),
                 as_uint8_ptr(v),
-                data_frames
+                attributes_table
             );
             if (debug_) {
                 std::cout << "[PartitionManager] init_partitions: Added " << count
