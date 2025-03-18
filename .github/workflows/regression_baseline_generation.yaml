@@ -1,0 +1,40 @@
+name: Manual Baseline Generation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-baseline:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Setup Environment
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+
+      - name: Build Project
+        run: |
+          pip install .
+
+      - name: Generate Workload and Results
+        run: |
+          cd test/python/regression
+          python run_all_workloads.py --overwrite --name baseline
+
+      - name: Upload Baseline Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-artifacts
+          path: |
+            data
+            workloads
+            results

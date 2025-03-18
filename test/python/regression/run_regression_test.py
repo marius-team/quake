@@ -6,47 +6,59 @@ import json
 import torch
 import numpy as np
 import pandas as pd
+import logging
 from pathlib import Path
 import time
 
-# Import your vector search index and workload classes.
-# (These should be defined in your project; adjust the import paths as needed.)
+# Import your project-specific modules.
 from quake.index_wrappers.quake import QuakeWrapper
 from quake.datasets.ann_datasets import load_dataset
 from quake import IndexBuildParams, SearchParams
 from quake.workload_generator import DynamicWorkloadGenerator, WorkloadEvaluator
 
+def setup_logging(log_level=logging.INFO):
+    logging.basicConfig(level=log_level,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+
+def load_configuration(config_path: Path) -> dict:
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        return config
+    except Exception as e:
+        logging.error(f"Failed to load configuration file {config_path}: {e}")
+        raise
+
 def run_performance_test(index: QuakeWrapper,
-                         build_params: IndexBuildParams,
-                         search_params: SearchParams,
+                         build_params: dict,
+                         search_params: dict,
                          workload_generator: DynamicWorkloadGenerator,
                          evaluator: WorkloadEvaluator,
-                         csv_output_path: Path):
+                         csv_output_path: Path) -> None:
     """
     Runs the workload on the index, collects per-operation metrics, and writes a CSV file.
     """
-    print("Generating workload operations...")
+    logging.info("Generating workload operations...")
     if not workload_generator.workload_exists():
         workload_generator.generate_workload()
 
-    print("Evaluating workload...")
+    logging.info("Evaluating workload...")
     results = evaluator.evaluate_workload(name="Quake",
                                           index=index,
                                           build_params=build_params,
                                           search_params=search_params)
 
-    # create output directory if it does not exist
-    csv_output_path = Path(csv_output_path)
+    # Create output directory if it does not exist.
     csv_output_path.mkdir(parents=True, exist_ok=True)
-
     csv_output_file = csv_output_path / "results.csv"
 
-    # Save the results as a CSV file.
+    # Save results as CSV.
     df = pd.DataFrame(results)
     df.to_csv(csv_output_file, index=False)
-    print(f"CSV results saved to {csv_output_file}")
+    logging.info(f"CSV results saved to {csv_output_file}")
 
 def main():
+    setup_logging()
     parser = argparse.ArgumentParser(
         description="Run Regression Test for the Vector Search Library"
     )
@@ -66,38 +78,50 @@ def main():
         '--name',
         type=str,
         default=None,
-        help='Name of the experiment')
-
+        help='Name of the experiment'
+    )
+    parser.add_argument(
+        '--overwrite',
+        action='store_true',
+        help='Overwrite existing results if set'
+    )
     args = parser.parse_args()
 
-    # Load configuration from YAML.
-    with open(args.config, 'r') as f:
-        config = yaml.safe_load(f)
+    config_path = Path(args.config)
+    config = load_configuration(config_path)
 
     # Set seeds for reproducibility.
     seed = config.get('seed', 1738)
-
-    workload_name = args.config.split('/')[-1].split('.')[0]
-
-    if args.name is not None:
-        name = args.name
-    else:
-        name = workload_name
-
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+    # Use the stem of the config file as a default experiment name.
+    workload_name = config_path.stem
+    name = args.name if args.name is not None else workload_name
+
+    # Setup workload and output directories.
+    workload_dir = Path(config.get('workload_dir', 'workloads/experiment')) / workload_name
+    workload_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(config.get('results_dir', 'results')) / workload_name / name
+
+    # Check if results already exist.
+    results_csv = output_dir / "results.csv"
+    if results_csv.exists() and not args.overwrite:
+        logging.info(f"Results already exist in {output_dir}. Skipping run_regression_test. Use --overwrite to force rerun.")
+        return
+
     # Load dataset.
-    dataset_name = config['dataset']['name']
-    dataset_path = config['dataset'].get('path', None)
-    print(f"Loading dataset {dataset_name} from {dataset_path} ...")
+    dataset_config = config.get('dataset', {})
+    dataset_name = dataset_config.get('name')
+    dataset_path = dataset_config.get('path', None)
+    logging.info(f"Loading dataset {dataset_name} from {dataset_path} ...")
     vectors, queries, gt = load_dataset(dataset_name, dataset_path)
 
+    # Extract index parameters from the configuration.
     build_params = {
         "nc": config['index'].get('nc', 1000),
         "metric": config['index'].get('metric', 'l2')
     }
-
     search_params = {
         "k": config['index']['search'].get('k', 10),
         "nprobe": config['index']['search'].get('nprobe', 10),
@@ -106,13 +130,7 @@ def main():
         "batched_scan": config['index']['search'].get('batched_scan', False)
     }
 
-    # Set up workload generator.
-    workload_dir = config.get('workload_dir', 'workloads/experiment')
-    workload_dir = Path(workload_dir) / workload_name
-    workload_dir.mkdir(parents=True, exist_ok=True)
-
-    output_dir = Path(config.get('results_dir', 'results')) / workload_name / name
-
+    # Instantiate the workload generator.
     workload_generator = DynamicWorkloadGenerator(
         workload_dir=workload_dir,
         base_vectors=vectors,
@@ -130,15 +148,16 @@ def main():
         seed=seed
     )
 
-    # Set up evaluator.
+    # Instantiate the evaluator.
     evaluator = WorkloadEvaluator(
         workload_dir=workload_dir,
         output_dir=output_dir
     )
 
+    # Instantiate your index.
     index = QuakeWrapper()
 
-    # Run the performance test and output CSV.
+    # Run the regression test.
     run_performance_test(index, build_params, search_params, workload_generator, evaluator, output_dir)
 
 if __name__ == '__main__':

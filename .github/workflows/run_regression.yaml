@@ -1,0 +1,45 @@
+name: PR Regression Test
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  regression-test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Setup Environment
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+
+      - name: Build Project
+        run: |
+          pip install .
+
+      - name: Download Baseline Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: baseline-artifacts
+          path: downloaded_baseline
+
+      - name: Restore Baseline Workload and Results
+        run: |
+          # Copy the pre-generated workload and results into dedicated baseline folders.
+          cp -r downloaded_baseline/workloads test/python/regression/workloads
+          cp -r downloaded_baseline/results test/python/regression/results
+          cp -r downloaded_baseline/data test/python/regression/data
+
+      - name: Run Regression Tests
+        run: |
+          python run_all_workloads.py --name pr_regression
