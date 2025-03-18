@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 import argparse
 
-def run_workload(config: Path, results_dir: Path, run_name: str) -> None:
+def run_workload(config: Path, results_dir: Path, run_name: str, overwrite: bool) -> None:
     """Run the regression test for a given config and store its results."""
     print(f"Running workload for config: {config.name} (run: {run_name})")
     # Create a dedicated subdirectory for this workload's results using the run name.
@@ -17,7 +17,8 @@ def run_workload(config: Path, results_dir: Path, run_name: str) -> None:
         "python", "run_regression_test.py",
         "--config", str(config),
         "--output", str(output_dir),
-        "--name", run_name
+        "--name", run_name,
+        "--overwrite" if overwrite else ""
     ])
     if result.returncode != 0:
         sys.exit(f"Error running workload: {config}")
@@ -26,6 +27,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run all workload configurations with a given run name.")
     parser.add_argument("--name", type=str, required=True,
                         help="Name of this run (e.g. 'baseline' or 'PR-123'). This will be appended to the results directory for each config.")
+    parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
     # List your workload configuration files.
@@ -41,7 +43,7 @@ def main():
 
     # Run each workload configuration.
     for config in configs:
-        run_workload(config, results_dir, args.name)
+        run_workload(config, results_dir, args.name, args.overwrite)
 
     # Once all workloads are complete, call the comparison script.
     compare_cmd = [
