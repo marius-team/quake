@@ -5,7 +5,7 @@ on:
 
 jobs:
   setup-env:
-    uses: ./.github/workflows/setup-environment.yaml
+    uses: ./.github/workflows/setup_environment.yaml
 
   generate-baseline:
     needs: setup-env
@@ -13,7 +13,6 @@ jobs:
     container:
       image: ${{ needs.setup-env.outputs.container_image }}
     steps:
-      - uses: ./.github/workflows/setup_environment.yaml
       - name: Build Quake for Baseline
         uses: ./.github/actions/build-quake
         with:

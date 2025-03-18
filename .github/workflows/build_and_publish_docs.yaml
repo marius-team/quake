@@ -6,7 +6,7 @@ on:
 
 jobs:
   setup-env:
-    uses: ./.github/workflows/setup-environment.yaml
+    uses: ./.github/workflows/setup_environment.yaml
 
   build_docs:
     needs: setup-env

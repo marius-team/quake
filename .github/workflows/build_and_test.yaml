@@ -8,7 +8,7 @@ on:
 
 jobs:
   setup-env:
-    uses: ./.github/workflows/setup-environment.yaml
+    uses: ./.github/workflows/setup_environment.yaml
 
   build_and_test:
     needs: setup-env
