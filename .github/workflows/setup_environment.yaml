@@ -44,8 +44,7 @@ jobs:
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
-          conda activate quake-env
-          pip install pyyaml
+          conda activate test-env
       - name: Run Extra Commands
         if: ${{ inputs.extra-commands != '' }}
         shell: bash
