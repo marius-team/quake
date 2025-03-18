@@ -56,7 +56,7 @@ jobs:
         run: |
           echo "Computing hash for dependency files..."
           # Concatenate the files to create a unique fingerprint.
-          hash=$(cat environments/ubuntu-latest/Dockerfile conda.yaml 2>/dev/null | sha256sum | awk '{print $1}')
+          hash=$(cat environments/ubuntu-latest/Dockerfile environments/ubuntu-latest/conda.yaml 2>/dev/null | sha256sum | awk '{print $1}')
           echo "hash=$hash" >> "$GITHUB_OUTPUT"
           echo "Dependency hash: $hash"
 
