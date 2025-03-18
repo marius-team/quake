@@ -25,14 +25,9 @@ runs:
     - name: Setup Conda Environment
       shell: bash
       run: |
-        # Ensure GitHub's safe.directory is set (needed on some runners)
         git config --global --add safe.directory '*'
-        # Source conda's initialization script.
-        source /opt/miniconda/etc/profile.d/conda.sh
-        # Activate the specified conda environment.
+        eval "$(conda shell.bash hook)"
         conda activate ${{ inputs.env-name }}
-        # Install any common Python dependencies.
-        pip install pyyaml
 
     - name: Run Extra Commands
       if: ${{ inputs.extra-commands != '' }}
