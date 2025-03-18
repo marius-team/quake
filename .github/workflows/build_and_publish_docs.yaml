@@ -11,6 +11,8 @@ jobs:
   build_docs:
     needs: setup-container
     runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.setup-container.outputs.container_image }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

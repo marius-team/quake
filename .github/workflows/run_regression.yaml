@@ -28,16 +28,15 @@ jobs:
           cmake_options: "-DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF -DBUILD_TESTS=ON"
           target: "bindings quake_tests"
 
-      - name: Get baseline artifacts
+      - name: Get Baseline Artifacts
         uses: actions/download-artifact@v2
         with:
           name: baseline-artifacts
+
+      - name: Run Regression Tests
         run: |
           mv workloads tests/python/regression
           mv results tests/python/regression
           mv data tests/python/regression
-
-      - name: Run Regression Tests
-        run: |
           cd tests/python/regression
           python run_all_workloads.py --name "PR-${{ github.event.number }}"
