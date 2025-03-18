@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Print container name
         run: |
-        echo "Container image is: ${{ needs.setup-container.outputs.container_image }}"
+          echo "Container image is: ${{ needs.setup-container.outputs.container_image }}"
 
       - name: Checkout Repository
         uses: actions/checkout@v4
