@@ -2,9 +2,10 @@ name: Container Setup
 
 on:
   workflow_call:
-
-outputs:
-  container_image: ${{ jobs.determine-and-build.outputs.container_image }}
+    outputs:
+      container_image:
+        description: "Container image determined by this workflow"
+        value: ${{ jobs.determine-and-build.outputs.container_image }}
 
 jobs:
   determine-and-build:
