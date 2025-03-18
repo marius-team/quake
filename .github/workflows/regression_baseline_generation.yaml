@@ -1,7 +1,10 @@
 name: Manual Baseline Generation
 
 on:
-  workflow_dispatch:
+#  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 jobs:
   generate-baseline:
