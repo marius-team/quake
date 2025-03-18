@@ -1,0 +1,30 @@
+name: Setup Container Environment
+
+on:
+  workflow_call:
+    inputs:
+      run_commands:
+        description: 'Commands to run in the container'
+        required: true
+        type: string
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Setup Environment
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+          # Ensure common dependencies are installed
+          pip install pyyaml
+
+      - name: Run Provided Commands
+        run: ${{ inputs.run_commands }}

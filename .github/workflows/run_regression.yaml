@@ -2,44 +2,37 @@ name: PR Regression Test
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
+  determine-container:
+    runs-on: ubuntu-latest
+    outputs:
+      container_image: ${{ steps.determine.outputs.container_image }}
+    steps:
+      - name: Determine and Build Container
+        id: determine
+        uses: ./.github/actions/determine-container
+        with:
+          event-before: ${{ github.event.before }}
+          sha: ${{ github.sha }}
+
   regression-test:
+    needs: determine-container
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+      image: ${{ needs.determine-container.outputs.container_image }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+      - name: Build Quake for Regression
+        uses: ./.github/actions/build-quake
         with:
-          submodules: true
-          fetch-depth: 0
-
-      - name: Build Project
-        run: |
-          git config --global --add safe.directory '*'
-          eval "$(conda shell.bash hook)"
-          conda activate quake-env
-          conda install conda-forge::hydra-core
-          python3 -m pip install pyyaml
-          pip install .
-
-      - name: Download Baseline Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: baseline-artifacts
-          path: downloaded_baseline
-
-      - name: Restore Baseline Workload and Results
-        run: |
-          # Copy the pre-generated workload and results into dedicated baseline folders.
-          cp -r downloaded_baseline/workloads test/python/regression/workloads
-          cp -r downloaded_baseline/results test/python/regression/results
-          cp -r downloaded_baseline/data test/python/regression/data
-
+          build_method: "cmake"
+          build_type: "Release"
+          cmake_options: "-DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF -DBUILD_TESTS=ON"
+          target: "bindings quake_tests"
       - name: Run Regression Tests
         run: |
-          cd test/python/regression
-          python3 run_all_workloads.py --name pr_regression
+          # Run your driver script that organizes regression test operations.
+          python ../run_all_workloads.py --name "PR-${{ github.event.number }}"

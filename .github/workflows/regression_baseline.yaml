@@ -1,0 +1,30 @@
+name: Manual Baseline Generation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-baseline:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+    steps:
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+      - name: Build Quake for Baseline
+        uses: ./.github/actions/build-quake
+        with:
+          build_method: "cmake"
+          build_type: "Release"
+          cmake_options: "-DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF -DBUILD_TESTS=ON"
+          target: "bindings quake_tests"
+      - name: Run Baseline Driver Script
+        run: |
+          python ../run_all_workloads.py --overwrite --name baseline
+      - name: Upload Baseline Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-artifacts
+          path: |
+            build/workloads
+            build/results

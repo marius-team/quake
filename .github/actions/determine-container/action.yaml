@@ -1,0 +1,58 @@
+name: Determine and Build Container
+description: >
+  Checks for dependency changes and, if found, builds and pushes a test container.
+  Otherwise, it returns the main container image.
+inputs:
+  event-before:
+    description: 'Commit hash before the change'
+    required: true
+  sha:
+    description: 'Current commit hash'
+    required: true
+  dockerfile:
+    description: 'Path to the Dockerfile'
+    required: false
+    default: 'environments/ubuntu-latest/Dockerfile'
+  conda-file:
+    description: 'Path to the conda YAML file'
+    required: false
+    default: 'environments/ubuntu-latest/conda.yaml'
+  test-container-tag:
+    description: 'Tag prefix for test container (e.g., ghcr.io/marius-team/quake/test_container:)'
+    required: false
+    default: 'ghcr.io/marius-team/quake/test_container:'
+  main-container:
+    description: 'Main container image if no dependency changes'
+    required: false
+    default: 'ghcr.io/marius-team/quake/ubuntu-latest:latest'
+outputs:
+  container_image:
+    description: 'The container image to use'
+runs:
+  using: "composite"
+  steps:
+    - name: Check for dependency changes
+      id: check
+      shell: bash
+      run: |
+        echo "Checking for dependency changes..."
+        if git diff --name-only "${{ inputs.event-before }}" "${{ inputs.sha }}" | grep -E "$(basename "${{ inputs.dockerfile }}")|$(basename "${{ inputs.conda-file }}")"; then
+          echo "Dependencies changed."
+          echo "build_required=true" >> $GITHUB_OUTPUT
+        else
+          echo "No dependency changes."
+          echo "build_required=false" >> $GITHUB_OUTPUT
+        fi
+    - name: Build Test Container if Needed
+      id: build
+      shell: bash
+      run: |
+        if [ "${{ steps.check.outputs.build_required }}" = "true" ]; then
+          echo "Building test container..."
+          docker build -f "${{ inputs.dockerfile }}" -t "${{ inputs.test-container-tag }}${{ inputs.sha }}" .
+          docker push "${{ inputs.test-container-tag }}${{ inputs.sha }}"
+          echo "container_image=${{ inputs.test-container-tag }}${{ inputs.sha }}" >> $GITHUB_OUTPUT
+        else
+          echo "No build required. Using main container."
+          echo "container_image=${{ inputs.main-container }}" >> $GITHUB_OUTPUT
+        fi

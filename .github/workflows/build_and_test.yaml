@@ -2,66 +2,44 @@ name: Build and Test
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
-
-env:
-  BUILD_TYPE: Debug
+    branches: [ main ]
 
 jobs:
-  test:
+  determine-container:
+    runs-on: ubuntu-latest
+    outputs:
+      container_image: ${{ steps.determine.outputs.container_image }}
+    steps:
+      - name: Determine and Build Container
+        id: determine
+        uses: ./.github/actions/determine-container
+        with:
+          event-before: ${{ github.event.before }}
+          sha: ${{ github.sha }}
+
+  build_and_test:
+    needs: determine-container
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+      image: ${{ needs.determine-container.outputs.container_image }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+      - name: Build Quake for Testing
+        uses: ./.github/actions/build-quake
         with:
-          submodules: true
-          fetch-depth: 0
-
-      - name: Build project
+          build_method: "cmake"
+          build_type: "Debug"
+          cmake_options: "-DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF -DBUILD_TESTS=ON"
+          target: "bindings quake_tests"
+      - name: Run C++ Tests
         run: |
-          git config --global --add safe.directory '*'
-          eval "$(conda shell.bash hook)"
-          conda activate quake-env
-          mkdir -p build
           cd build
-          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-                -DQUAKE_USE_NUMA=OFF \
-                -DQUAKE_ENABLE_GPU=OFF \
-                -DBUILD_TESTS=ON \
-                -DQUAKE_USE_AVX512=OFF \
-                ../
-          make bindings -j2
-          make quake_tests -j2
-
-      - name: Run tests
+          test/cpp/quake_tests
+      - name: Run Python Tests
         run: |
-            cd build
-            test/cpp/quake_tests
-
-  python_build:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-          fetch-depth: 0
-
-      - name: Debug Checkout
-        run: |
-          ls -R
-
-      - name: Build project
-        run: |
-          git config --global --add safe.directory '*'
-          eval "$(conda shell.bash hook)"
-          conda activate quake-env
           pip install .
           pip install pytest
           python -m pytest test/python
