@@ -43,6 +43,8 @@ jobs:
           docker build -f environments/ubuntu-latest/Dockerfile -t "$tag" .
           docker push "$tag"
           echo "container_image=$tag" >> "$GITHUB_OUTPUT"
+          echo "Test container built and pushed."
+          echo "container_image=$tag"
 
       - name: Set Container Image Output
         id: set_image
@@ -56,3 +58,4 @@ jobs:
             echo "No dependency changes. Using main container: $image"
           fi
           echo "container_image=$image" >> "$GITHUB_OUTPUT"
+          echo "container_image=$image"
