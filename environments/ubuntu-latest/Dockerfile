@@ -47,6 +47,9 @@ SHELL ["bash", "-c"]
 RUN echo "conda activate quake-env" >> ~/.bashrc
 ENV CONDA_DEFAULT_ENV=quake-env
 
+# initialize conda
+RUN conda init bash
+
 # -----------------------------
 # Entry point
 # -----------------------------
