@@ -24,7 +24,7 @@ jobs:
           eval "$(conda shell.bash hook)"
           conda activate quake-env
           conda install conda-forge::hydra-core
-          conda install anaconda::yaml
+          pip install yaml
           pip install .
 
       - name: Generate Workload and Results
