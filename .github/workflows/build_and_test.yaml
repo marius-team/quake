@@ -14,8 +14,12 @@ jobs:
     needs: setup-container
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+      image: ${{ needs.setup-container.outputs.container_image }}
     steps:
+      - name: Print container name
+        run: |
+        echo "Container image is: ${{ needs.setup-container.outputs.container_image }}"
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
