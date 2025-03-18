@@ -17,14 +17,11 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      - name: Setup Environment
+      - name: Build Project
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-
-      - name: Build Project
-        run: |
           pip install .
 
       - name: Download Baseline Artifacts
