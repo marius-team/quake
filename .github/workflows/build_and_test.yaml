@@ -16,21 +16,8 @@ jobs:
     container:
       image: ${{ needs.setup-container.outputs.container_image }}
     steps:
-      - name: Print container name
-        run: |
-          echo "Container image is: ${{ needs.setup-container.outputs.container_image }}"
-
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Debug Container
-        shell: bash
-        run: |
-          echo "===== Container Debug ====="
-          echo "PATH=$PATH"
-          which conda || true
-          conda info --envs || true
-          ls -l /opt/miniconda/etc/profile.d
 
       - name: Activate quake-env
         shell: bash
@@ -44,19 +31,20 @@ jobs:
           pip install pytest
           python -c "import torch; print('Torch version:', torch.__version__)"
 
-      - name: Build C++ Targets
-        uses: ./.github/actions/build-quake
-        with:
-          build_method: "cmake"
-          build_type: "Debug"
-          cmake_options: "-DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF -DBUILD_TESTS=ON"
-          target: "quake_tests"
-
-      - name: Build Python Package
-        uses: ./.github/actions/build-quake
-        with:
-          build_method: "pip"
-          build_type: "Release"
+      - name: Build C++
+        run: |
+          source /opt/miniconda/etc/profile.d/conda.sh
+          conda activate quake-env
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                -DQUAKE_USE_NUMA=OFF \
+                -DQUAKE_ENABLE_GPU=OFF \
+                -DBUILD_TESTS=ON \
+                -DQUAKE_USE_AVX512=OFF \
+                ../
+          make bindings -j2
+          make quake_tests -j2
 
       - name: Run C++ Tests
         shell: bash
@@ -66,5 +54,8 @@ jobs:
       - name: Run Python Tests
         shell: bash
         run: |
+          source /opt/miniconda/etc/profile.d/conda.sh
+          conda activate quake-env
+          pip install .
           pip install pytest
           python -m pytest test/python
