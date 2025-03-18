@@ -2,8 +2,6 @@ name: Container Setup
 
 on:
   workflow_call:
-    outputs:
-      container_image: string
 
 jobs:
   determine-and-build:
