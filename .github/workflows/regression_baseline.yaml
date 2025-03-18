@@ -1,9 +1,7 @@
 name: Manual Baseline Generation
 
 on:
-#  workflow_dispatch:
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   setup-container:
