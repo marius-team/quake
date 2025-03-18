@@ -49,12 +49,16 @@ void IndexPartition::set_code_size(int64_t code_size) {
     code_size_ = code_size;
 }
 
-void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
+void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes, std::shared_ptr<arrow::Table> attributes_table) {
     if (n_entry <= 0) return;
     ensure_capacity(num_vectors_ + n_entry);
     const size_t code_bytes = static_cast<size_t>(code_size_);
     std::memcpy(codes_ + num_vectors_ * code_bytes, new_codes, n_entry * code_bytes);
     std::memcpy(ids_ + num_vectors_, new_ids, n_entry * sizeof(idx_t));
+    if(attributes_table!=nullptr){
+        attributes_tables_.push_back(attributes_table);
+    }
+
     num_vectors_ += n_entry;
 }
 

@@ -11,6 +11,7 @@ dependencies:
   - faiss-cpu
   - matplotlib
   - pytest
+  - libarrow-all=19.0.1 
   - pip
   - pip:
     - sphinx

@@ -27,6 +27,7 @@ public:
 
     uint8_t* codes_ = nullptr;  ///< Pointer to the encoded vectors (raw memory block)
     idx_t* ids_ = nullptr;      ///< Pointer to the vector IDs
+    std::vector<std::shared_ptr<arrow::Table>> attributes_tables_ = {};
 
     /// Default constructor.
     IndexPartition() = default;
@@ -86,7 +87,7 @@ public:
      * @param new_ids Pointer to the new vector IDs.
      * @param new_codes Pointer to the new encoded vectors.
      */
-    void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes);
+    void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes, std::shared_ptr<arrow::Table> attributes_table=nullptr);
 
     /**
      * @brief Update existing entries in place.

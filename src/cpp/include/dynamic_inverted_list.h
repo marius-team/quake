@@ -135,6 +135,7 @@ namespace faiss {
          * @param n_entry Number of entries to add.
          * @param ids Pointer to the vector IDs.
          * @param codes Pointer to the encoded vectors.
+         * @param data_frames Arrow data frames.
          * @return Number of entries added.
          * @throws std::runtime_error if the partition does not exist.
          */
@@ -142,7 +143,28 @@ namespace faiss {
             size_t list_no,
             size_t n_entry,
             const idx_t *ids,
-            const uint8_t *codes) override;
+            const uint8_t *codes,
+            std::shared_ptr<arrow::Table> attributes_table
+        );
+
+        /**
+         * @brief Append new entries (codes and IDs) to a partition.
+         *
+         * @param list_no Partition number.
+         * @param n_entry Number of entries to add.
+         * @param ids Pointer to the vector IDs.
+         * @param codes Pointer to the encoded vectors.
+         * @param data_frames Optional Arrow data frames.
+         * @return Number of entries added.
+         * @throws std::runtime_error if the partition does not exist.
+         */
+        size_t add_entries(
+            size_t list_no,
+            size_t n_entry,
+            const idx_t *ids,
+            const uint8_t *codes
+        ) ;
+
 
         /**
          * @brief Update existing entries in a partition.

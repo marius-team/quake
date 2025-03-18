@@ -152,7 +152,9 @@ namespace faiss {
         size_t list_no,
         size_t n_entry,
         const idx_t *ids,
-        const uint8_t *codes) {
+        const uint8_t *codes,
+        shared_ptr<arrow::Table> attributes_table
+    )  {
         if (n_entry == 0) {
             return 0;
         }
@@ -168,8 +170,17 @@ namespace faiss {
             part->set_code_size(static_cast<int64_t>(code_size));
         }
 
-        part->append((int64_t) n_entry, ids, codes);
+        part->append((int64_t) n_entry, ids, codes, attributes_table);
         return n_entry;
+    }
+
+    size_t DynamicInvertedLists::add_entries(
+        size_t list_no,
+        size_t n_entry,
+        const idx_t *ids,
+        const uint8_t *codes
+        ) {
+        return add_entries(list_no, n_entry, ids, codes, {});
     }
 
     void DynamicInvertedLists::update_entries(

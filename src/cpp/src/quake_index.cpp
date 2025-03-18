@@ -25,7 +25,7 @@ QuakeIndex::~QuakeIndex() {
     maintenance_policy_params_ = nullptr;
 }
 
-shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params) {
+shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params, std::shared_ptr<arrow::Table> attributes_table) {
     build_params_ = build_params;
     metric_ = str_to_metric_type(build_params_->metric);
 
@@ -45,7 +45,8 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
             ids,
             build_params_->nlist,
             metric_,
-            build_params_->niter
+            build_params_->niter,
+            attributes_table
         );
         auto e1 = std::chrono::high_resolution_clock::now();
         timing_info->train_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e1 - s1).count();
@@ -71,6 +72,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         clustering->centroids = x.mean(0, true);
         clustering->vectors = {x};
         clustering->vector_ids = {ids};
+        clustering->attributes_tables = {attributes_table};
 
         partition_manager_->init_partitions(parent_, clustering);
     }

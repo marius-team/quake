@@ -33,6 +33,12 @@
 #include <pthread.h>
 #include <ctime>
 
+#include <arrow/api.h>
+#include <arrow/array.h>
+#include <arrow/table.h>
+#include <arrow/type.h>
+#include <arrow/chunked_array.h>
+
 #ifdef QUAKE_USE_NUMA
 #include <numa.h>
 #include <numaif.h>
@@ -256,6 +262,7 @@ struct Clustering {
     Tensor partition_ids;
     vector<Tensor> vectors;
     vector<Tensor> vector_ids;
+    vector<shared_ptr<arrow::Table>> attributes_tables;
 
     int64_t ntotal() const {
         int64_t n = 0;

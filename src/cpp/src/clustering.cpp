@@ -7,12 +7,16 @@
 #include "clustering.h"
 #include <faiss/IndexFlat.h>
 #include "faiss/Clustering.h"
+#include <arrow/compute/api_vector.h>
+#include <arrow/api.h>
+#include <arrow/compute/api.h>
 
 shared_ptr<Clustering> kmeans(Tensor vectors,
                               Tensor ids,
                               int n_clusters,
                               MetricType metric_type,
                               int niter,
+                              std::shared_ptr<arrow::Table> attributes_table,
                               Tensor /* initial_centroids */) {
     // Ensure enough vectors are available and sizes match.
     assert(vectors.size(0) >= n_clusters * 2);
@@ -52,10 +56,57 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     // Partition vectors and ids by cluster.
     vector<Tensor> cluster_vectors(n_clusters);
     vector<Tensor> cluster_ids(n_clusters);
+    vector<shared_ptr<arrow::Table>> cluster_attributes_tables(n_clusters);
+
     for (int i = 0; i < n_clusters; i++) {
-        cluster_vectors[i] = vectors.index({assignments == i});
-        cluster_ids[i] = ids.index({assignments == i});
+        auto mask = (assignments == i);
+        cluster_vectors[i] = vectors.index({mask});
+        cluster_ids[i] = ids.index({mask});
+
+        if(attributes_table == nullptr) {
+            cluster_attributes_tables[i] = nullptr;
+            continue;
+        }
+
+        auto cluster_ids_tensor = cluster_ids[i];  // Assuming this is a tensor with IDs
+        std::vector<int64_t> cluster_ids_vec(cluster_ids_tensor.data<int64_t>(), 
+                                             cluster_ids_tensor.data<int64_t>() + cluster_ids_tensor.numel());
+
+        // Convert to Arrow Array
+        arrow::Int64Builder id_builder;
+        id_builder.AppendValues(cluster_ids_vec);
+        std::shared_ptr<arrow::Array> cluster_ids_array;
+        id_builder.Finish(&cluster_ids_array);
+
+        // Get the "id" column from the attributes table
+        std::shared_ptr<arrow::ChunkedArray> id_column = attributes_table->GetColumnByName("id");
+        
+        auto lookup_options = std::make_shared<arrow::compute::SetLookupOptions>(cluster_ids_array);
+        // Apply set lookup to filter rows
+        auto result = arrow::compute::CallFunction(
+            "index_in", 
+            {id_column->chunk(0)}, 
+            lookup_options.get()
+        );
+        
+        auto index_array = std::static_pointer_cast<arrow::Int32Array>(result->make_array());
+
+        auto mask_result = arrow::compute::CallFunction(
+            "not_equal",
+            {index_array, arrow::MakeScalar(-1)}
+        );
+
+        // Convert result to a Boolean mask
+        auto mask_table = std::static_pointer_cast<arrow::BooleanArray>(mask_result->make_array());
+
+        // Filter the table using the mask
+        auto filtered_table_result = arrow::compute::Filter(attributes_table, mask_table);
+
+        cluster_attributes_tables[i] = filtered_table_result->table();
+        std::cout<<cluster_attributes_tables[i]->ToString()<<std::endl;
     }
+
+
     Tensor partition_ids = torch::arange(n_clusters, torch::kInt64);
 
     shared_ptr<Clustering> clustering = std::make_shared<Clustering>();
@@ -63,6 +114,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     clustering->partition_ids = partition_ids;
     clustering->vectors = cluster_vectors;
     clustering->vector_ids = cluster_ids;
+    clustering->attributes_tables = cluster_attributes_tables;
 
     delete index_ptr;
     return clustering;
