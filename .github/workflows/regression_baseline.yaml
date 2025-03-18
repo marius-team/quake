@@ -38,6 +38,6 @@ jobs:
         with:
           name: baseline-artifacts
           path: |
-            workloads
-            results
-            data
+            test/python/regression/workloads
+            test/python/regression/results
+            test/python/regression/data
