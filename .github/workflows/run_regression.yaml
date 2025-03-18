@@ -32,8 +32,10 @@ jobs:
 
       - name: Run Regression Tests
         run: |
-          mv workloads tests/python/regression
-          mv results tests/python/regression
-          mv data tests/python/regression
-          cd tests/python/regression
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          mv workloads test/python/regression
+          mv results test/python/regression
+          mv data test/python/regression
+          cd test/python/regression
           python run_all_workloads.py --name "PR-${{ github.event.number }}"

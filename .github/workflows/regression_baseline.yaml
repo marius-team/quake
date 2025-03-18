@@ -27,7 +27,9 @@ jobs:
 
       - name: Run Baseline Driver Script
         run: |
-          cd tests/python/regression
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          cd test/python/regression
           python run_all_workloads.py --overwrite --name baseline
 
       - name: Upload Baseline Artifacts
