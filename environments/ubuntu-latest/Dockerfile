@@ -36,21 +36,11 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
     bash /tmp/miniconda.sh -b -p $CONDA_DIR && \
     rm /tmp/miniconda.sh
 
-# -----------------------------
-# Set up and activate conda environment
-# -----------------------------
+
+# Copy in your conda environment YAML
 COPY environments/ubuntu-latest/conda.yaml /tmp/conda.yaml
-RUN conda env create -f /tmp/conda.yaml && \
-    conda clean -afy
 
-SHELL ["bash", "-c"]
-RUN echo "conda activate quake-env" >> ~/.bashrc
-ENV CONDA_DEFAULT_ENV=quake-env
+# Create quake-env
+RUN conda env create -f /tmp/conda.yaml && conda clean -afy
 
-# initialize conda
-RUN conda init bash
-
-# -----------------------------
-# Entry point
-# -----------------------------
-ENTRYPOINT ["/bin/bash", "-ci", "conda activate quake-env && exec bash"]
+CMD ["/bin/bash"]

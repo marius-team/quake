@@ -19,13 +19,21 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Conda
+      - name: Activate quake-env
+        shell: bash
         run: |
-          git config --global --add safe.directory '*'
-          export PATH="/opt/miniconda/bin:$PATH"
-          eval "$(/opt/miniconda/bin/conda shell.bash hook)"
-          conda info --envs
+          # In GitHub Actions, the container entrypoint is often overridden,
+          # so we explicitly activate quake-env here:
+          source /opt/miniconda/etc/profile.d/conda.sh
           conda activate quake-env
+          
+          # Optional: confirm environment
+          conda info --envs
+          echo "CONDA_DEFAULT_ENV=$CONDA_DEFAULT_ENV"
+
+          # Now run any commands that require quake-env
+          pip install pytest
+          python -c "import torch; print('Torch version:', torch.__version__)"
 
       - name: Build C++ Targets
         uses: ./.github/actions/build-quake
