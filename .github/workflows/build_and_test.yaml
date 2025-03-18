@@ -19,21 +19,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Activate quake-env
-        shell: bash
-        run: |
-          source /opt/miniconda/etc/profile.d/conda.sh
-          conda activate quake-env
-          
-          conda info --envs
-          echo "CONDA_DEFAULT_ENV=$CONDA_DEFAULT_ENV"
-
-          pip install pytest
-          python -c "import torch; print('Torch version:', torch.__version__)"
-
       - name: Build C++
         run: |
-          source /opt/miniconda/etc/profile.d/conda.sh
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
           conda activate quake-env
           mkdir -p build
           cd build
@@ -54,7 +43,8 @@ jobs:
       - name: Run Python Tests
         shell: bash
         run: |
-          source /opt/miniconda/etc/profile.d/conda.sh
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
           conda activate quake-env
           pip install .
           pip install pytest

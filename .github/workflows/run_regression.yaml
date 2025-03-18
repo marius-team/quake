@@ -18,13 +18,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Build Quake for Regression
-        uses: ./.github/actions/build-quake
-        with:
-          build_method: "cmake"
-          build_type: "Release"
-          cmake_options: "-DQUAKE_USE_NUMA=OFF -DQUAKE_ENABLE_GPU=OFF -DBUILD_TESTS=ON"
-          target: "bindings quake_tests"
+      - name: Install Quake
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+          pip install .
 
       - name: Get Baseline Artifacts
         uses: actions/download-artifact@v4
