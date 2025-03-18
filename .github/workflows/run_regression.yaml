@@ -22,7 +22,7 @@ jobs:
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-          conda install hydra-core
+          conda install conda-forge::hydra-core
           pip install .
 
       - name: Download Baseline Artifacts

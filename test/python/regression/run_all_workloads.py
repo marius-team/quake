@@ -12,9 +12,9 @@ def run_workload(config: Path, results_dir: Path, run_name: str, overwrite: bool
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Execute the regression test script with the given configuration and run name.
-    # This assumes run_regression_test.py has been modified to accept a --name parameter.
+    # This assumes run_workload.py has been modified to accept a --name parameter.
     result = subprocess.run([
-        "python", "run_regression_test.py",
+        "python", "run_workload.py",
         "--config", str(config),
         "--output", str(output_dir),
         "--name", run_name,
