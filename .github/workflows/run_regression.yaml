@@ -35,7 +35,6 @@ jobs:
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-          pip install pandas
           mv workloads test/python/regression
           mv results test/python/regression
           mv data test/python/regression
