@@ -143,9 +143,13 @@ TEST(ListScanLatencyEstimatorTest, MismatchedGridsForFile) {
 
 TEST(ListScanLatencyEstimatorTest, EstimateVsActualLatency) {
   int d = 32;
-  std::vector<int> n_values = {16, 64, 256};
+  std::vector<int> n_values = {64, 256, 1024};
   std::vector<int> k_values = {1, 4, 16};
   int n_trials = 25;
+
+  // clear old profile file if it exists
+  std::string test_filename = "latency_profile.csv";
+  std::remove(test_filename.c_str());
 
   // In practice, you might have a bigger grid, but let's keep it short for test
   ListScanLatencyEstimator estimator(d, n_values, k_values, n_trials);
