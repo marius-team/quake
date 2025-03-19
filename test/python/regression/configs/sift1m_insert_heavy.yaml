@@ -1,0 +1,30 @@
+# sift1m_heavy_insert.yaml
+seed: 1738
+mode: run
+name: sift1m_heavy_insert
+
+dataset:
+  name: sift1m
+  path: data/sift
+
+index:
+  metric: l2
+  nc: 1024
+  do_maintenance: True
+
+  search:
+    k: 10
+
+workload:
+  insert_ratio: 0.80
+  delete_ratio: 0.10
+  query_ratio: 0.10
+  update_batch_size: 1000
+  query_batch_size: 1000
+  number_of_operations: 1000
+  initial_size: 100000
+  cluster_size: 100
+  cluster_sample_distribution: uniform
+
+results_dir: results
+workload_dir: workloads

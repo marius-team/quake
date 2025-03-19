@@ -385,7 +385,6 @@ TEST(QuakeIndexStressTest, RapidAddRemoveAddTest) {
         // Add
         auto add_vectors = generate_random_data(batch_size, dimension);
         auto add_ids = generate_sequential_ids(batch_size, i * batch_size);
-        std::cout << add_ids << std::endl;
         auto add_info = index.add(add_vectors, add_ids);
         ASSERT_EQ(add_info->n_vectors, batch_size);
 
