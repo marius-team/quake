@@ -7,7 +7,7 @@
 // A simple helper to split a string by delimiter.
 // You can replace this with any library function if you wish.
 static std::vector<std::string> split_string(const std::string &str,
-                                            char delim) {
+                                             char delim) {
     std::vector<std::string> tokens;
     std::stringstream ss(str);
     std::string item;
@@ -384,7 +384,7 @@ MaintenanceCostEstimator::MaintenanceCostEstimator(int d, float alpha, int k)
 float MaintenanceCostEstimator::compute_split_delta(int partition_size, float hit_rate, int total_partitions) const {
     // Compute overhead incurred by adding one more partition.
     float delta_overhead = latency_estimator_->estimate_scan_latency(total_partitions + 1, k_) -
-                             latency_estimator_->estimate_scan_latency(total_partitions, k_);
+                           latency_estimator_->estimate_scan_latency(total_partitions, k_);
     // Cost before splitting.
     float old_cost = latency_estimator_->estimate_scan_latency(partition_size, k_) * hit_rate;
     // Cost after splitting: assume the partition is split in half and cost doubles due to two partitions,
@@ -393,35 +393,64 @@ float MaintenanceCostEstimator::compute_split_delta(int partition_size, float hi
     return delta_overhead + new_cost - old_cost;
 }
 
-float MaintenanceCostEstimator::compute_delete_delta(int partition_size,
-                                                       float hit_rate,
-                                                       int total_partitions,
-                                                       float current_scan_fraction) const {
-    // Ensure that there are at least 2 partitions; deletion is undefined otherwise.
+
+float MaintenanceCostEstimator::compute_delete_delta(
+    int partition_size, // size of the candidate (deleted) partition
+    float hit_rate, // scan fraction ("hit rate") for the candidate partition
+    int total_partitions,
+    float avg_partition_hit_rate, // average scan fraction for each partition
+    float avg_partition_size // average size of partitions
+) const {
+    // Guard against invalid usage
     if (total_partitions <= 1) {
+        // Can't delete if there's only 1 partition
         return 0.0f;
     }
 
-    // Let T = total_partitions, n = partition_size, and p = hit_rate.
-    // Compute the structural benefit: the reduction in overhead when one partition is removed.
+    // ----------------------------------------------------
+    // 1) Structural overhead difference:
+    //    = L(T-1, k) - L(T, k).
+    // ----------------------------------------------------
     float latency_T = latency_estimator_->estimate_scan_latency(total_partitions, k_);
     float latency_T_minus_1 = latency_estimator_->estimate_scan_latency(total_partitions - 1, k_);
     float delta_overhead = latency_T_minus_1 - latency_T;
 
-    // Compute the merging penalty.
-    // After deletion, the n vectors of the deleted partition are redistributed among (T-1) partitions.
-    // Under an even-distribution assumption, each remaining partition gets an extra n/(T-1) vectors.
-    // The new cost for queries that originally hit this partition becomes:
-    // L(n + n/(T-1), k) instead of L(n, k). The extra cost is:
-    float merged_partition_size = partition_size + partition_size / static_cast<float>(total_partitions - 1);
-    float latency_merged = latency_estimator_->estimate_scan_latency(merged_partition_size, k_);
-    float latency_original = latency_estimator_->estimate_scan_latency(partition_size, k_);
-    float delta_merge = latency_merged - latency_original;
+    // ----------------------------------------------------
+    // 2) Scanning cost difference:
+    //
+    // Old scanning cost (approx):
+    //    cost_old = (T-1)*(\bar{p}) * L(\bar{n}, k)
+    //             + p_d * L(n_d, k)
+    //
+    // New scanning cost (approx):
+    //    each of (T-1) partitions has new size \bar{n}' = \bar{n} + n_d/(T-1)
+    //    and new scan fraction \bar{p}' = \bar{p} + p_d/(T-1)
+    //    cost_new = (T-1)*(\bar{p}') * L(\bar{n}', k)
+    // ----------------------------------------------------
+    float cost_old = (total_partitions - 1) * avg_partition_hit_rate
+                     * latency_estimator_->estimate_scan_latency(avg_partition_size, k_)
+                     + hit_rate
+                     * latency_estimator_->estimate_scan_latency(partition_size, k_);
 
-    float delta_reassign = current_scan_fraction * latency_original;
+    // Compute the "new" size and scan fraction after merging
+    float merged_size = avg_partition_size + static_cast<float>(partition_size) / (total_partitions - 1);
+    float merged_hit_rate = avg_partition_hit_rate + hit_rate / static_cast<float>(total_partitions - 1);
 
-    // Total delta cost is the sum of the structural benefit and the merging penalty scaled by the hit rate.
-    float delta = delta_overhead + hit_rate * delta_merge + delta_reassign;
+    float cost_new;
+    if (partition_size < total_partitions) {
+        // assume at most partition_size partitions get the extra vectors
+        cost_new = partition_size * merged_hit_rate * latency_estimator_->estimate_scan_latency(avg_partition_size + 1, k_)
+                   + (total_partitions - partition_size - 1) * merged_hit_rate * latency_estimator_->estimate_scan_latency(avg_partition_size, k_);
+    } else {
+        cost_new = (total_partitions - 1) * merged_hit_rate * latency_estimator_->estimate_scan_latency(ceil(merged_size), k_);
+    }
+
+    float delta_scanning = cost_new - cost_old;
+
+    // ----------------------------------------------------
+    // 3) Final delete delta = structural overhead + scanning delta
+    // ----------------------------------------------------
+    float delta = delta_overhead + delta_scanning;
     return delta;
 }
 

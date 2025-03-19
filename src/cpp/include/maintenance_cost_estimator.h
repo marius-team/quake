@@ -99,9 +99,10 @@ public:
     /// @param partition_size Size of the partition to delete.
     /// @param hit_rate Hit rate (fraction) of the partition.
     /// @param total_partitions Total number of partitions before deletion.
-    /// @param current_scan_fraction Current overall scan fraction.
+    /// @param avg_partition_hit_rate Average hit rate of all partitions.
+    /// @param avg_partition_size Average size of all partitions.
     /// @return The computed delete delta.
-    float compute_delete_delta(int partition_size, float hit_rate, int total_partitions, float current_scan_fraction) const;
+    float compute_delete_delta(int partition_size, float hit_rate, int total_partitions, float avg_partition_hit_rate, float avg_partition_size) const;
 
     /// @brief Get the latency estimator.
     shared_ptr<ListScanLatencyEstimator> get_latency_estimator() const;

@@ -38,7 +38,6 @@ MaintenancePolicy::MaintenancePolicy(
 // to decide on actions, and calls the PartitionManager methods accordingly.
 //
 shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
-
     // only consider split/deletion once the window is full
     if (hit_count_tracker_->get_num_queries_recorded() < params_->window_size) {
         return std::make_shared<MaintenanceTimingInfo>();
@@ -65,6 +64,7 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     vector<int64_t> partitions_to_delete;
     vector<int64_t> partitions_to_split;
 
+    int avg_partition_size = partition_manager_->ntotal() / total_partitions;
     for (const auto &partition_id: all_partition_ids) {
         // Get hit count and hit rate for the partition.
         int hit_count = aggregated_hits[partition_id];
@@ -73,18 +73,17 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
 
         // Deletion decision.
         float delete_delta = cost_estimator_->compute_delete_delta(
-            partition_size, hit_rate, total_partitions, current_scan_fraction);
+            partition_size, hit_rate, total_partitions, current_scan_fraction, avg_partition_size);
 
         if (delete_delta < -params_->delete_threshold_ns) {
             partitions_to_delete.push_back(partition_id);
-        }
-
-        // Splitting decision (only if partition is sufficiently large).
-        if (partition_size > params_->min_partition_size) {
-            float split_delta = cost_estimator_->compute_split_delta(
-                partition_size, hit_rate, total_partitions);
-            if (split_delta < -params_->split_threshold_ns) {
-                partitions_to_split.push_back(partition_id);
+        } else {
+            if (partition_size > params_->min_partition_size) {
+                float split_delta = cost_estimator_->compute_split_delta(
+                    partition_size, hit_rate, total_partitions);
+                if (split_delta < -params_->split_threshold_ns) {
+                    partitions_to_split.push_back(partition_id);
+                }
             }
         }
     }
@@ -100,7 +99,7 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     // STEP 3: Process deletions.
     auto start_delete = steady_clock::now();
     if (partitions_to_delete_tens.numel() > 0) {
-        std::cout << "Deleting partitions " << partitions_to_delete_tens.numel() << std::endl;
+        std::cout << "Deleting partitions " << partitions_to_delete_tens << std::endl;
         partition_manager_->delete_partitions(partitions_to_delete_tens);
     }
     for (int64_t partition_id: partitions_to_delete) {
@@ -114,7 +113,8 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     if (partitions_to_split_tens.numel() > 0) {
         split_partitions = partition_manager_->split_partitions(partitions_to_split_tens);
         // Assume each split yields two new partitions.
-        std::cout << "Splitting partitions '" << partitions_to_split_tens.numel() << "' into " << 2 * partitions_to_split_tens.numel() << " partitions." << std::endl;
+        std::cout << "Splitting partitions '" << partitions_to_split_tens.numel() << "' into " << 2 *
+                partitions_to_split_tens.numel() << " partitions." << std::endl;
         auto new_partition_ids_accessor = split_partitions->partition_ids.accessor<int64_t, 1>();
         int64_t split_partition_offset = 0;
         int n_splits = 2;
@@ -124,9 +124,11 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
                 hit_count_tracker_->record_split(partition_id,
                                                  aggregated_hits[partition_id],
                                                  new_partition_ids_accessor[2 * split_partition_offset],
-                                                 aggregated_hits[new_partition_ids_accessor[2 * split_partition_offset]],
+                                                 aggregated_hits[new_partition_ids_accessor[
+                                                     2 * split_partition_offset]],
                                                  new_partition_ids_accessor[2 * split_partition_offset + 1],
-                                                 aggregated_hits[new_partition_ids_accessor[2 * split_partition_offset + 1]]);
+                                                 aggregated_hits[new_partition_ids_accessor[
+                                                     2 * split_partition_offset + 1]]);
             }
         }
 
@@ -158,7 +160,6 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
 void MaintenancePolicy::record_query_hits(vector<int64_t> partition_ids) {
     vector<int64_t> scanned_sizes = partition_manager_->get_partition_sizes(partition_ids);
     hit_count_tracker_->add_query_data(partition_ids, scanned_sizes);
-
 }
 
 //
@@ -184,13 +185,17 @@ vector<int64_t> MaintenancePolicy::check_partitions_for_deletion() {
     vector<int64_t> partitions_to_delete;
     int total_partitions = partition_manager_->nlist();
     float current_scan_fraction = hit_count_tracker_->get_current_scan_fraction();
+    int avg_partition_size = partition_manager_->ntotal() / total_partitions;
     for (const auto &entry: aggregated_hits) {
         int64_t partition_id = entry.first;
         int hit_count = entry.second;
         float hit_rate = static_cast<float>(hit_count) / static_cast<float>(params_->window_size);
         int partition_size = partition_manager_->get_partition_size(partition_id);
-        float delta = cost_estimator_->compute_delete_delta(partition_size, hit_rate,
-                                                            total_partitions, current_scan_fraction);
+        float delta = cost_estimator_->compute_delete_delta(partition_size,
+                                                            hit_rate,
+                                                            total_partitions,
+                                                            current_scan_fraction,
+                                                            avg_partition_size);
         if (delta < -params_->delete_threshold_ns) {
             partitions_to_delete.push_back(partition_id);
         }

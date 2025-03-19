@@ -110,9 +110,9 @@ TEST(MaintenancePolicyRefactoredTest, RecordAndResetHitCount) {
 // Here we record hits only on some partitions so that others remain underutilized.
 //
 TEST(MaintenancePolicyRefactoredTest, TriggerDeletion) {
-  auto [parent, manager] = CreateParentAndManager(3, 4, 100);
+  auto [parent, manager] = CreateParentAndManager(1000, 4, 100000);
   auto params = make_shared<MaintenancePolicyParams>();
-  params->window_size = 3;
+  params->window_size = 999;
   params->alpha = 0.5f;
   // Set delete threshold low so that partitions with few hits are marked.
   params->delete_threshold_ns = 0.0f;
@@ -121,10 +121,13 @@ TEST(MaintenancePolicyRefactoredTest, TriggerDeletion) {
 
   auto policy = make_shared<MaintenancePolicy>(manager, params);
 
-  // Record hits on partitions 1 and 2, but not on partition 0.
-  policy->record_query_hits({1});
-  policy->record_query_hits({2});
-  policy->record_query_hits({1});
+  // set hits for all partitions besides 0
+  for (int i = 1; i < 1000; i++) {
+    policy->record_query_hits({i, i, i, i, i, i, i, i, i, i, i});
+  }
+
+  // make partition 0 small
+  manager->partitions_->partitions_[0]->resize(10);
 
   // Run maintenance. Partition 0, being unhit, should be deleted.
   shared_ptr<MaintenanceTimingInfo> info = policy->perform_maintenance();

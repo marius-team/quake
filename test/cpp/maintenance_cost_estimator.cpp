@@ -28,7 +28,7 @@ protected:
     }
 };
 
-TEST_F(MaintenanceCostEstimatorTest, compute_split_deltaTest) {
+TEST_F(MaintenanceCostEstimatorTest, ComputeSplitDelta) {
     // Given: partition_size = 1000, hit_rate = 0.3, total_partitions = 100.
     int partition_size = 1000;
     float hit_rate = 0.3f;
@@ -48,7 +48,7 @@ TEST_F(MaintenanceCostEstimatorTest, compute_split_deltaTest) {
     EXPECT_NEAR(computed_delta, expected_delta, 1.0);
 }
 
-TEST_F(MaintenanceCostEstimatorTest, compute_delete_deltaTest) {
+TEST_F(MaintenanceCostEstimatorTest, ComputeDeleteDelta) {
     // Given: partition_size = 1000, hit_rate = 0.3, total_partitions = 100, current_scan_fraction = 0.25.
     int partition_size = 1000;
     float hit_rate = 0.3f;
@@ -72,10 +72,18 @@ TEST_F(MaintenanceCostEstimatorTest, compute_delete_deltaTest) {
     float latency_original = latency_estimator_->estimate_scan_latency(partition_size, k);
     float delta_merge = latency_merged - latency_original;
 
-    // Total delta cost is the sum of the structural benefit and the merging penalty scaled by the hit rate.
-    float expected_delta = delta_overhead + hit_rate * delta_merge;
+    float delta_reassign = current_scan_fraction * latency_original;
 
-    float computed_delta = estimator->compute_delete_delta(partition_size, hit_rate, total_partitions, current_scan_fraction);
+    // Total delta cost is the sum of the structural benefit and the merging penalty scaled by the hit rate.
+    float expected_delta = delta_overhead + hit_rate * delta_merge + delta_reassign;
+
+    int average_partition_size = partition_size;
+
+    float computed_delta = estimator->compute_delete_delta(partition_size,
+        hit_rate,
+        total_partitions,
+        current_scan_fraction,
+        average_partition_size);
 
     std::cout << "Computed delta: " << computed_delta << std::endl;
     std::cout << "Expected delta: " << expected_delta << std::endl;

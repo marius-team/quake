@@ -25,8 +25,8 @@ class MaintenancePolicy {
    * @param params Configuration parameters for the maintenance policy.
    */
   MaintenancePolicy(
-      std::shared_ptr<PartitionManager> partition_manager,
-      std::shared_ptr<MaintenancePolicyParams> params);
+      shared_ptr<PartitionManager> partition_manager,
+      shared_ptr<MaintenancePolicyParams> params);
 
   /**
    * @brief Perform maintenance operations including deletion and splitting.
@@ -48,10 +48,10 @@ class MaintenancePolicy {
   void reset();
 
  private:
-  std::shared_ptr<PartitionManager> partition_manager_;  ///< Manages partition state.
-  std::shared_ptr<MaintenancePolicyParams> params_;        ///< Maintenance parameters.
-  std::shared_ptr<MaintenanceCostEstimator> cost_estimator_; ///< Cost estimator for maintenance actions.
-  std::shared_ptr<HitCountTracker> hit_count_tracker_;       ///< Hit count tracker for partition hit rates.
+  shared_ptr<PartitionManager> partition_manager_;  ///< Manages partition state.
+  shared_ptr<MaintenancePolicyParams> params_;        ///< Maintenance parameters.
+  shared_ptr<MaintenanceCostEstimator> cost_estimator_; ///< Cost estimator for maintenance actions.
+  shared_ptr<HitCountTracker> hit_count_tracker_;       ///< Hit count tracker for partition hit rates.
 
   /**
    * @brief Determine which partitions should be deleted.
