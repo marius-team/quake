@@ -19,7 +19,7 @@
 class IndexPartition {
 public:
     int numa_node_ = -1;    ///< Assigned NUMA node (-1 if not set)
-    int thread_id_ = -1;    ///< Mapped thread ID for processing
+    int core_id_ = -1;    ///< Mapped thread ID for processing
 
     int64_t buffer_size_ = 0;   ///< Allocated capacity (in number of vectors)
     int64_t num_vectors_ = 0;   ///< Current number of stored vectors
@@ -144,6 +144,8 @@ public:
      * @param new_capacity The new capacity (number of vectors).
      */
     void reallocate_memory(int64_t new_capacity);
+
+    void set_core_id(int core_id);
 
 #ifdef QUAKE_USE_NUMA
     /**

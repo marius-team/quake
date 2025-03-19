@@ -68,7 +68,7 @@ shared_ptr<PartitionState> MaintenancePolicy::get_partition_state(bool only_modi
     if (only_modified) {
         partition_ids = vector<int64_t>(modified_partitions_.begin(), modified_partitions_.end());
     } else {
-        Tensor p_ids = partition_manager_->partitions_->get_partition_ids();
+        Tensor p_ids = partition_manager_->partition_store_->get_partition_ids();
         auto p_ids_accessor = p_ids.accessor<int64_t, 1>();
         partition_ids = vector<int64_t>(p_ids.size(0));
         for (int i = 0; i < p_ids.size(0); i++) {
@@ -78,7 +78,7 @@ shared_ptr<PartitionState> MaintenancePolicy::get_partition_state(bool only_modi
 
     // For each partition, get the size and compute the hit rate.
     for (int64_t partition_id : partition_ids) {
-        int64_t partition_size = partition_manager_->partitions_->list_size(partition_id);
+        int64_t partition_size = partition_manager_->partition_store_->list_size(partition_id);
         int64_t hits = per_partition_hits_[partition_id];
         int curr_window_size = std::max(std::min(window_size_, curr_query_id_), 1);
         float hit_rate = hits / (float)curr_window_size;
@@ -170,7 +170,7 @@ void MaintenancePolicy::increment_hit_count(vector<int64_t> hit_partition_ids) {
     int vectors_scanned_new = 0;
     for (const auto &hit : hit_partition_ids) {
         per_partition_hits_[hit]++;
-        int size = partition_manager_->partitions_->list_size(hit);
+        int size = partition_manager_->partition_store_->list_size(hit);
         vectors_scanned_new += size;
         modified_partitions_.insert(hit);
         if (debug_) {
@@ -207,7 +207,7 @@ void MaintenancePolicy::increment_hit_count(vector<int64_t> hit_partition_ids) {
     std::vector<int64_t> hits_sizes;
     hits_sizes.reserve(hit_partition_ids.size());
     for (const auto &hit : hit_partition_ids) {
-        hits_sizes.push_back(partition_manager_->partitions_->list_size(hit));
+        hits_sizes.push_back(partition_manager_->partition_store_->list_size(hit));
     }
     per_query_scanned_partitions_sizes_[current_query_index] = hits_sizes;
     running_sum_scan_fraction_ += new_scan_fraction;

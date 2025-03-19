@@ -1,0 +1,10 @@
+diff a/docs/index.rst b/docs/index.rst	(rejected hunks)
+@@ -11,5 +11,7 @@ Quake Documentation
+    install
+    development_guide
+    api
++   architecture
++
+ 
+ * :ref:`genindex`
+\ No newline at end of file
