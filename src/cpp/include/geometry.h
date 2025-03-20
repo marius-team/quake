@@ -83,7 +83,7 @@ inline vector<float> compute_boundary_distances(const Tensor &query, vector<floa
 
             // Compute squared norm: A2 = ||v||^2.
             float A2 = faiss::fvec_inner_product(line_vector.data(), line_vector.data(), dimension);
-            float A = std::sqrtf(A2);  // Guaranteed nonzero.
+            float A = std::sqrt(A2);  // Guaranteed nonzero.
 
             // Compute dot product: dot = <r, v>.
             float dot_val = faiss::fvec_inner_product(residual.data(), line_vector.data(), dimension);
