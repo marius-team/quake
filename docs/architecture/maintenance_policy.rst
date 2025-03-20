@@ -1,4 +1,4 @@
-MaintenancePolicy Architecture
+MaintenancePolicy
 ================================
 
 Overview
@@ -17,7 +17,7 @@ several key components:
   scanned) over a sliding window. It computes the average scan fraction and maintains
   history of split and delete events for later analysis.
 
-Key Methods and Data Flow
+Key Methods
 -------------------------
 1. **Record Query Hits:**
    Each time a query is processed, the `record_query_hits()` method is called
