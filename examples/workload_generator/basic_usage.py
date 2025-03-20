@@ -44,28 +44,28 @@ def main():
     search_k = 10
     recall_target = .9
 
-    # # Create a DynamicWorkloadGenerator instance
-    # generator = DynamicWorkloadGenerator(
-    #     workload_dir=workload_dir,
-    #     base_vectors=base_vectors,
-    #     metric=metric,
-    #     insert_ratio=insert_ratio,
-    #     delete_ratio=delete_ratio,
-    #     query_ratio=query_ratio,
-    #     update_batch_size=update_batch_size,
-    #     query_batch_size=query_batch_size,
-    #     number_of_operations=number_of_operations,
-    #     initial_size=initial_size,
-    #     cluster_size=cluster_size,
-    #     cluster_sample_distribution=cluster_sample_distribution,
-    #     queries=queries,
-    #     query_cluster_sample_distribution=query_cluster_sample_distribution,
-    #     seed=seed
-    # )
-    #
-    # # Generate the workload (operations are saved to disk along with a runbook)
-    # print("Generating workload...")
-    # generator.generate_workload()
+    # Create a DynamicWorkloadGenerator instance
+    generator = DynamicWorkloadGenerator(
+        workload_dir=workload_dir,
+        base_vectors=base_vectors,
+        metric=metric,
+        insert_ratio=insert_ratio,
+        delete_ratio=delete_ratio,
+        query_ratio=query_ratio,
+        update_batch_size=update_batch_size,
+        query_batch_size=query_batch_size,
+        number_of_operations=number_of_operations,
+        initial_size=initial_size,
+        cluster_size=cluster_size,
+        cluster_sample_distribution=cluster_sample_distribution,
+        queries=queries,
+        query_cluster_sample_distribution=query_cluster_sample_distribution,
+        seed=seed
+    )
+
+    # Generate the workload (operations are saved to disk along with a runbook)
+    print("Generating workload...")
+    generator.generate_workload()
 
     # Define an example index configuration.
     index_cfg = {
