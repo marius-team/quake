@@ -27,13 +27,13 @@ def main():
     base_vectors, queries, _ = load_dataset("sift1m")
 
     # Workload generation parameters
-    insert_ratio = 0.0
+    insert_ratio = .9
     delete_ratio = 0.0
-    query_ratio = 1.0
+    query_ratio = .1
     update_batch_size = 10000
-    query_batch_size = 100
+    query_batch_size = 10
     number_of_operations = 1000
-    initial_size = 1000000
+    initial_size = 100000
     cluster_size = int(math.sqrt(base_vectors.shape[0]))
     cluster_sample_distribution = "uniform"  # or "skewed"
     query_cluster_sample_distribution = "uniform"  # or "skewed" / "skewed_fixed"
