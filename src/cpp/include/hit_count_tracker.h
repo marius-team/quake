@@ -14,22 +14,6 @@
 #include <cmath>
 #include <common.h>
 
-/// @brief Record for a split event.
-struct SplitRecord {
-    int64_t parent_id;
-    int64_t parent_hits;
-    int64_t left_id;
-    int64_t left_hits;
-    int64_t right_id;
-    int64_t right_hits;
-};
-
-/// @brief Record for a delete event.
-struct DeleteRecord {
-    int64_t partition_id;
-    int64_t hits;
-};
-
 /// @brief HitCountTracker maintains per-query hit counts and scanned partition sizes in a sliding window,
 /// computes the current scan fraction, and records maintenance history (split and delete events).
 class HitCountTracker {
@@ -70,12 +54,6 @@ public:
     /// @brief Record a delete event in the history.
     void record_delete(int64_t partition_id, int64_t hits);
 
-    /// @brief Get the history of split events.
-    const vector<SplitRecord>& get_split_history() const;
-
-    /// @brief Get the history of delete events.
-    const vector<DeleteRecord>& get_delete_history() const;
-
     /// @brief Get the window size.
     int get_window_size() const;
 
@@ -94,10 +72,6 @@ private:
     // Running sum of the scan fractions in the current window.
     float running_sum_scan_fraction_;
     float current_scan_fraction_;
-
-    // History records for maintenance events.
-    vector<SplitRecord> split_history_;
-    vector<DeleteRecord> delete_history_;
 
     /// @brief Helper function to compute the scan fraction for a query.
     /// @param scanned_sizes Vector of scanned partition sizes for one query.

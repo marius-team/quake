@@ -70,9 +70,6 @@ inline vector<float> compute_boundary_distances(const Tensor &query, vector<floa
 
     auto end = std::chrono::high_resolution_clock::now();
 
-    std::cout << "Time taken for initialization: "
-              << std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() << " ns" << std::endl;
-
     // used for euclidean distance
     if (euclidean) {
         // Compute residual: r = q - c0.
@@ -370,11 +367,11 @@ inline vector<float> compute_recall_profile(vector<float> boundary_distances, fl
     partition_probabilities[0] = 2.0 * partition_probabilities[1];
     // partition_probabilities[0] = 1 - partition_probabilities[1];
 
-    if (weigh_using_partition_sizes) {
-        for (int j = 0; j < num_partitions; j++) {
-            partition_probabilities[j] *= partition_sizes[j];
-        }
-    }
+    // if (weigh_using_partition_sizes) {
+    //     for (int j = 0; j < num_partitions; j++) {
+    //         partition_probabilities[j] *= partition_sizes[j];
+    //     }
+    // }
 
     // Ensure the probabilities sum to 1
     double sum_probabilities = 0.0;

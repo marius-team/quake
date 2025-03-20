@@ -104,6 +104,16 @@ public:
     /// @return The computed delete delta.
     float compute_delete_delta(int partition_size, float hit_rate, int total_partitions, float avg_partition_hit_rate, float avg_partition_size) const;
 
+    /// @brief Compute the delta delta given reassignments (use for rejection of deletes)
+    /// @param partition_size Size of the partition to delete.
+    /// @param hit_rate Hit rate (fraction) of the partition.
+    /// @param total_partitions Total number of partitions before deletion.
+    /// @param reassign_counts Number of vectors reassigned to each partition.
+    /// @param reassign_sizes Size of the partitions to which the vectors will be reassigned.
+    /// @param reassign_hit_rates Hit rates of the partitions to which the vectors will be reassigned.
+    /// @return The computed delete delta.
+    float compute_delete_delta_w_reassign(int partition_size, float hit_rate, int total_partitions,  const vector<int64_t> &reassign_counts, const vector<int64_t> &reassign_sizes, const vector<float> &reassign_hit_rates) const;
+
     /// @brief Get the latency estimator.
     shared_ptr<ListScanLatencyEstimator> get_latency_estimator() const;
 

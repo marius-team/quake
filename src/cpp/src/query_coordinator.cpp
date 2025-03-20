@@ -573,9 +573,6 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 curr_end_time = std::chrono::high_resolution_clock::now();
                 recall_model_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(curr_end_time - curr_start_time).count();
                 if (recall_estimate >= search_params->recall_target) {
-                    std::cout << "Recall target reached." << std::endl;
-                    std::cout << "Recall estimate: " << recall_estimate << std::endl;
-                    std::cout << "Scanned " << p << " partitions." << std::endl;
                     break;
                 }
             }
@@ -652,7 +649,7 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
                 (int) (partition_manager_->nlist() * search_params->initial_search_fraction), 1);
             parent_search_params->k = initial_num_partitions_to_search;
         } else {
-            parent_search_params->k = search_params->nprobe;
+            parent_search_params->k = std::min(search_params->nprobe, (int) partition_manager_->nlist());
         }
 
         auto parent_search_result = parent_->search(x, parent_search_params);

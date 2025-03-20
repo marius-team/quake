@@ -191,7 +191,7 @@ TEST(MaintenancePolicyRefactoredTest, TriggerSplitting) {
 // when splits occur.
 //
 TEST(MaintenancePolicyRefactoredTest, MaintenanceRunsSuccessfully) {
-  auto [parent, manager] = CreateParentAndManager(3, 4, 1000);
+  auto [parent, manager] = CreateParentAndManager(100, 4, 100000);
   auto params = make_shared<MaintenancePolicyParams>();
   params->window_size = 3;
   params->alpha = 0.5f;
@@ -199,6 +199,8 @@ TEST(MaintenancePolicyRefactoredTest, MaintenanceRunsSuccessfully) {
   params->delete_threshold_ns = 0.0f;
   params->split_threshold_ns = 0.0f;
   params->min_partition_size = 1;
+  params->refinement_radius = 10;
+  params->refinement_iterations = 3;
 
   auto policy = make_shared<MaintenancePolicy>(manager, params);
 

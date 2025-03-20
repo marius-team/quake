@@ -11,10 +11,9 @@
 #include "maintenance_cost_estimator.h"
 
 /**
- * @brief A simplified maintenance policy that manages partition hit counts and
+ * @brief Maintenance policy that manages partition hit counts and
  * performs maintenance operations (such as deletion and splitting) in a single pass.
  *
- * This class provides a vastly simplified interface and internal structure.
  */
 class MaintenancePolicy {
  public:
@@ -54,25 +53,11 @@ class MaintenancePolicy {
   shared_ptr<HitCountTracker> hit_count_tracker_;       ///< Hit count tracker for partition hit rates.
 
   /**
-   * @brief Determine which partitions should be deleted.
-   *
-   * @return std::vector<int64_t> List of partition IDs to delete.
-   */
-  std::vector<int64_t> check_partitions_for_deletion();
-
-  /**
-   * @brief Determine which partitions should be split.
-   *
-   * @return std::vector<int64_t> List of partition IDs to split.
-   */
-  std::vector<int64_t> check_partitions_for_splitting();
-
-  /**
    * @brief Perform local refinement on a set of partition IDs.
    *
    * @param partition_ids Tensor of partition IDs.
    */
-  void local_refinement(const torch::Tensor& partition_ids);
+  void local_refinement(const Tensor& partition_ids);
 };
 
 #endif  // MAINTENANCE_POLICY_REFACTORED_H

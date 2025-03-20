@@ -146,6 +146,10 @@ shared_ptr<ModifyTimingInfo> QuakeIndex::modify(Tensor ids, Tensor x) {
 void QuakeIndex::initialize_maintenance_policy(shared_ptr<MaintenancePolicyParams> maintenance_policy_params) {
     maintenance_policy_params_ = maintenance_policy_params;
     maintenance_policy_ = make_shared<MaintenancePolicy>(partition_manager_, maintenance_policy_params);
+
+    if (query_coordinator_ != nullptr) {
+        query_coordinator_->maintenance_policy_ = maintenance_policy_;
+    }
 }
 
 shared_ptr<MaintenanceTimingInfo> QuakeIndex::maintenance() {

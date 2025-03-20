@@ -26,8 +26,6 @@ void HitCountTracker::reset() {
     per_query_hits_.resize(window_size_);
     per_query_scanned_sizes_.clear();
     per_query_scanned_sizes_.resize(window_size_);
-    split_history_.clear();
-    delete_history_.clear();
 }
 
 void HitCountTracker::set_total_vectors(int total_vectors) {
@@ -77,34 +75,6 @@ const vector<vector<int64_t>>& HitCountTracker::get_per_query_hits() const {
 
 const vector<vector<int64_t>>& HitCountTracker::get_per_query_scanned_sizes() const {
     return per_query_scanned_sizes_;
-}
-
-void HitCountTracker::record_split(int64_t parent_id, int64_t parent_hits,
-                                  int64_t left_id, int64_t left_hits,
-                                  int64_t right_id, int64_t right_hits) {
-    SplitRecord record;
-    record.parent_id = parent_id;
-    record.parent_hits = parent_hits;
-    record.left_id = left_id;
-    record.left_hits = left_hits;
-    record.right_id = right_id;
-    record.right_hits = right_hits;
-    split_history_.push_back(record);
-}
-
-void HitCountTracker::record_delete(int64_t partition_id, int64_t hits) {
-    DeleteRecord record;
-    record.partition_id = partition_id;
-    record.hits = hits;
-    delete_history_.push_back(record);
-}
-
-const vector<SplitRecord>& HitCountTracker::get_split_history() const {
-    return split_history_;
-}
-
-const vector<DeleteRecord>& HitCountTracker::get_delete_history() const {
-    return delete_history_;
 }
 
 int HitCountTracker::get_window_size() const {

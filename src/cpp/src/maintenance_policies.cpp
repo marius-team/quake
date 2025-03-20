@@ -14,9 +14,7 @@ using std::vector;
 using std::unordered_map;
 using std::shared_ptr;
 
-//
-// Constructor: Initialize the PartitionManager, parameters, cost estimator, and hit tracker.
-//
+
 MaintenancePolicy::MaintenancePolicy(
     shared_ptr<PartitionManager> partition_manager,
     shared_ptr<MaintenancePolicyParams> params)
@@ -32,14 +30,13 @@ MaintenancePolicy::MaintenancePolicy(
         params_->window_size, partition_manager_->ntotal());
 }
 
-//
-// perform_maintenance() orchestrates deletion, splitting, and local refinement.
-// It aggregates hit counts from the HitCountTracker, uses the cost estimator
-// to decide on actions, and calls the PartitionManager methods accordingly.
-//
 shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     // only consider split/deletion once the window is full
+
+    int64_t num_queries = hit_count_tracker_->get_num_queries_recorded();
     if (hit_count_tracker_->get_num_queries_recorded() < params_->window_size) {
+        std::cout << "Window not full yet. " << num_queries << " queries recorded and " << params_->window_size
+                  << " queries required." << std::endl;
         return std::make_shared<MaintenanceTimingInfo>();
     }
 
@@ -76,7 +73,53 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
             partition_size, hit_rate, total_partitions, current_scan_fraction, avg_partition_size);
 
         if (delete_delta < -params_->delete_threshold_ns) {
-            partitions_to_delete.push_back(partition_id);
+
+            if (params_->enable_delete_rejection && partition_size > params_->min_partition_size) {
+                // check the assignments of the partitions to be deleted.
+                auto search_params = make_shared<SearchParams>();
+                search_params->k = 2; // get the top 2 partitions, ignore the first one as it is the partition itself
+                search_params->batched_scan = true;
+                float *partition_vectors = (float *) partition_manager_->partitions_->partitions_[partition_id]->codes_;
+                Tensor part_vecs = torch::from_blob(partition_vectors, {(int64_t) partition_manager_->partitions_->list_size(partition_id),
+                                                                       partition_manager_->d()}, torch::kFloat32);
+                auto res = partition_manager_->parent_->search(part_vecs, search_params);
+
+                Tensor reassign_ids = res->ids.flatten();
+
+                // remove the partition itself
+                reassign_ids = reassign_ids.masked_select(reassign_ids != partition_id);
+
+                // Get A) the unique partitions, B) the number reassigned, C) the size of the partitions, D) hit rates of the partitions
+                Tensor uniques;
+                Tensor counts;
+                std::tie(uniques, std::ignore, counts) = torch::_unique2(reassign_ids, true, false, true);
+                Tensor part_sizes = partition_manager_->get_partition_sizes(uniques);
+
+                // convert to vectors
+                vector<int64_t> reassign_id_vec = vector<int64_t>(uniques.data_ptr<int64_t>(), uniques.data_ptr<int64_t>() + uniques.size(0));
+
+                vector<int64_t> reassign_sizes = vector<int64_t>(part_sizes.data_ptr<int64_t>(),
+                                                                 part_sizes.data_ptr<int64_t>() + part_sizes.size(0));
+                vector<int64_t> reassign_counts = vector<int64_t>(counts.data_ptr<int64_t>(),
+                                                                  counts.data_ptr<int64_t>() + counts.size(0));
+                vector<float> hit_rates;
+                for (int64_t reassign_id: reassign_id_vec) {
+                    hit_rates.push_back(static_cast<float>(aggregated_hits[reassign_id]) / static_cast<float>(params_->window_size));
+                }
+
+                float delta = cost_estimator_->compute_delete_delta_w_reassign(partition_manager_->get_partition_size(partition_id),
+                                                                              static_cast<float>(aggregated_hits[partition_id]) / static_cast<float>(params_->window_size),
+                                                                              total_partitions,
+                                                                              reassign_counts,
+                                                                              reassign_sizes,
+                                                                              hit_rates);
+
+                if (delta < -params_->delete_threshold_ns) {
+                    partitions_to_delete.push_back(partition_id);
+                }
+            } else {
+                partitions_to_delete.push_back(partition_id);
+            }
         } else {
             if (partition_size > params_->min_partition_size) {
                 float split_delta = cost_estimator_->compute_split_delta(
@@ -89,21 +132,17 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     }
 
     // Convert partition ID vectors to Torch tensors.
-    torch::Tensor partitions_to_delete_tens = torch::from_blob(
+    Tensor partitions_to_delete_tens = torch::from_blob(
         partitions_to_delete.data(), {static_cast<int64_t>(partitions_to_delete.size())},
         torch::kInt64).clone();
-    torch::Tensor partitions_to_split_tens = torch::from_blob(
+    Tensor partitions_to_split_tens = torch::from_blob(
         partitions_to_split.data(), {static_cast<int64_t>(partitions_to_split.size())},
         torch::kInt64).clone();
 
     // STEP 3: Process deletions.
     auto start_delete = steady_clock::now();
     if (partitions_to_delete_tens.numel() > 0) {
-        std::cout << "Deleting partitions " << partitions_to_delete_tens << std::endl;
         partition_manager_->delete_partitions(partitions_to_delete_tens);
-    }
-    for (int64_t partition_id: partitions_to_delete) {
-        hit_count_tracker_->record_delete(partition_id, aggregated_hits[partition_id]);
     }
     auto end_delete = steady_clock::now();
 
@@ -111,26 +150,9 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     auto start_split = steady_clock::now();
     shared_ptr<Clustering> split_partitions;
     if (partitions_to_split_tens.numel() > 0) {
+
+        // split the partitions into two
         split_partitions = partition_manager_->split_partitions(partitions_to_split_tens);
-        // Assume each split yields two new partitions.
-        std::cout << "Splitting partitions '" << partitions_to_split_tens.numel() << "' into " << 2 *
-                partitions_to_split_tens.numel() << " partitions." << std::endl;
-        auto new_partition_ids_accessor = split_partitions->partition_ids.accessor<int64_t, 1>();
-        int64_t split_partition_offset = 0;
-        int n_splits = 2;
-        for (int64_t partition_id: partitions_to_split) {
-            for (int i = 0; i < n_splits; i++) {
-                split_partition_offset++;
-                hit_count_tracker_->record_split(partition_id,
-                                                 aggregated_hits[partition_id],
-                                                 new_partition_ids_accessor[2 * split_partition_offset],
-                                                 aggregated_hits[new_partition_ids_accessor[
-                                                     2 * split_partition_offset]],
-                                                 new_partition_ids_accessor[2 * split_partition_offset + 1],
-                                                 aggregated_hits[new_partition_ids_accessor[
-                                                     2 * split_partition_offset + 1]]);
-            }
-        }
 
         // remove old partitions
         partition_manager_->delete_partitions(partitions_to_split_tens, false);
@@ -154,99 +176,27 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     return timing_info;
 }
 
-//
-// record_partition_hit() records a hit event for a partition by adding it as a query.
-//
 void MaintenancePolicy::record_query_hits(vector<int64_t> partition_ids) {
     vector<int64_t> scanned_sizes = partition_manager_->get_partition_sizes(partition_ids);
     hit_count_tracker_->add_query_data(partition_ids, scanned_sizes);
 }
 
-//
-// reset() clears the hit count tracker’s stored query data.
-//
 void MaintenancePolicy::reset() {
     hit_count_tracker_->reset();
 }
 
-//
-// check_partitions_for_deletion() aggregates hit counts and uses the cost estimator
-// to determine which partitions are underutilized and candidates for deletion.
-//
-vector<int64_t> MaintenancePolicy::check_partitions_for_deletion() {
-    vector<vector<int64_t> > per_query_hits = hit_count_tracker_->get_per_query_hits();
-    unordered_map<int64_t, int> aggregated_hits;
-    for (const auto &query_hits: per_query_hits) {
-        for (int64_t pid: query_hits) {
-            aggregated_hits[pid]++;
-        }
-    }
-
-    vector<int64_t> partitions_to_delete;
-    int total_partitions = partition_manager_->nlist();
-    float current_scan_fraction = hit_count_tracker_->get_current_scan_fraction();
-    int avg_partition_size = partition_manager_->ntotal() / total_partitions;
-    for (const auto &entry: aggregated_hits) {
-        int64_t partition_id = entry.first;
-        int hit_count = entry.second;
-        float hit_rate = static_cast<float>(hit_count) / static_cast<float>(params_->window_size);
-        int partition_size = partition_manager_->get_partition_size(partition_id);
-        float delta = cost_estimator_->compute_delete_delta(partition_size,
-                                                            hit_rate,
-                                                            total_partitions,
-                                                            current_scan_fraction,
-                                                            avg_partition_size);
-        if (delta < -params_->delete_threshold_ns) {
-            partitions_to_delete.push_back(partition_id);
-        }
-    }
-    return partitions_to_delete;
-}
-
-//
-// check_partitions_for_splitting() aggregates hit counts and uses the cost estimator
-// to decide which partitions are overutilized and should be split.
-//
-vector<int64_t> MaintenancePolicy::check_partitions_for_splitting() {
-    vector<vector<int64_t> > per_query_hits = hit_count_tracker_->get_per_query_hits();
-    unordered_map<int64_t, int> aggregated_hits;
-    for (const auto &query_hits: per_query_hits) {
-        for (int64_t pid: query_hits) {
-            aggregated_hits[pid]++;
-        }
-    }
-
-    vector<int64_t> partitions_to_split;
-    int total_partitions = partition_manager_->nlist();
-    for (const auto &entry: aggregated_hits) {
-        int64_t partition_id = entry.first;
-        int hit_count = entry.second;
-        float hit_rate = static_cast<float>(hit_count) / static_cast<float>(params_->window_size);
-        int partition_size = partition_manager_->get_partition_size(partition_id);
-        if (partition_size <= params_->min_partition_size) continue;
-        float delta = cost_estimator_->compute_split_delta(partition_size, hit_rate, total_partitions);
-        if (delta < -params_->split_threshold_ns) {
-            partitions_to_split.push_back(partition_id);
-        }
-    }
-    return partitions_to_split;
-}
-
-//
-// local_refinement() delegates to the PartitionManager's refine_partitions() method.
-//
 void MaintenancePolicy::local_refinement(const torch::Tensor &partition_ids) {
-    return;
-    // Tensor centroids = partition_manager_->get(partition_ids);
-    // auto search_params = make_shared<SearchParams>();
-    // search_params->k = params_->refinement_radius;
-    // auto search_result = partition_manager_->parent_->search(centroids, search_params);
-    //
-    // Tensor curr_partition_ids = torch::cat({search_result->ids.flatten(0, 1), partition_ids});
-    // Tensor unique_partitions = std::get<0>(torch::_unique(curr_partition_ids));
-    //
-    // // ignore -1 partition id
-    // unique_partitions = unique_partitions.masked_select(unique_partitions >= 0);
-    //
-    // partition_manager_->refine_partitions(unique_partitions, params_->refinement_iterations);
+    Tensor split_centroids = partition_manager_->parent_->get(partition_ids);
+    auto search_params = std::make_shared<SearchParams>();
+    search_params->nprobe = 1000;
+    search_params->k = params_->refinement_radius;
+
+    if (params_->refinement_radius == 0) {
+        return;
+    }
+
+    auto result = partition_manager_->parent_->search(split_centroids, search_params);
+    Tensor refine_ids = std::get<0>(torch::_unique(result->ids));
+    refine_ids = refine_ids.masked_select(refine_ids != -1);
+    partition_manager_->refine_partitions(refine_ids, params_->refinement_iterations);
 }
