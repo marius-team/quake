@@ -202,7 +202,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             if (res.topk_buffer_pool.size() < static_cast<size_t>(job.num_queries)) {
                 res.topk_buffer_pool.resize(job.num_queries);
                 for (int64_t q = 0; q < job.num_queries; ++q) {
-                    res.topk_buffer_pool[q] = std::make_shared<TopkBuffer>(0, metric_ == faiss::METRIC_INNER_PRODUCT);
+                    res.topk_buffer_pool[q] = std::make_shared<TopkBuffer>(job.k, metric_ == faiss::METRIC_INNER_PRODUCT);
                 }
             } else {
                 for (int64_t q = 0; q < job.num_queries; ++q) {
@@ -210,6 +210,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                     res.topk_buffer_pool[q]->reset();
                 }
             }
+
             // Process the batched job.
             batched_scan_list((float *) res.local_query_buffer.data(),
                 partition_codes,
@@ -302,14 +303,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 global_topk_buffer_pool_[q]->set_processing_query(true);
             }
         }
-        if (partition_ids.dim() == 1) {
-            for (int64_t q = 0; q < num_queries; q++) {
-                global_topk_buffer_pool_[q]->set_jobs_left(partition_ids.size(0));
-            }
-        } else {
-            for (int64_t q = 0; q < num_queries; q++) {
-                global_topk_buffer_pool_[q]->set_jobs_left(partition_ids.size(1));
-            }
+        for (int64_t q = 0; q < num_queries; q++) {
+            global_topk_buffer_pool_[q]->set_jobs_left(partition_ids.size(1));
         }
     }
     auto end_time = high_resolution_clock::now();
@@ -318,8 +313,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     start_time = high_resolution_clock::now();
     if (search_params->batched_scan) {
-        if (partition_ids.dim() == 1)
-            partition_ids = partition_ids.unsqueeze(0).expand({num_queries, partition_ids.size(0)});
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         std::unordered_map<int64_t, vector<int64_t>> per_partition_query_ids;
@@ -342,8 +335,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             core_resources_[core_id].job_queue.enqueue(job);
         }
     } else {
-        if (partition_ids.dim() == 1)
-            partition_ids = partition_ids.unsqueeze(0).expand({num_queries, partition_ids.size(0)});
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         int64_t start = 0;

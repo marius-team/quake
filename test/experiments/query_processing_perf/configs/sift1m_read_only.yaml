@@ -18,29 +18,29 @@ index:
     batched_scan: True
 
 configs:
-  - name: serial_scan1
-    build:
-      n_workers: 0
-    search:
-      n_threads: 1
-
-  - name: serial_scan2
-    build:
-      n_workers: 0
-    search:
-      n_threads: 2
+#  - name: serial_scan1
+#    build:
+#      n_workers: 0
+#    search:
+#      n_threads: 1
 #
-  - name: serial_scan4
-    build:
-      n_workers: 0
-    search:
-      n_threads: 4
-#
-  - name: serial_scan8
-    build:
-      n_workers: 0
-    search:
-      n_threads: 8
+#  - name: serial_scan2
+#    build:
+#      n_workers: 0
+#    search:
+#      n_threads: 2
+##
+#  - name: serial_scan4
+#    build:
+#      n_workers: 0
+#    search:
+#      n_threads: 4
+##
+#  - name: serial_scan8
+#    build:
+#      n_workers: 0
+#    search:
+#      n_threads: 8
 
   - name: worker_scan1
     build:
