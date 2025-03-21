@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <stdexcept>
+#include <cmath>
 
 // For convenience.
 using std::make_shared;
