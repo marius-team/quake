@@ -336,6 +336,11 @@ Tensor PartitionManager::get(const Tensor &ids) {
     return vectors;
 }
 
+vector<float *> PartitionManager::get_vectors(vector<int64_t> ids) {
+    return partitions_->get_vectors_by_id(ids);
+}
+
+
 shared_ptr<Clustering> PartitionManager::select_partitions(const Tensor &select_ids, bool copy) {
     if (debug_) {
         std::cout << "[PartitionManager] select_partitions: Selecting partitions from provided ids." << std::endl;
@@ -439,120 +444,44 @@ shared_ptr<Clustering> PartitionManager::split_partitions(const Tensor &partitio
     return split_clustering;
 }
 
-void PartitionManager::refine_partitions(const Tensor &partition_ids, int iterations) {
+void PartitionManager::refine_partitions(Tensor partition_ids, int iterations) {
     if (debug_) {
         std::cout << "[PartitionManager] refine_partitions: Refining partitions with iterations = "
                   << iterations << std::endl;
     }
-    Tensor pids = partition_ids.defined() && partition_ids.size(0) > 0
-        ? partition_ids
-        : get_partition_ids();
-    if (!pids.size(0) || !partitions_ || !parent_) {
-        throw runtime_error("[PartitionManager] refine_partitions: no partitions to refine.");
+
+    if (!partition_ids.defined()) {
+        partition_ids = parent_->get_ids();
     }
 
-    faiss::MetricType mt = parent_->metric_;
-    shared_ptr<Clustering> selected_parts = select_partitions(pids);
-    Tensor centroids = selected_parts->centroids;
-    int64_t nclusters = pids.size(0);
-    int64_t d = centroids.size(1);
-    bool isIP = (mt == faiss::METRIC_INNER_PRODUCT);
-
-    auto pids_accessor = pids.accessor<int64_t, 1>();
-
-    for (int iter = 0; iter < iterations; iter++) {
-        Tensor new_centroids = torch::zeros_like(centroids);
-        Tensor counts = torch::zeros({nclusters}, torch::kLong);
-
-        // #pragma omp parallel
-        {
-            Tensor local_centroids = torch::zeros_like(centroids);
-            Tensor local_counts = torch::zeros({nclusters}, torch::kLong);
-
-            // #pragma omp for nowait
-            for (int64_t i = 0; i < nclusters; i++) {
-                Tensor vecs = selected_parts->vectors[i];
-                if (!vecs.defined() || !vecs.size(0)) continue;
-
-                Tensor dist = isIP
-                    ? -torch::mm(vecs, centroids.t())
-                    : torch::cdist(vecs, centroids);
-
-                auto min_res = dist.min(/*dim=*/1, /*keepdim=*/false);
-                Tensor labels = std::get<1>(min_res);
-                auto lbl_acc = labels.accessor<int64_t, 1>();
-
-                for (int64_t row = 0; row < vecs.size(0); row++) {
-                    int64_t c = lbl_acc[row];
-                    local_centroids[c] += vecs[row];
-                    local_counts[c] += 1;
-                }
-            }
-            // #pragma omp critical
-            {
-                new_centroids += local_centroids;
-                counts += local_counts;
-            }
-        }
-
-        if (iter < iterations) {
-            auto counts_acc = counts.accessor<int64_t, 1>();
-            for (int64_t c = 0; c < nclusters; c++) {
-                int64_t n = counts_acc[c];
-                if (n > 0) {
-                    centroids[c] = new_centroids[c] / (float)n;
-                    if (isIP) {
-                        float norm = centroids[c].norm().item<float>();
-                        if (norm > 1e-12f) {
-                            centroids[c] /= norm;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Final assignment
-    for (int64_t i = 0; i < nclusters; i++) {
-        int64_t pid = pids_accessor[i];
-        Tensor vecs = selected_parts->vectors[i];
-        Tensor ids = selected_parts->vector_ids[i];
-        if (!vecs.defined() || !vecs.size(0)) continue;
-
-        Tensor dist = isIP
-            ? -torch::mm(vecs, centroids.t())
-            : torch::cdist(vecs, centroids);
-        auto min_res = dist.min(/*dim=*/1, /*keepdim=*/false);
-        Tensor labels = std::get<1>(min_res);
-
-        std::vector<idx_t> to_remove;
-        to_remove.reserve(ids.size(0));
-        std::vector<int64_t> new_pids_array(ids.size(0));
-
-        auto lbl_acc = labels.accessor<int64_t, 1>();
-        auto ids_acc = ids.accessor<int64_t, 1>();
-        for (int64_t row = 0; row < vecs.size(0); row++) {
-            int64_t c = lbl_acc[row];
-            if (c != i) {
-                to_remove.push_back((idx_t)ids_acc[row]);
-            }
-            new_pids_array[row] = pids_accessor[c];
-        }
-
-        partitions_->batch_update_entries(
-            pid,
-            new_pids_array.data(),
-            (u_int8_t *) vecs.data_ptr(),
-            ids_acc.data(),
-            vecs.size(0)
-        );
+    if (partition_ids.size(0) == 0) {
         if (debug_) {
-            std::cout << "[PartitionManager] refine_partitions: After updating partition "
-                      << pid << ", new size: " << partitions_->list_size(pid) << std::endl;
+            std::cout << "[PartitionManager] refine_partitions: No partitions to refine. Exiting." << std::endl;
         }
+        return;
     }
 
-    parent_->modify(pids, centroids);
+    auto pids = partition_ids.accessor<int64_t, 1>();
+
+    Tensor current_centroids = parent_->get(partition_ids);
+    vector<shared_ptr<IndexPartition>> index_partitions(partition_ids.size(0));
+    for (int i = 0; i < partition_ids.size(0); i++) {
+        index_partitions[i] = partitions_->partitions_[pids[i]];
+    }
+
+    std::tie(current_centroids, index_partitions) = kmeans_refine_partitions(current_centroids,
+        index_partitions,
+        parent_->metric_,
+        iterations);
+
+    // modify centroids
+    parent_->modify(partition_ids, current_centroids);
+
+    // replace partitions
+    for (int i = 0; i < partition_ids.size(0); i++) {
+        partitions_->partitions_[pids[i]] = index_partitions[i];
+    }
+
     if (debug_) {
         std::cout << "[PartitionManager] refine_partitions: Completed refinement." << std::endl;
     }
@@ -728,6 +657,14 @@ Tensor PartitionManager::get_ids() {
     return torch::cat(ids, 0);
 }
 
+vector<int64_t> PartitionManager::get_partition_sizes(vector<int64_t> partition_ids) {
+    vector<int64_t> partition_sizes;
+    for (int64_t partition_id : partition_ids) {
+        partition_sizes.push_back(partitions_->list_size(partition_id));
+    }
+    return partition_sizes;
+}
+
 Tensor PartitionManager::get_partition_sizes(Tensor partition_ids) {
     if (debug_) {
         std::cout << "[PartitionManager] get_partition_sizes: Getting sizes for partitions." << std::endl;
@@ -752,6 +689,11 @@ Tensor PartitionManager::get_partition_sizes(Tensor partition_ids) {
     }
     return partition_sizes;
 }
+
+int64_t PartitionManager::get_partition_size(int64_t partition_id) {
+    return partitions_->list_size(partition_id);
+}
+
 
 bool PartitionManager::validate() {
     if (debug_) {

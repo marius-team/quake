@@ -339,7 +339,6 @@ TEST_F(QuakeSerialIVFBenchmark, Remove) {
 //
 // ===== Faiss BENCHMARK TESTS =====
 //
-
 TEST_F(FaissFlatBenchmark, Search) {
     int64_t k = K;
     std::vector<float> distances(NUM_QUERIES * k);

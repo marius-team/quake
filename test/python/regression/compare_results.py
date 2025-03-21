@@ -25,170 +25,123 @@ def load_results(results_dir: Path) -> pd.DataFrame:
     dfs = []
     for csv_file in csv_files:
         df = pd.read_csv(csv_file)
-        # Assume the parent directory name is the workload name.
-        config_name = csv_file.parent.name
-        df['config'] = config_name
+        # Assume the parent directory's name is the maintenance configuration name.
+        df['maintenance_config'] = csv_file.parent.name
         dfs.append(df)
     combined_df = pd.concat(dfs, ignore_index=True)
-
-    # Ensure a 'method' column exists. If not, default to a single method.
+    # If the 'method' column is missing, use maintenance_config as the method.
     if 'method' not in combined_df.columns:
-        combined_df['method'] = 'Quake'
-
+        combined_df['method'] = combined_df['maintenance_config']
     logging.info(f"Loaded {len(dfs)} CSV files with a total of {combined_df.shape[0]} rows.")
     return combined_df
 
 def compare_metrics(df: pd.DataFrame, thresholds: Dict[str, float]
                     ) -> Tuple[Dict[str, Dict[str, pd.Series]], List[Tuple[str, str, str, float, float, float]]]:
     """
-    For each workload (config), compute average metrics per method and compare them.
-    Regression failures are only flagged if more than one method exists for that workload.
-    Returns:
-      - A dictionary mapping workload -> (metric -> series indexed by method)
-      - A list of regression failures in the form
-         (metric, config, method, best, current, diff)
+    Compute average metrics per maintenance configuration and flag regression failures.
+    For latency (lower is better) and recall (higher is better), compare averages against thresholds.
     """
     comparisons = {}
     regression_failures = []
-
-    # Process each workload separately.
-    for config, subdf in df.groupby('config'):
-        # Select only the metrics we care about (those specified in thresholds)
+    for config, subdf in df.groupby('maintenance_config'):
         metrics_to_compare = [metric for metric in thresholds.keys() if metric in subdf.columns]
         if not metrics_to_compare:
             continue
-        # Compute means only for the specified numeric columns.
-        avg_by_method = subdf.groupby('method')[metrics_to_compare].mean(numeric_only=True)
+        avg_by_config = subdf.groupby('maintenance_config')[metrics_to_compare].mean(numeric_only=True)
         comparisons[config] = {}
-
-        if len(avg_by_method) > 1:
-            for metric, threshold in thresholds.items():
-                if metric not in avg_by_method.columns:
-                    continue
-                series = avg_by_method[metric]
-                comparisons[config][metric] = series
-                if metric == 'latency_ms':
-                    best = series.min()
-                    for method, value in series.items():
-                        diff = (value - best) / best
-                        if diff > threshold:
-                            regression_failures.append((metric, config, method, best, value, diff))
-                elif metric == 'recall':
-                    best = series.max()
-                    for method, value in series.items():
-                        diff = (best - value) / best
-                        if diff > threshold:
-                            regression_failures.append((metric, config, method, best, value, diff))
-        else:
-            # With only one method, store the series for the aggregate plot.
-            for metric in metrics_to_compare:
-                comparisons[config][metric] = avg_by_method[metric]
+        for metric, threshold in thresholds.items():
+            if metric not in avg_by_config.columns:
+                continue
+            series = avg_by_config[metric]
+            comparisons[config][metric] = series
+            if metric == 'latency_ms':
+                best = series.min()
+                for method, value in series.items():
+                    diff = (value - best) / best
+                    if diff > threshold:
+                        regression_failures.append((metric, config, method, best, value, diff))
+            elif metric == 'recall':
+                best = series.max()
+                for method, value in series.items():
+                    diff = (best - value) / best
+                    if diff > threshold:
+                        regression_failures.append((metric, config, method, best, value, diff))
     return comparisons, regression_failures
 
 def plot_aggregate_matrix(df: pd.DataFrame, metrics: List[str], output_path: Path) -> None:
     """
-    For each metric, pivot the results to a matrix with rows = method and columns = workload (config),
-    then display as a heatmap.
+    Create an aggregate matrix plot showing the average value for each metric (row) per maintenance configuration (column).
     """
-    num_metrics = len(metrics)
-    fig, axes = plt.subplots(1, num_metrics, figsize=(6*num_metrics, 5))
-    if num_metrics == 1:
-        axes = [axes]
+    # Group by maintenance_config and compute the mean of each metric.
+    agg_data = {}
+    for metric in metrics:
+        agg_data[metric] = df.groupby("maintenance_config")[metric].mean()
+    agg_df = pd.DataFrame(agg_data).T  # rows are metrics, columns are maintenance configurations
 
-    for ax, metric in zip(axes, metrics):
-        pivot = df.pivot_table(values=metric, index='method', columns='config', aggfunc=np.mean)
-        cax = ax.imshow(pivot.values, cmap='viridis', aspect='auto')
-        ax.set_xticks(np.arange(pivot.shape[1]))
-        ax.set_xticklabels(pivot.columns, rotation=45, ha='right')
-        ax.set_yticks(np.arange(pivot.shape[0]))
-        ax.set_yticklabels(pivot.index)
-        ax.set_title(f'Average {metric}')
-        # Annotate with values.
-        for i in range(pivot.shape[0]):
-            for j in range(pivot.shape[1]):
-                ax.text(j, i, f"{pivot.iloc[i, j]:.2f}", ha="center", va="center", color="w")
-        fig.colorbar(cax, ax=ax)
+    fig, ax = plt.subplots(figsize=(8, 4))
+    cax = ax.imshow(agg_df.values, cmap='viridis', aspect='auto')
+    # Set x-axis labels (maintenance configurations)
+    ax.set_xticks(np.arange(agg_df.shape[1]))
+    ax.set_xticklabels(agg_df.columns, rotation=45, ha='right')
+    # Set y-axis labels (metrics)
+    ax.set_yticks(np.arange(agg_df.shape[0]))
+    ax.set_yticklabels(agg_df.index)
+    ax.set_title("Aggregate Metrics per Workload")
+    # Annotate each cell with the value.
+    for i in range(agg_df.shape[0]):
+        for j in range(agg_df.shape[1]):
+            ax.text(j, i, f"{agg_df.iloc[i, j]:.2f}", ha="center", va="center", color="w")
+    fig.colorbar(cax, ax=ax)
     plt.tight_layout()
     plt.savefig(output_path)
     logging.info(f"Aggregate matrix plot saved to {output_path}")
+    plt.show()
 
-def plot_detailed_per_operation_all(df: pd.DataFrame, output_dir: Path) -> None:
+def plot_joint_detailed_per_operation_all(df: pd.DataFrame, output_path: Path) -> None:
     """
-    Generate a detailed per-operation plot for each workload (config).
-    For each workload, plot four panels:
-      - Operation Latency (ms) with separate lines for query, insert, and delete operations.
-      - Query Recall (for query operations)
-      - Resident Set Size (if available)
-      - Number of Partitions (if available)
-    Saves one plot per workload in output_dir.
+    Generate a joint detailed per-operation plot that shows multiple maintenance configurations
+    (methods) on the same axes. Four subplots are created for key metrics:
+      - Query latency (ms)
+      - Query recall
+      - Resident set size (n_resident)
+      - Number of partitions (n_list)
+    For query-specific metrics (latency and recall), only operations of type 'query' are used.
     """
-    workloads = df['config'].unique()
-    for workload in workloads:
-        df_workload = df[df['config'] == workload]
-        methods = df_workload['method'].unique()  # still available for legends in other panels
+    # Filter query operations for latency and recall.
+    query_df = df[df["operation_type"] == "query"]
+    configs = df["maintenance_config"].unique()
 
-        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    axs = axs.flatten()
 
-        # Panel A: Operation Latency by Operation Type
-        ax = axs[0, 0]
-        op_types = df_workload['operation_type'].unique()
-        for op_type in op_types:
-            subset = df_workload[df_workload['operation_type'] == op_type]
-            if 'operation_number' in subset.columns and 'latency_ms' in subset.columns:
-                ax.plot(subset['operation_number'], subset['latency_ms'],
-                        marker='o', linestyle='-', label=op_type)
-        ax.set_title('Operation Latency (ms) by Operation Type')
-        ax.set_xlabel('Operation Number')
-        ax.set_ylabel('Latency (ms)')
+    # Define the metrics to plot along with labels and their source dataframe.
+    metrics = [
+        ("latency_ms", "Query Latency (ms)", query_df),
+        ("recall", "Query Recall", query_df),
+        ("n_resident", "Resident Set Size", df),
+        ("n_list", "Number of Partitions", df)
+    ]
+
+    for ax, (metric, ylabel, data_source) in zip(axs, metrics):
+        for config in configs:
+            data = data_source[data_source["maintenance_config"] == config]
+            data = data.sort_values("operation_number")
+            if not data.empty:
+                ax.plot(data["operation_number"], data[metric], marker='o', label=config)
+        ax.set_xlabel("Operation Number")
+        ax.set_ylabel(ylabel)
+        ax.set_title(f"{ylabel} per Operation")
         ax.legend()
 
-        # Panel B: Query Recall (for query operations)
-        ax = axs[0, 1]
-        for m in methods:
-            subset = df_workload[(df_workload['method'] == m) & (df_workload['operation_type'] == 'query')]
-            if not subset.empty and 'operation_number' in subset.columns and 'recall' in subset.columns:
-                ax.plot(subset['operation_number'], subset['recall'],
-                        marker='o', linestyle='-', label=m)
-        ax.set_title('Query Recall')
-        ax.set_xlabel('Operation Number')
-        ax.set_ylabel('Recall')
-        ax.legend()
+    plt.tight_layout()
+    plt.savefig(output_path)
+    logging.info(f"Joint detailed per-operation plot saved to {output_path}")
+    plt.show()
 
-        # Panel C: Resident Set Size (if available)
-        ax = axs[1, 0]
-        for m in methods:
-            subset = df_workload[df_workload['method'] == m]
-            if 'operation_number' in subset.columns and 'n_resident' in subset.columns:
-                ax.plot(subset['operation_number'], subset['n_resident'],
-                        marker='o', linestyle='-', label=m)
-        ax.set_title('Resident Set Size')
-        ax.set_xlabel('Operation Number')
-        ax.set_ylabel('Resident Vectors')
-        ax.legend()
-
-        # Panel D: Number of Partitions (if available)
-        ax = axs[1, 1]
-        for m in methods:
-            subset = df_workload[df_workload['method'] == m]
-            if 'operation_number' in subset.columns and 'n_list' in subset.columns:
-                ax.plot(subset['operation_number'], subset['n_list'],
-                        marker='o', linestyle='-', label=m)
-        ax.set_title('Number of Partitions')
-        ax.set_xlabel('Operation Number')
-        ax.set_ylabel('Partitions')
-        ax.legend()
-
-        plt.tight_layout()
-        plot_path = output_dir / f"detailed_{workload}.png"
-        plt.savefig(plot_path)
-        logging.info(f"Detailed per-operation plot for workload '{workload}' saved to {plot_path}")
-        plt.close(fig)
-
-def main() -> None:
+def main():
     setup_logging()
-
     parser = argparse.ArgumentParser(
-        description="Compare regression test results and produce aggregate and detailed plots."
+        description="Compare regression test results and produce aggregate and joint detailed plots."
     )
     parser.add_argument(
         '--results_dir', type=Path, default=Path('results'),
@@ -196,15 +149,15 @@ def main() -> None:
     )
     parser.add_argument(
         '--plot_type', type=str, default='both', choices=['aggregate', 'detailed', 'both'],
-        help="Type of plot to generate: 'aggregate', 'detailed', or 'both'."
+        help="Type of plot to generate: 'aggregate', 'detailed' (joint), or 'both'."
     )
     parser.add_argument(
-        '--output_aggregate', type=Path, default=Path('results/aggregate_matrix.png'),
+        '--output_aggregate', type=Path, default=Path('aggregate_matrix.png'),
         help="Output path for the aggregate matrix plot."
     )
     parser.add_argument(
-        '--detailed_output_dir', type=Path, default=Path('results/detailed'),
-        help="Output directory for detailed per-operation plots."
+        '--detailed_output', type=Path, default=Path('detailed_joint.png'),
+        help="Output path for the joint detailed per-operation plot."
     )
     parser.add_argument(
         '--thresholds', type=str, default='{"latency_ms": 0.05, "recall": 0.01}',
@@ -217,19 +170,19 @@ def main() -> None:
 
     comparisons, failures = compare_metrics(df, thresholds)
     if failures:
-        logging.error("Regression failures detected (comparing methods within the same workload):")
+        logging.error("Regression failures detected:")
         for metric, config, method, best, current, diff in failures:
             logging.error(f"Workload '{config}' method '{method}' for metric '{metric}': best = {best:.2f}, "
                           f"current = {current:.2f}, diff = {diff*100:.1f}%")
     else:
-        logging.info("No inter-method regressions detected within individual workloads.")
+        logging.info("No inter-method regressions detected within workloads.")
 
     if args.plot_type in ['aggregate', 'both']:
+        # Here the aggregate matrix shows workloads (maintenance_config) on the x-axis
+        # and each metric (e.g., latency and recall) as rows.
         plot_aggregate_matrix(df, metrics=["latency_ms", "recall"], output_path=args.output_aggregate)
-
     if args.plot_type in ['detailed', 'both']:
-        args.detailed_output_dir.mkdir(parents=True, exist_ok=True)
-        plot_detailed_per_operation_all(df, output_dir=args.detailed_output_dir)
+        plot_joint_detailed_per_operation_all(df, output_path=args.detailed_output)
 
 if __name__ == '__main__':
     main()

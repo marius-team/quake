@@ -1,0 +1,48 @@
+# sift1m_read_only.yaml
+seed: 1739
+mode: run
+name: sift1m_write_heavy
+overwrite: True
+
+dataset:
+  name: sift1m
+  path: data/sift
+
+index:
+  metric: l2
+  nc: 1024
+
+  search:
+    k: 10
+    recall_target: .9
+
+maintenance_configs:
+  - name: no_maintenance
+    do_maintenance: False
+
+  - name: wo_reject
+    do_maintenance: True
+    delete_threshold: 10.0
+    split_threshold: 50.0
+    refinement_radius: 50
+    enable_delete_rejection: False
+
+  - name: w_reject
+    do_maintenance: True
+    delete_threshold: 10.0
+    split_threshold: 50.0
+    refinement_radius: 50
+
+workload:
+  insert_ratio: .4
+  delete_ratio: .1
+  query_ratio: .5
+  update_batch_size: 10000
+  query_batch_size: 100
+  number_of_operations: 1000
+  initial_size: 100000
+  cluster_size: 1000
+  cluster_sample_distribution: skewed
+
+results_dir: results
+workload_dir: workloads

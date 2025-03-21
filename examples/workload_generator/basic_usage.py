@@ -15,6 +15,7 @@ from pathlib import Path
 
 from quake.workload_generator import DynamicWorkloadGenerator, WorkloadEvaluator
 from quake.datasets.ann_datasets import load_dataset
+from quake.index_wrappers.quake import QuakeWrapper
 
 def main():
     # Directories for workload and evaluation output
@@ -77,13 +78,25 @@ def main():
     # Create a WorkloadEvaluator instance and evaluate the workload
     evaluator = WorkloadEvaluator(
         workload_dir=workload_dir,
-        index_cfg=index_cfg,
         output_dir=output_dir
     )
 
     print("Evaluating workload...")
-    search_params = {"recall_target": recall_target, "k": search_k}
-    results = evaluator.evaluate_workload(search_params, do_maintenance=True)
+
+    nc = 1000
+    build_params = {"nc": nc, "metric": "l2"}
+    # search_params = {"nprobe": 20, "k": search_k}
+    search_params = {"k": search_k, "recall_target": .9}
+
+    index = QuakeWrapper()
+
+    results = evaluator.evaluate_workload(
+        name="quake_test",
+        index=index,
+        build_params=build_params,
+        search_params=search_params,
+        do_maintenance=True,
+    )
 
 
 if __name__ == "__main__":

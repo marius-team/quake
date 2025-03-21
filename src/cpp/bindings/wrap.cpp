@@ -208,16 +208,6 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Delete threshold (ns). default = ") + std::to_string(DEFAULT_DELETE_THRESHOLD_NS)).c_str())
         .def_readwrite("split_threshold_ns", &MaintenancePolicyParams::split_threshold_ns,
              (std::string("Split threshold (ns). default = ") + std::to_string(DEFAULT_SPLIT_THRESHOLD_NS)).c_str())
-        .def_readwrite("k_large", &MaintenancePolicyParams::k_large,
-             (std::string("Large k value for maintenance. default = ") + std::to_string(DEFAULT_K_LARGE)).c_str())
-        .def_readwrite("k_small", &MaintenancePolicyParams::k_small,
-             (std::string("Small k value for maintenance. default = ") + std::to_string(DEFAULT_K_SMALL)).c_str())
-        .def_readwrite("modify_centroids", &MaintenancePolicyParams::modify_centroids,
-             (std::string("Flag to modify centroids during maintenance. default = ") + std::to_string(DEFAULT_MODIFY_CENTROIDS)).c_str())
-        .def_readwrite("target_partition_size", &MaintenancePolicyParams::target_partition_size,
-             (std::string("Target partition size. default = ") + std::to_string(DEFAULT_TARGET_PARTITION_SIZE)).c_str())
-        .def_readwrite("max_partition_ratio", &MaintenancePolicyParams::max_partition_ratio,
-             (std::string("Maximum allowed partition ratio. default = ") + std::to_string(DEFAULT_MAX_PARTITION_RATIO)).c_str())
         .def("__repr__", [](const MaintenancePolicyParams &m) {
             std::ostringstream oss;
             oss << "{";
@@ -231,11 +221,6 @@ PYBIND11_MODULE(_bindings, m) {
             oss << "\"enable_delete_rejection\": " << (m.enable_delete_rejection ? "true" : "false") << ", ";
             oss << "\"delete_threshold_ns\": " << m.delete_threshold_ns << ", ";
             oss << "\"split_threshold_ns\": " << m.split_threshold_ns << ", ";
-            oss << "\"k_large\": " << m.k_large << ", ";
-            oss << "\"k_small\": " << m.k_small << ", ";
-            oss << "\"modify_centroids\": " << (m.modify_centroids ? "true" : "false") << ", ";
-            oss << "\"target_partition_size\": " << m.target_partition_size << ", ";
-            oss << "\"max_partition_ratio\": " << m.max_partition_ratio;
             oss << "}";
             return oss.str();
         });

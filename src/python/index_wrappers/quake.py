@@ -102,7 +102,7 @@ class QuakeWrapper(IndexWrapper):
         assert ids.ndim == 1
         return self.index.remove(ids)
 
-    def search(self, query: torch.Tensor, k: int, nprobe: int = 1, batched_scan = False, recall_target: float = -1, k_factor=4.0, use_precomputed = True) -> Tuple[
+    def search(self, query: torch.Tensor, k: int, nprobe: int = 1, batched_scan = False, recall_target: float = -1, k_factor=4.0, use_precomputed = True, initial_search_fraction = .05) -> Tuple[
         torch.Tensor, torch.Tensor]:
         """
         Find the k-nearest neighbors of the query vectors.
@@ -118,6 +118,7 @@ class QuakeWrapper(IndexWrapper):
         search_params.recall_target = recall_target
         search_params.use_precomputed = use_precomputed
         search_params.batched_scan = batched_scan
+        search_params.initial_search_fraction = initial_search_fraction
         search_params.k = k
         return self.index.search(query, search_params)
 
@@ -136,7 +137,7 @@ class QuakeWrapper(IndexWrapper):
         """
         self.index.save(str(filename))
 
-    def load(self, filename: str, n_workers: int = 1, use_numa: bool = False, verbose: bool = False,
+    def load(self, filename: str, n_workers: int = 0, use_numa: bool = False, verbose: bool = False,
              verify_numa: bool = False, same_core: bool = True, use_centroid_workers: bool = False, use_adaptive_n_probe : bool = False):
         """
         Load the index from a file.
@@ -146,7 +147,7 @@ class QuakeWrapper(IndexWrapper):
         print(
             f"Loading index from {filename}, with {n_workers} workers, use_numa={use_numa}, verbose={verbose}, verify_numa={verify_numa}, same_core={same_core}, use_centroid_workers={use_centroid_workers}")
         self.index = QuakeIndex()
-        self.index.load(str(filename), True)
+        self.index.load(str(filename), n_workers)
 
     def centroids(self) -> torch.Tensor:
         """
@@ -154,7 +155,8 @@ class QuakeWrapper(IndexWrapper):
 
         :return: The centroids of the index
         """
-        return self.index.centroids()
+        centroid_ids = self.index.parent.get_ids()
+        return self.index.parent.get(centroid_ids)
 
     def cluster_ids(self) -> torch.Tensor:
         """
@@ -162,7 +164,7 @@ class QuakeWrapper(IndexWrapper):
 
         :return: The cluster ids of the index
         """
-        return self.index.parent.get_ids()
+        return self.index.cluster_assignments()
 
     def metric(self) -> str:
         """
