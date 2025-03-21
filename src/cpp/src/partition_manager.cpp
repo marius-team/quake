@@ -469,7 +469,10 @@ void PartitionManager::refine_partitions(Tensor partition_ids, int iterations) {
         index_partitions[i] = partitions_->partitions_[pids[i]];
     }
 
-    std::tie(current_centroids, index_partitions) = kmeans_refine_partitions(current_centroids, index_partitions, iterations);
+    std::tie(current_centroids, index_partitions) = kmeans_refine_partitions(current_centroids,
+        index_partitions,
+        parent_->metric_,
+        iterations);
 
     // modify centroids
     parent_->modify(partition_ids, current_centroids);

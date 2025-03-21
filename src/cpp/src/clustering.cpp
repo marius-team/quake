@@ -70,29 +70,15 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     return clustering;
 }
 
-/**
- * @brief Refines partitions without concatenating vectors.
- *
- * Uses batched_scan_list to reassign each vector (from every partition) to its nearest
- * centroid and then rebuilds the partitions and centroids.
- *
- * @param centroids  The current centroids as an IndexPartition.
- * @param partitions The current partitions mapping.
- * @param refinement_iterations If 0, only reassign; otherwise, update centroids iteratively.
- *
- * @return A tuple with (updated centroids, new refined partitions)
- */
-tuple<Tensor, vector<shared_ptr<IndexPartition> > > kmeans_refine_partitions(
+tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
     Tensor centroids,
     vector<shared_ptr<IndexPartition>> partitions,
+    MetricType metric,
     int refinement_iterations) {
 
     // Determine number of clusters and dimension.
     int n_clusters = centroids.size(0);
     int d = centroids.size(1);
-    // For simplicity, use L2 metric. (You ca
-    // n generalize for inner product if needed.)
-    MetricType metric = faiss::METRIC_L2;
 
     // Run for the desired number of iterations (if refinement_iterations==0, do one pass).
     int iterations = (refinement_iterations > 0) ? refinement_iterations : 1;
