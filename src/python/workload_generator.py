@@ -421,7 +421,7 @@ class WorkloadEvaluator:
 
         return index
 
-    def evaluate_workload(self, name, index, build_params, search_params, do_maintenance=False, m_params=None):
+    def evaluate_workload(self, name, index, build_params, search_params, do_maintenance=False, m_params=None, batch=False):
         """
         Evaluate the workload on the index. At the end a summary is printed and a multi-panel plot is saved.
         """
@@ -467,16 +467,24 @@ class WorkloadEvaluator:
                 gt_ids = torch.load(self.operations_dir / f"{operation_id}_gt_ids.pt", weights_only=True)
                 gt_dist = torch.load(self.operations_dir / f"{operation_id}_gt_dists.pt", weights_only=True)
                 queries = query_vectors[operation_ids]
-                Is, Ds, timing_infos = [], [], []
+
                 start_time = time.time()
-                for query in queries:
-                    query = query.unsqueeze(0)
-                    search_result = index.search(query, **search_params)
-                    Is.append(search_result.ids)
-                    Ds.append(search_result.distances)
-                    timing_infos.append(search_result.timing_info)
+                if batch:
+                    search_result = index.search(queries, **search_params)
+                    pred_ids = search_result.ids
+                    timing_infos = [search_result.timing_info]
+                else:
+                    Is, Ds, timing_infos = [], [], []
+
+                    for query in queries:
+                        query = query.unsqueeze(0)
+                        search_result = index.search(query, **search_params)
+                        Is.append(search_result.ids)
+                        Ds.append(search_result.distances)
+                        timing_infos.append(search_result.timing_info)
+                    pred_ids = torch.cat(Is)
                 op_time = time.time() - start_time
-                pred_ids = torch.cat(Is)
+
                 recalls = compute_recall(pred_ids, gt_ids, search_params['k'])
                 mean_recall = recalls.mean().item()
                 self.runbook["operations"][operation_id]["recall"] = mean_recall

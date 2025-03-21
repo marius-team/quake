@@ -27,6 +27,7 @@ struct ScanJob {
  vector<int64_t> query_ids;    ///< Global query IDs; used in batched mode.
  bool is_batched = false;      ///< Indicates whether this is a batched query job.
  int64_t num_queries = 0;      ///< The number of queries in batched mode.
+ int rank = 0;                 ///< Rank of the partition
 };
 
 /**
@@ -65,6 +66,10 @@ public:
     std::condition_variable global_cv_;                ///< Condition variable for thread coordination.
     std::atomic<int> stop_workers_;                    ///< Flag to signal workers to terminate.
     bool debug_ = false;                               ///< Debug mode flag.
+
+    vector<vector<std::atomic<bool>>> job_flags_; ///< Flags to track job completion
+    std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.
+    std::atomic<int64_t> job_process_time_ns = 0; ///< Time spent processing jobs.
 
 
     /**

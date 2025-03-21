@@ -14,28 +14,58 @@ index:
 
   search:
     k: 10
-    nprobe: 10
+    nprobe: 20
+    batched_scan: True
 
 configs:
-  - name: serial_scan
+  - name: serial_scan1
     build:
       n_workers: 0
+    search:
+      n_threads: 1
+
+  - name: serial_scan2
+    build:
+      n_workers: 0
+    search:
+      n_threads: 2
+#
+  - name: serial_scan4
+    build:
+      n_workers: 0
+    search:
+      n_threads: 4
+#
+  - name: serial_scan8
+    build:
+      n_workers: 0
+    search:
+      n_threads: 8
 
   - name: worker_scan1
     build:
       n_workers: 1
+    search:
+      n_threads: 1
 
   - name: worker_scan2
     build:
       n_workers: 2
+    search:
+      n_threads: 1
 
   - name: worker_scan4
     build:
       n_workers: 4
+    search:
+      n_threads: 1
+
 
   - name: worker_scan8
     build:
       n_workers: 8
+    search:
+      n_threads: 1
 
 workload:
   insert_ratio: 0.0

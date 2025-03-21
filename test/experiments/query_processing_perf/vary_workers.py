@@ -81,12 +81,14 @@ def run_experiment_for_config(curr_config, config):
     # Set up and run the workload evaluator.
     evaluator = WorkloadEvaluator(workload_dir=workload_dir, output_dir=results_dir)
     search_params = config["index"]["search"]
+    search_params["n_threads"] = curr_config["search"]["n_threads"]
     results = evaluator.evaluate_workload(
         name="quake_test",
         index=index,
         build_params=build_params,
         search_params=search_params,
         do_maintenance=do_maint,
+        batch=True
     )
 
     return results
