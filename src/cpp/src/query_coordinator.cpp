@@ -269,6 +269,10 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     auto start_time = high_resolution_clock::now();
 
+    if (partition_ids.dim() == 1) {
+        partition_ids = partition_ids.unsqueeze(0).expand({num_queries, partition_ids.size(0)});
+    }
+
     job_flags_.clear();
     job_flags_.resize(num_queries);
     for (int64_t q = 0; q < num_queries; q++) {
