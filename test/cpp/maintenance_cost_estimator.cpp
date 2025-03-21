@@ -53,8 +53,9 @@ TEST_F(MaintenanceCostEstimatorTest, ComputeDeleteDelta) {
     int partition_size = 1000;
     float hit_rate = 0.3f;
     int total_partitions = 100;
-    float current_scan_fraction = 0.25f;
+    float avg_partition_hit_rate = 0.25f;
     int k = estimator->get_k();
+    int avg_partition_size = partition_size;
 
     // Let T = total_partitions, n = partition_size, and p = hit_rate.
     // Compute the structural benefit: the reduction in overhead when one partition is removed.
@@ -62,27 +63,33 @@ TEST_F(MaintenanceCostEstimatorTest, ComputeDeleteDelta) {
     float latency_T_minus_1 = latency_estimator_->estimate_scan_latency(total_partitions - 1, k);
     float delta_overhead = latency_T_minus_1 - latency_T;
 
-    // Compute the merging penalty.
-    // After deletion, the n vectors of the deleted partition are redistributed among (T-1) partitions.
-    // Under an even-distribution assumption, each remaining partition gets an extra n/(T-1) vectors.
-    // The new cost for queries that originally hit this partition becomes:
-    // L(n + n/(T-1), k) instead of L(n, k). The extra cost is:
-    float merged_partition_size = partition_size + partition_size / static_cast<float>(total_partitions - 1);
-    float latency_merged = latency_estimator_->estimate_scan_latency(merged_partition_size, k);
-    float latency_original = latency_estimator_->estimate_scan_latency(partition_size, k);
-    float delta_merge = latency_merged - latency_original;
+    float cost_old = (total_partitions - 1) * avg_partition_hit_rate
+                     * latency_estimator_->estimate_scan_latency(avg_partition_size, k)
+                     + hit_rate
+                     * latency_estimator_->estimate_scan_latency(partition_size, k);
 
-    float delta_reassign = current_scan_fraction * latency_original;
+    // Compute the "new" size and scan fraction after merging
+    float merged_size = avg_partition_size + static_cast<float>(partition_size) / (total_partitions - 1);
+    float merged_hit_rate = avg_partition_hit_rate + hit_rate / static_cast<float>(total_partitions - 1);
 
-    // Total delta cost is the sum of the structural benefit and the merging penalty scaled by the hit rate.
-    float expected_delta = delta_overhead + hit_rate * delta_merge + delta_reassign;
+    float cost_new;
+    if (partition_size < total_partitions) {
+        // assume at most partition_size partitions get the extra vectors
+        cost_new = partition_size * merged_hit_rate * latency_estimator_->estimate_scan_latency(avg_partition_size + 1, k)
+                   + (total_partitions - partition_size - 1) * merged_hit_rate * latency_estimator_->estimate_scan_latency(avg_partition_size, k);
+    } else {
+        cost_new = (total_partitions - 1) * merged_hit_rate * latency_estimator_->estimate_scan_latency(ceil(merged_size), k);
+    }
+
+    float delta_scanning = cost_new - cost_old;
+    float expected_delta = delta_overhead + delta_scanning;
 
     int average_partition_size = partition_size;
 
     float computed_delta = estimator->compute_delete_delta(partition_size,
         hit_rate,
         total_partitions,
-        current_scan_fraction,
+        avg_partition_hit_rate,
         average_partition_size);
 
     std::cout << "Computed delta: " << computed_delta << std::endl;

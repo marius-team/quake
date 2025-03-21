@@ -444,10 +444,21 @@ shared_ptr<Clustering> PartitionManager::split_partitions(const Tensor &partitio
     return split_clustering;
 }
 
-void PartitionManager::refine_partitions(const Tensor &partition_ids, int iterations) {
+void PartitionManager::refine_partitions(Tensor partition_ids, int iterations) {
     if (debug_) {
         std::cout << "[PartitionManager] refine_partitions: Refining partitions with iterations = "
                   << iterations << std::endl;
+    }
+
+    if (!partition_ids.defined()) {
+        partition_ids = parent_->get_ids();
+    }
+
+    if (partition_ids.size(0) == 0) {
+        if (debug_) {
+            std::cout << "[PartitionManager] refine_partitions: No partitions to refine. Exiting." << std::endl;
+        }
+        return;
     }
 
     auto pids = partition_ids.accessor<int64_t, 1>();

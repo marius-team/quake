@@ -489,8 +489,6 @@ float MaintenanceCostEstimator::compute_delete_delta_w_reassign(int partition_si
     // 3) Final delete delta = structural overhead + scanning delta
     // ----------------------------------------------------
     float delta = delta_overhead + removal_delta + reassign_delta;
-
-    std::cout << "Delta overhead: " << delta_overhead << ", removal: " << removal_delta << ", reassign: " << reassign_delta << std::endl;
     return delta;
 }
 
