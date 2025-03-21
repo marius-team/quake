@@ -71,8 +71,14 @@ public:
     Tensor get(const Tensor &ids);
 
     /**
+     * @brief No copy version of get
+     * @param ids Vector of IDs.
+     */
+     vector<float *> get_vectors(vector<int64_t> ids);
+
+    /**
      * @brief Split a given partition into multiple smaller ones.
-     * @param partition_id The ID/index of the partition to split.
+     * @param partition_ids The partition IDs to split.
      */
     shared_ptr<Clustering> split_partitions(const Tensor &partition_ids);
 
@@ -81,7 +87,7 @@ public:
     * @param partition_ids Tensor of shape [num_partitions] containing partition IDs. If empty, refines all partitions.
     * @param refinement_iterations Number of refinement iterations. If 0, then only reassigns vectors.
     */
-    void refine_partitions(const Tensor &partition_ids = Tensor(), int refinement_iterations = 0);
+    void refine_partitions(Tensor partition_ids = Tensor(), int refinement_iterations = 0);
 
     /**
      * @brief Delete multiple partitions and reassign vectors
@@ -141,6 +147,18 @@ public:
      * @param partition_ids Tensor of shape [num_partitions] containing partition IDs.
      */
     Tensor get_partition_sizes(Tensor partition_ids = Tensor());
+
+    /**
+     * @brief Get the partition size.
+     * @param partition_ids Vector of partition IDs.
+     */
+     vector<int64_t> get_partition_sizes(vector<int64_t> partition_ids);
+
+    /**
+     * @brief Get the partition size.
+     * @param partition_id The ID of the partition.
+     */
+    int64_t get_partition_size(int64_t partition_id);
 
     /**
      * @brief Get the partition IDs.

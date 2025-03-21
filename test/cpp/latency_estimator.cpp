@@ -6,9 +6,10 @@
 //
 
 #include <gtest/gtest.h>
-#include "latency_estimation.h"
+#include "maintenance_cost_estimator.h"
 #include "list_scanning.h"  // Must include your scan_list(...) definition
 #include <cstdio>           // For remove()
+#include <fstream>          // For file I/O
 
 // Helper function to measure actual latency for given n and k
 static float measure_actual_latency(const ListScanLatencyEstimator& estimator,

@@ -28,6 +28,8 @@ public:
     uint8_t* codes_ = nullptr;  ///< Pointer to the encoded vectors (raw memory block)
     idx_t* ids_ = nullptr;      ///< Pointer to the vector IDs
 
+    std::unordered_map<idx_t, int64_t> id_to_index_; ///< Map of vector ID to index
+
     /// Default constructor.
     IndexPartition() = default;
 

@@ -420,7 +420,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 }
 
 shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partition_ids_to_scan,
-                                                         shared_ptr<SearchParams> search_params) {
+                                                       shared_ptr<SearchParams> search_params) {
     if (!partition_manager_) {
         throw std::runtime_error("[QueryCoordinator::serial_scan] partition_manager_ is null.");
     }
@@ -441,7 +441,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
     // Preallocate output tensors.
     auto ret_ids = torch::full({num_queries, k}, -1, torch::kInt64);
     auto ret_dists = torch::full({num_queries, k},
-                                  std::numeric_limits<float>::infinity(), torch::kFloat32);
+                                 std::numeric_limits<float>::infinity(), torch::kFloat32);
 
     auto timing_info = std::make_shared<SearchTimingInfo>();
     timing_info->n_queries = num_queries;
@@ -456,7 +456,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
         partition_ids_to_scan = partition_ids_to_scan.unsqueeze(0).expand({num_queries, partition_ids_to_scan.size(0)});
     }
     auto partition_ids_accessor = partition_ids_to_scan.accessor<int64_t, 2>();
-    float* x_ptr = x.data_ptr<float>();
+    float *x_ptr = x.data_ptr<float>();
 
     // Allocate per-query result vectors.
     vector<vector<float>> all_topk_dists(num_queries);
@@ -594,21 +594,12 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
                 (int) (partition_manager_->nlist() * search_params->initial_search_fraction), 1);
             parent_search_params->k = initial_num_partitions_to_search;
         } else {
-            parent_search_params->k = search_params->nprobe;
+            parent_search_params->k = std::min(search_params->nprobe, (int) partition_manager_->nlist());
         }
 
         auto parent_search_result = parent_->search(x, parent_search_params);
         partition_ids_to_scan = parent_search_result->ids;
         parent_timing_info = parent_search_result->timing_info;
-
-        // if (maintenance_policy_ != nullptr) {
-        //     for (int i = 0; i < partition_ids_to_scan.size(0); i++) {
-        //         vector<int64_t> hit_partition_ids_vec = vector<int64_t>(partition_ids_to_scan[i].data_ptr<int64_t>(),
-        //                                                                 partition_ids_to_scan[i].data_ptr<int64_t>() +
-        //                                                                 partition_ids_to_scan[i].size(0));
-        //         maintenance_policy_->increment_hit_count(hit_partition_ids_vec);
-        //     }
-        // }
     }
 
     auto search_result = scan_partitions(x, partition_ids_to_scan, search_params);
@@ -641,7 +632,6 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
     Tensor x,
     Tensor partition_ids,
     shared_ptr<SearchParams> search_params) {
-
     if (!partition_manager_) {
         throw std::runtime_error("[QueryCoordinator::batched_serial_scan] partition_manager_ is null.");
     }

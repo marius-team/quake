@@ -56,6 +56,12 @@ void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t
     std::memcpy(codes_ + num_vectors_ * code_bytes, new_codes, n_entry * code_bytes);
     std::memcpy(ids_ + num_vectors_, new_ids, n_entry * sizeof(idx_t));
     num_vectors_ += n_entry;
+
+    //
+    // // insert new ids into id_to_index_
+    // for (int64_t i = 0; i < n_entry; i++) {
+    //     id_to_index_[new_ids[i]] = num_vectors_ - n_entry + i;
+    // }
 }
 
 void IndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
@@ -81,6 +87,14 @@ void IndexPartition::remove(int64_t index) {
 
     int64_t last_idx = num_vectors_ - 1;
     const size_t code_bytes = static_cast<size_t>(code_size_);
+
+    // // Update id_to_index_
+    // idx_t last_id = ids_[last_idx];
+    // idx_t removed_id = ids_[index];
+    //
+    // id_to_index_[last_id] = index;
+    // id_to_index_.erase(removed_id);
+
     std::memcpy(codes_ + index * code_bytes, codes_ + last_idx * code_bytes, code_bytes);
     ids_[index] = ids_[last_idx];
 
@@ -113,12 +127,21 @@ void IndexPartition::clear() {
 }
 
 int64_t IndexPartition::find_id(idx_t id) const {
+
+    // use map
+    // auto it = id_to_index_.find(id);
+    // if (it == id_to_index_.end()) {
+    //     return -1;
+    // }
+    // return it->second;
+
+    // use linear search
     for (int64_t i = 0; i < num_vectors_; i++) {
         if (ids_[i] == id) {
             return i;
         }
     }
-    return -1; // not found
+    return -1;
 }
 
 void IndexPartition::set_core_id(int core_id) {

@@ -9,7 +9,7 @@ import torch
 
 from quake.utils import compute_recall, knn, to_path
 from quake.index_wrappers.quake import QuakeWrapper
-from quake import MaintenancePolicyParams
+from quake import MaintenancePolicyParams, SearchParams
 import hashlib
 import matplotlib.pyplot as plt
 
@@ -74,34 +74,54 @@ class StratifiedClusterSampler(VectorSampler):
         self.update_ranks(self.root_cluster)
 
     def update_ranks(self, root_cluster: int):
+        print("Updating cluster ranks: root cluster", root_cluster)
         self.root_cluster = root_cluster
         nearest_cluster_ids, _ = knn(self.centroids[root_cluster], self.centroids, -1, "l2")
         self.cluster_ranks = nearest_cluster_ids.flatten()
 
     def sample(self, sample_pool: torch.Tensor, size: int, update_ranks: bool = True):
+        # Get the cluster assignments for all indices in the sample pool.
         sample_assignments = self.assignments[sample_pool]
-        non_empty_clusters = torch.unique(sample_assignments)
-        mask = torch.zeros(self.cluster_size, dtype=torch.bool)
-        mask[non_empty_clusters] = True
-        cluster_order = self.cluster_ranks[mask[self.cluster_ranks]]
-        cluster_samples = []
-        curr_sample_size = 0
-        for cluster_id in cluster_order:
-            mask = sample_assignments == cluster_id
-            cluster_sample_pool = sample_pool[mask]
-            if cluster_sample_pool.shape[0] == 0:
+
+        # Identify which clusters are present in the sample pool.
+        present_clusters = set(sample_assignments.tolist())
+
+        # Filter self.cluster_ranks to only include clusters that are present.
+        cluster_order = [c for c in self.cluster_ranks.tolist() if c in present_clusters]
+
+        sampled_indices = []
+        num_collected = 0
+
+        # Loop over clusters in the order defined by the filtered ranks.
+        for cluster in cluster_order:
+            print("Sampling from cluster", cluster)
+            # Find indices in sample_pool that belong to this cluster.
+            cluster_mask = (sample_assignments == cluster).nonzero(as_tuple=True)[0]
+            if cluster_mask.numel() == 0:
                 continue
-            cluster_sample_size = min(size - curr_sample_size, cluster_sample_pool.shape[0])
-            cluster_sample = cluster_sample_pool[torch.randperm(cluster_sample_pool.shape[0])[:cluster_sample_size]]
-            cluster_samples.append(cluster_sample)
-            curr_sample_size += cluster_sample_size
-            if curr_sample_size >= size:
+
+            # Determine how many samples to draw from this cluster.
+            n_to_sample = min(size - num_collected, cluster_mask.numel())
+
+            # Randomly sample from the indices in this cluster.
+            perm = torch.randperm(cluster_mask.numel())
+            chosen = cluster_mask[perm[:n_to_sample]]
+            sampled_indices.append(sample_pool[chosen])
+
+            num_collected += n_to_sample
+            if num_collected >= size:
                 break
-        sample_ids = torch.cat(cluster_samples)
-        if update_ranks:
-            self.update_ranks(cluster_id)
-        sample_ids = torch.unique(sample_ids)
-        return sample_ids
+
+        # Concatenate the sampled indices.
+        result = torch.cat(sampled_indices) if sampled_indices else torch.tensor([], dtype=torch.long)
+
+        # Optionally update ranks with the last cluster that contributed samples.
+        if update_ranks and cluster_order:
+            self.update_ranks(cluster_order[1])
+
+        # Remove duplicates, if any.
+        result = torch.unique(result)
+        return result
 
 
 class DynamicWorkloadGenerator:
@@ -165,6 +185,9 @@ class DynamicWorkloadGenerator:
         self.cluster_ranks = None
         self.sampler = None
 
+        self.resident_history = []
+        self.query_history = []
+
     def workload_exists(self):
         return (self.workload_dir / "runbook.json").exists()
 
@@ -179,7 +202,7 @@ class DynamicWorkloadGenerator:
         assert self.number_of_operations > 0
         assert self.initial_size > 0
         assert self.cluster_size > 0
-        assert self.cluster_sample_distribution in ["uniform", "skewed"]
+        assert self.cluster_sample_distribution in ["uniform", "skewed", "skewed_fixed"]
 
     def initialize_clustered_index(self):
         if self.initial_clustering_path is not None:
@@ -198,8 +221,12 @@ class DynamicWorkloadGenerator:
                         metric=self.metric,
                         ids=torch.arange(self.base_vectors.shape[0]))
             index.save(str(self.workload_dir / "clustered_index.bin"))
-        self.assignments = index.cluster_ids()
-        print("Cluster assignments shape:", self.assignments.shape)
+
+        search_params = SearchParams()
+        search_params.k = 1
+        search_params.batched_scan = True
+        self.assignments = index.index.parent.search(self.base_vectors, search_params).ids.flatten()
+
         return index
 
     def sample(self, size: int, operation_type: str):
@@ -216,12 +243,13 @@ class DynamicWorkloadGenerator:
         if operation_type in ["insert", "delete"]:
             sample_ids = self.sampler.sample(sample_pool, size)
         else:
-            update_ranks = (self.query_cluster_sample_distribution != "skewed_fixed")
+            # update_ranks = (self.query_cluster_sample_distribution != "skewed_fixed")
+            update_ranks = True
             sample_ids = self.query_sampler.sample(sample_pool, size, update_ranks=update_ranks)
         return sample_ids
 
     def initialize_workload(self):
-        if self.cluster_sample_distribution == "skewed":
+        if self.cluster_sample_distribution in ["skewed", "skewed_fixed"]:
             self.sampler = StratifiedClusterSampler(self.assignments, self.clustered_index.centroids())
         elif self.cluster_sample_distribution == "uniform":
             self.sampler = UniformSampler()
@@ -268,6 +296,10 @@ class DynamicWorkloadGenerator:
         self.initialize_workload()
         n_inserts = n_deletes = n_queries = 0
         n_operations = 0
+
+        initial_uniques, initial_counts = torch.unique(self.assignments, return_counts=True)
+        all_sizes = torch.zeros(initial_uniques.shape[0])
+        all_sizes[initial_uniques] = initial_counts.float()
         for i in range(self.number_of_operations):
             operation_type = np.random.choice(["insert", "delete", "query"],
                                               p=[self.insert_ratio, self.delete_ratio, self.query_ratio])
@@ -310,18 +342,44 @@ class DynamicWorkloadGenerator:
                 torch.save(dists, self.operations_dir / f"{i}_gt_dists.pt")
             print("Operation", i, entry)
             self.runbook["operations"][i] = entry
+
+            # Determine the number of clusters. Assuming clusters are labeled from 0 to max_cluster.
+            n_clusters = int(self.assignments.max().item()) + 1
+            fractions = np.zeros(n_clusters)
+
+            # get resident assignments
+            resident_assignments = self.assignments[self.resident_set]
+
+            uniques, counts = torch.unique(resident_assignments, return_counts=True)
+            fractions[uniques] = counts.float() / all_sizes[uniques]
+            # Append the vector of fractions for this operation.
+            self.resident_history.append(fractions)
+
         self.runbook["summary"] = {
             "n_inserts": n_inserts,
             "n_deletes": n_deletes,
             "n_queries": n_queries,
             "n_operations": n_operations,
         }
+
+        # Convert the history to a NumPy array with shape (n_clusters, n_operations)
+        heatmap_array = np.array(self.resident_history).T
+        fig, ax = plt.subplots(figsize=(10, 6))
+        cax = ax.imshow(heatmap_array, cmap='viridis', aspect='auto')
+        ax.set_xlabel('Operation Number')
+        ax.set_ylabel('Cluster ID')
+        cbar = fig.colorbar(cax)
+        cbar.set_label('Resident Fraction')
+        plt.tight_layout()
+        plt.savefig(self.workload_dir / "resident_history.png")
+
         print("\nWorkload Generation Summary:")
         print(f"Total Operations: {n_operations}")
         print(f"Inserts: {n_inserts}, Deletes: {n_deletes}, Queries: {n_queries}")
         print(f"Final resident set size: {self.resident_set.sum().item()}")
         with open(self.workload_dir / "runbook.json", "w") as f:
             json.dump(self.runbook, f, indent=4)
+        # ----------------------------------------------------------------------------
 
 
 class WorkloadEvaluator:
@@ -342,7 +400,7 @@ class WorkloadEvaluator:
         self.base_vectors_path = to_path(base_vectors_path) if base_vectors_path else self.workload_dir / "base_vectors.pt"
         self.runbook = None
 
-    def initialize_index(self, name, index, build_params):
+    def initialize_index(self, name, index, build_params, m_params):
         index_dir = self.workload_dir / "init_indexes"
         index_dir.mkdir(parents=True, exist_ok=True)
         index_path = index_dir / f"{name}.index"
@@ -356,9 +414,14 @@ class WorkloadEvaluator:
         else:
             index.load(index_path, n_workers=build_params.get("num_workers", 0))
             print(f"Index {name} loaded from {index_path}")
+
+        if (isinstance(index, QuakeWrapper) and m_params is not None):
+            index.index.initialize_maintenance_policy(m_params)
+            print(f"Maintenance policy initialized: {m_params}")
+
         return index
 
-    def evaluate_workload(self, name, index, build_params, search_params, do_maintenance=False):
+    def evaluate_workload(self, name, index, build_params, search_params, do_maintenance=False, m_params=None):
         """
         Evaluate the workload on the index. At the end a summary is printed and a multi-panel plot is saved.
         """
@@ -369,7 +432,7 @@ class WorkloadEvaluator:
         base_vectors = torch.load(self.base_vectors_path, weights_only=True).to(torch.float32)
         initial_indices = torch.load(self.initial_indices_path, weights_only=True).to(torch.int64)
 
-        index = self.initialize_index(name, index, build_params)
+        index = self.initialize_index(name, index, build_params, m_params)
 
         self.runbook = json.load(open(self.runbook_path, "r"))
         query_vectors = (base_vectors if self.runbook["parameters"]["sample_queries"]
@@ -422,6 +485,7 @@ class WorkloadEvaluator:
                 print(f"Query Time: {mean_time:.2f} ns, Recall: {mean_recall:.2f}")
 
             if do_maintenance:
+                print("Running maintenance...")
                 index.maintenance()
 
             n_resident = operation.get("n_resident", None)
