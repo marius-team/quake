@@ -470,17 +470,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     search_result->distances = topk_dists;
     search_result->timing_info = timing_info;
 
-    // print out timing info
-    std::cout << "Timing info: " << std::endl;
-    std::cout << "Total time: " << timing_info->total_time_ns << std::endl;
-    std::cout << "Job enqueue time: " << timing_info->job_enqueue_time_ns << std::endl;
-    std::cout << "Job wait time: " << timing_info->job_wait_time_ns << std::endl;
-    std::cout << "Buffer init time: " << timing_info->buffer_init_time_ns << std::endl;
-    std::cout << "Result agg time: " << timing_info->result_aggregate_time_ns << std::endl;
-    std::cout << "Job pull time: " << job_pull_time_ns / num_workers_ << std::endl;
-    std::cout << "Job process time: " << job_process_time_ns / num_workers_ << std::endl;
-    std::cout << "Partitions scanned: " << timing_info->partitions_scanned << std::endl;
-
     return search_result;
 }
 
