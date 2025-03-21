@@ -60,7 +60,7 @@ class CMakeBuild(build_ext):
 
         # check if numa is available
         try:
-            subprocess.check_output(["numactl", "--version"])
+            subprocess.check_output(["numactl", "--show"])
             cmake_args += ["-DQUAKE_USE_NUMA=ON"]
         except OSError:
             cmake_args += ["-DQUAKE_USE_NUMA=OFF"]
