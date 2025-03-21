@@ -48,7 +48,7 @@ class QuakeWrapper(IndexWrapper):
         }
 
     def build(self, vectors: torch.Tensor, nc: int, metric: str = "l2", ids: Optional[torch.Tensor] = None,
-              n_workers: int = 0, m: int = -1, code_size: int = 8):
+              num_workers: int = 0, m: int = -1, code_size: int = 8):
         """
         Build the index with the given vectors and arguments.
 
@@ -67,7 +67,7 @@ class QuakeWrapper(IndexWrapper):
         build_params = quake.IndexBuildParams()
         build_params.metric = metric
         build_params.nlist = nc
-        build_params.num_workers = n_workers
+        build_params.num_workers = num_workers
 
         self.index = QuakeIndex()
 
