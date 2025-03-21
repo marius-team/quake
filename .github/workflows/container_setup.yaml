@@ -1,0 +1,106 @@
+name: Container Setup
+
+on:
+  workflow_call:
+    outputs:
+      container_image:
+        description: "Container image determined by this workflow"
+        value: ${{ jobs.determine-and-build.outputs.container_image }}
+
+jobs:
+  determine-and-build:
+    runs-on: ubuntu-latest
+    outputs:
+      container_image: ${{ steps.set_image.outputs.container_image }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for dependency changes
+        id: diff
+        shell: bash
+        run: |
+          echo "Checking for dependency changes..."
+          # Fetch the latest state of the default branch.
+          git fetch origin ${{ github.event.repository.default_branch }}
+          # Compare the dependency files between the default branch and current commit.
+          if git diff --name-only origin/${{ github.event.repository.default_branch }}...${{ github.sha }} | grep -E 'Dockerfile|conda.yaml'; then
+            echo "build_required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Use Main Container if No Dependency Changes
+        id: use_main
+        if: steps.diff.outputs.build_required == 'false'
+        shell: bash
+        run: |
+          image="ghcr.io/marius-team/quake/ubuntu-latest:latest"
+          echo "No dependency changes detected. Using main container: $image"
+          echo "container_image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Compute Dependency Hash
+        id: dependency_hash
+        if: steps.diff.outputs.build_required == 'true'
+        shell: bash
+        run: |
+          echo "Computing hash for dependency files..."
+          # Concatenate the files to create a unique fingerprint.
+          hash=$(cat environments/ubuntu-latest/Dockerfile environments/ubuntu-latest/conda.yaml 2>/dev/null | sha256sum | awk '{print $1}')
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          echo "Dependency hash: $hash"
+
+      - name: Check if Test Container Exists
+        id: check_container
+        if: steps.diff.outputs.build_required == 'true'
+        shell: bash
+        run: |
+          image="ghcr.io/marius-team/quake/test_container:${{ steps.dependency_hash.outputs.hash }}"
+          echo "Checking if container exists: $image"
+          if docker pull "$image" > /dev/null 2>&1; then
+            echo "container_exists=true" >> "$GITHUB_OUTPUT"
+            echo "container_image=$image" >> "$GITHUB_OUTPUT"
+            echo "Container already exists: $image"
+          else
+            echo "container_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Container not found: $image"
+          fi
+
+      - name: Build Test Container if Needed
+        id: build
+        if: steps.diff.outputs.build_required == 'true' && steps.check_container.outputs.container_exists == 'false'
+        shell: bash
+        run: |
+          tag="ghcr.io/marius-team/quake/test_container:${{ steps.dependency_hash.outputs.hash }}"
+          echo "Building test container: $tag"
+          docker build -f environments/ubuntu-latest/Dockerfile -t "$tag" .
+          docker push "$tag"
+          echo "container_image=$tag" >> "$GITHUB_OUTPUT"
+          echo "Test container built and pushed."
+
+      - name: Set Container Image Output
+        id: set_image
+        shell: bash
+        run: |
+          if [ "${{ steps.diff.outputs.build_required }}" = "false" ]; then
+            image="ghcr.io/marius-team/quake/ubuntu-latest:latest"
+          else
+            # Use the pre-existing container image if available, otherwise the one just built.
+            if [ -n "${{ steps.check_container.outputs.container_image }}" ]; then
+              image="${{ steps.check_container.outputs.container_image }}"
+            else
+              image="${{ steps.build.outputs.container_image }}"
+            fi
+          fi
+          echo "Using container image: $image"
+          echo "container_image=$image" >> "$GITHUB_OUTPUT"
