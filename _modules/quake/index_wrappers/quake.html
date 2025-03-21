@@ -209,7 +209,7 @@ window.addEventListener("load", () => mermaid.run());
 
 <div class="viewcode-block" id="QuakeWrapper.search">
 <a class="viewcode-back" href="../../../api.html#quake.index_wrappers.quake.QuakeWrapper.search">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">search</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">nprobe</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">batched_scan</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">recall_target</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">k_factor</span><span class="o">=</span><span class="mf">4.0</span><span class="p">,</span> <span class="n">use_precomputed</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">search</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">nprobe</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">batched_scan</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">recall_target</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">k_factor</span><span class="o">=</span><span class="mf">4.0</span><span class="p">,</span> <span class="n">use_precomputed</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">initial_search_fraction</span> <span class="o">=</span> <span class="mf">.05</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Find the k-nearest neighbors of the query vectors.</span>
@@ -225,6 +225,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">search_params</span><span class="o">.</span><span class="n">recall_target</span> <span class="o">=</span> <span class="n">recall_target</span>
         <span class="n">search_params</span><span class="o">.</span><span class="n">use_precomputed</span> <span class="o">=</span> <span class="n">use_precomputed</span>
         <span class="n">search_params</span><span class="o">.</span><span class="n">batched_scan</span> <span class="o">=</span> <span class="n">batched_scan</span>
+        <span class="n">search_params</span><span class="o">.</span><span class="n">initial_search_fraction</span> <span class="o">=</span> <span class="n">initial_search_fraction</span>
         <span class="n">search_params</span><span class="o">.</span><span class="n">k</span> <span class="o">=</span> <span class="n">k</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">search_params</span><span class="p">)</span></div>
 
@@ -252,7 +253,7 @@ window.addEventListener("load", () => mermaid.run());
 
 <div class="viewcode-block" id="QuakeWrapper.load">
 <a class="viewcode-back" href="../../../api.html#quake.index_wrappers.quake.QuakeWrapper.load">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">n_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">use_numa</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">n_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">use_numa</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
              <span class="n">verify_numa</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">same_core</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">use_centroid_workers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">use_adaptive_n_probe</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Load the index from a file.</span>
@@ -262,7 +263,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="nb">print</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Loading index from </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">, with </span><span class="si">{</span><span class="n">n_workers</span><span class="si">}</span><span class="s2"> workers, use_numa=</span><span class="si">{</span><span class="n">use_numa</span><span class="si">}</span><span class="s2">, verbose=</span><span class="si">{</span><span class="n">verbose</span><span class="si">}</span><span class="s2">, verify_numa=</span><span class="si">{</span><span class="n">verify_numa</span><span class="si">}</span><span class="s2">, same_core=</span><span class="si">{</span><span class="n">same_core</span><span class="si">}</span><span class="s2">, use_centroid_workers=</span><span class="si">{</span><span class="n">use_centroid_workers</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">QuakeIndex</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="kc">True</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">n_workers</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="QuakeWrapper.centroids">
@@ -273,7 +274,8 @@ window.addEventListener("load", () => mermaid.run());
 
 <span class="sd">        :return: The centroids of the index</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">centroids</span><span class="p">()</span></div>
+        <span class="n">centroid_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">get_ids</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">centroid_ids</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="QuakeWrapper.cluster_ids">
@@ -284,7 +286,7 @@ window.addEventListener("load", () => mermaid.run());
 
 <span class="sd">        :return: The cluster ids of the index</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">get_ids</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">cluster_assignments</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="QuakeWrapper.metric">

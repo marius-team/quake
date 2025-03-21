@@ -31,6 +31,7 @@ Detailed Components
    :maxdepth: 2
 
    query_coordinator
+   maintenance_policy
    partition_manager
    dynamic_inverted_list
    index_partition

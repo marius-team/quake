@@ -94,7 +94,7 @@ window.addEventListener("load", () => mermaid.run());
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">quake.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_recall</span><span class="p">,</span> <span class="n">knn</span><span class="p">,</span> <span class="n">to_path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">quake.index_wrappers.quake</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuakeWrapper</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">quake</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaintenancePolicyParams</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">quake</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaintenancePolicyParams</span><span class="p">,</span> <span class="n">SearchParams</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
 
@@ -178,6 +178,7 @@ window.addEventListener("load", () => mermaid.run());
 <div class="viewcode-block" id="StratifiedClusterSampler.update_ranks">
 <a class="viewcode-back" href="../../api.html#quake.workload_generator.StratifiedClusterSampler.update_ranks">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">update_ranks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_cluster</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Updating cluster ranks: root cluster&quot;</span><span class="p">,</span> <span class="n">root_cluster</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">root_cluster</span> <span class="o">=</span> <span class="n">root_cluster</span>
         <span class="n">nearest_cluster_ids</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">knn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">centroids</span><span class="p">[</span><span class="n">root_cluster</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">centroids</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;l2&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cluster_ranks</span> <span class="o">=</span> <span class="n">nearest_cluster_ids</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span></div>
@@ -186,29 +187,48 @@ window.addEventListener("load", () => mermaid.run());
 <div class="viewcode-block" id="StratifiedClusterSampler.sample">
 <a class="viewcode-back" href="../../api.html#quake.workload_generator.StratifiedClusterSampler.sample">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_pool</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">update_ranks</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+        <span class="c1"># Get the cluster assignments for all indices in the sample pool.</span>
         <span class="n">sample_assignments</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assignments</span><span class="p">[</span><span class="n">sample_pool</span><span class="p">]</span>
-        <span class="n">non_empty_clusters</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">sample_assignments</span><span class="p">)</span>
-        <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
-        <span class="n">mask</span><span class="p">[</span><span class="n">non_empty_clusters</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="n">cluster_order</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_ranks</span><span class="p">[</span><span class="n">mask</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_ranks</span><span class="p">]]</span>
-        <span class="n">cluster_samples</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">curr_sample_size</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">for</span> <span class="n">cluster_id</span> <span class="ow">in</span> <span class="n">cluster_order</span><span class="p">:</span>
-            <span class="n">mask</span> <span class="o">=</span> <span class="n">sample_assignments</span> <span class="o">==</span> <span class="n">cluster_id</span>
-            <span class="n">cluster_sample_pool</span> <span class="o">=</span> <span class="n">sample_pool</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">cluster_sample_pool</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+
+        <span class="c1"># Identify which clusters are present in the sample pool.</span>
+        <span class="n">present_clusters</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">sample_assignments</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+
+        <span class="c1"># Filter self.cluster_ranks to only include clusters that are present.</span>
+        <span class="n">cluster_order</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_ranks</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">present_clusters</span><span class="p">]</span>
+
+        <span class="n">sampled_indices</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">num_collected</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="c1"># Loop over clusters in the order defined by the filtered ranks.</span>
+        <span class="k">for</span> <span class="n">cluster</span> <span class="ow">in</span> <span class="n">cluster_order</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Sampling from cluster&quot;</span><span class="p">,</span> <span class="n">cluster</span><span class="p">)</span>
+            <span class="c1"># Find indices in sample_pool that belong to this cluster.</span>
+            <span class="n">cluster_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">sample_assignments</span> <span class="o">==</span> <span class="n">cluster</span><span class="p">)</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">as_tuple</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">cluster_mask</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">continue</span>
-            <span class="n">cluster_sample_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">size</span> <span class="o">-</span> <span class="n">curr_sample_size</span><span class="p">,</span> <span class="n">cluster_sample_pool</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-            <span class="n">cluster_sample</span> <span class="o">=</span> <span class="n">cluster_sample_pool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">randperm</span><span class="p">(</span><span class="n">cluster_sample_pool</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])[:</span><span class="n">cluster_sample_size</span><span class="p">]]</span>
-            <span class="n">cluster_samples</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cluster_sample</span><span class="p">)</span>
-            <span class="n">curr_sample_size</span> <span class="o">+=</span> <span class="n">cluster_sample_size</span>
-            <span class="k">if</span> <span class="n">curr_sample_size</span> <span class="o">&gt;=</span> <span class="n">size</span><span class="p">:</span>
+
+            <span class="c1"># Determine how many samples to draw from this cluster.</span>
+            <span class="n">n_to_sample</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">size</span> <span class="o">-</span> <span class="n">num_collected</span><span class="p">,</span> <span class="n">cluster_mask</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+
+            <span class="c1"># Randomly sample from the indices in this cluster.</span>
+            <span class="n">perm</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randperm</span><span class="p">(</span><span class="n">cluster_mask</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+            <span class="n">chosen</span> <span class="o">=</span> <span class="n">cluster_mask</span><span class="p">[</span><span class="n">perm</span><span class="p">[:</span><span class="n">n_to_sample</span><span class="p">]]</span>
+            <span class="n">sampled_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sample_pool</span><span class="p">[</span><span class="n">chosen</span><span class="p">])</span>
+
+            <span class="n">num_collected</span> <span class="o">+=</span> <span class="n">n_to_sample</span>
+            <span class="k">if</span> <span class="n">num_collected</span> <span class="o">&gt;=</span> <span class="n">size</span><span class="p">:</span>
                 <span class="k">break</span>
-        <span class="n">sample_ids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">cluster_samples</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">update_ranks</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">update_ranks</span><span class="p">(</span><span class="n">cluster_id</span><span class="p">)</span>
-        <span class="n">sample_ids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">sample_ids</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">sample_ids</span></div>
+
+        <span class="c1"># Concatenate the sampled indices.</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">sampled_indices</span><span class="p">)</span> <span class="k">if</span> <span class="n">sampled_indices</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+
+        <span class="c1"># Optionally update ranks with the last cluster that contributed samples.</span>
+        <span class="k">if</span> <span class="n">update_ranks</span> <span class="ow">and</span> <span class="n">cluster_order</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">update_ranks</span><span class="p">(</span><span class="n">cluster_order</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="c1"># Remove duplicates, if any.</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span></div>
 </div>
 
 
@@ -276,6 +296,9 @@ window.addEventListener("load", () => mermaid.run());
         <span class="bp">self</span><span class="o">.</span><span class="n">cluster_ranks</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="kc">None</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">resident_history</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">query_history</span> <span class="o">=</span> <span class="p">[]</span>
+
 <div class="viewcode-block" id="DynamicWorkloadGenerator.workload_exists">
 <a class="viewcode-back" href="../../api.html#quake.workload_generator.DynamicWorkloadGenerator.workload_exists">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">workload_exists</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -295,7 +318,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">number_of_operations</span> <span class="o">&gt;</span> <span class="mi">0</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_size</span> <span class="o">&gt;</span> <span class="mi">0</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_size</span> <span class="o">&gt;</span> <span class="mi">0</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_sample_distribution</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;uniform&quot;</span><span class="p">,</span> <span class="s2">&quot;skewed&quot;</span><span class="p">]</span></div>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_sample_distribution</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;uniform&quot;</span><span class="p">,</span> <span class="s2">&quot;skewed&quot;</span><span class="p">,</span> <span class="s2">&quot;skewed_fixed&quot;</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="DynamicWorkloadGenerator.initialize_clustered_index">
@@ -317,8 +340,12 @@ window.addEventListener("load", () => mermaid.run());
                         <span class="n">metric</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metric</span><span class="p">,</span>
                         <span class="n">ids</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_vectors</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
             <span class="n">index</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">workload_dir</span> <span class="o">/</span> <span class="s2">&quot;clustered_index.bin&quot;</span><span class="p">))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assignments</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">cluster_ids</span><span class="p">()</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Cluster assignments shape:&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">assignments</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+        <span class="n">search_params</span> <span class="o">=</span> <span class="n">SearchParams</span><span class="p">()</span>
+        <span class="n">search_params</span><span class="o">.</span><span class="n">k</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">search_params</span><span class="o">.</span><span class="n">batched_scan</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assignments</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_vectors</span><span class="p">,</span> <span class="n">search_params</span><span class="p">)</span><span class="o">.</span><span class="n">ids</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+
         <span class="k">return</span> <span class="n">index</span></div>
 
 
@@ -338,7 +365,8 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">if</span> <span class="n">operation_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;insert&quot;</span><span class="p">,</span> <span class="s2">&quot;delete&quot;</span><span class="p">]:</span>
             <span class="n">sample_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_pool</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">update_ranks</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_cluster_sample_distribution</span> <span class="o">!=</span> <span class="s2">&quot;skewed_fixed&quot;</span><span class="p">)</span>
+            <span class="c1"># update_ranks = (self.query_cluster_sample_distribution != &quot;skewed_fixed&quot;)</span>
+            <span class="n">update_ranks</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="n">sample_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_pool</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">update_ranks</span><span class="o">=</span><span class="n">update_ranks</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">sample_ids</span></div>
 
@@ -346,7 +374,7 @@ window.addEventListener("load", () => mermaid.run());
 <div class="viewcode-block" id="DynamicWorkloadGenerator.initialize_workload">
 <a class="viewcode-back" href="../../api.html#quake.workload_generator.DynamicWorkloadGenerator.initialize_workload">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">initialize_workload</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_sample_distribution</span> <span class="o">==</span> <span class="s2">&quot;skewed&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_sample_distribution</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;skewed&quot;</span><span class="p">,</span> <span class="s2">&quot;skewed_fixed&quot;</span><span class="p">]:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">StratifiedClusterSampler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">assignments</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">clustered_index</span><span class="o">.</span><span class="n">centroids</span><span class="p">())</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_sample_distribution</span> <span class="o">==</span> <span class="s2">&quot;uniform&quot;</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">UniformSampler</span><span class="p">()</span>
@@ -396,6 +424,10 @@ window.addEventListener("load", () => mermaid.run());
         <span class="bp">self</span><span class="o">.</span><span class="n">initialize_workload</span><span class="p">()</span>
         <span class="n">n_inserts</span> <span class="o">=</span> <span class="n">n_deletes</span> <span class="o">=</span> <span class="n">n_queries</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">n_operations</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="n">initial_uniques</span><span class="p">,</span> <span class="n">initial_counts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">assignments</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">all_sizes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">initial_uniques</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">all_sizes</span><span class="p">[</span><span class="n">initial_uniques</span><span class="p">]</span> <span class="o">=</span> <span class="n">initial_counts</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">number_of_operations</span><span class="p">):</span>
             <span class="n">operation_type</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;insert&quot;</span><span class="p">,</span> <span class="s2">&quot;delete&quot;</span><span class="p">,</span> <span class="s2">&quot;query&quot;</span><span class="p">],</span>
                                               <span class="n">p</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">insert_ratio</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">delete_ratio</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_ratio</span><span class="p">])</span>
@@ -438,12 +470,37 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">dists</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">operations_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">_gt_dists.pt&quot;</span><span class="p">)</span>
             <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Operation&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">runbook</span><span class="p">[</span><span class="s2">&quot;operations&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">entry</span>
+
+            <span class="c1"># Determine the number of clusters. Assuming clusters are labeled from 0 to max_cluster.</span>
+            <span class="n">n_clusters</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">assignments</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">fractions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_clusters</span><span class="p">)</span>
+
+            <span class="c1"># get resident assignments</span>
+            <span class="n">resident_assignments</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assignments</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">resident_set</span><span class="p">]</span>
+
+            <span class="n">uniques</span><span class="p">,</span> <span class="n">counts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">resident_assignments</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">fractions</span><span class="p">[</span><span class="n">uniques</span><span class="p">]</span> <span class="o">=</span> <span class="n">counts</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">/</span> <span class="n">all_sizes</span><span class="p">[</span><span class="n">uniques</span><span class="p">]</span>
+            <span class="c1"># Append the vector of fractions for this operation.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">resident_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fractions</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">runbook</span><span class="p">[</span><span class="s2">&quot;summary&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;n_inserts&quot;</span><span class="p">:</span> <span class="n">n_inserts</span><span class="p">,</span>
             <span class="s2">&quot;n_deletes&quot;</span><span class="p">:</span> <span class="n">n_deletes</span><span class="p">,</span>
             <span class="s2">&quot;n_queries&quot;</span><span class="p">:</span> <span class="n">n_queries</span><span class="p">,</span>
             <span class="s2">&quot;n_operations&quot;</span><span class="p">:</span> <span class="n">n_operations</span><span class="p">,</span>
         <span class="p">}</span>
+
+        <span class="c1"># Convert the history to a NumPy array with shape (n_clusters, n_operations)</span>
+        <span class="n">heatmap_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">resident_history</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+        <span class="n">cax</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">heatmap_array</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">aspect</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Operation Number&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Cluster ID&#39;</span><span class="p">)</span>
+        <span class="n">cbar</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">cax</span><span class="p">)</span>
+        <span class="n">cbar</span><span class="o">.</span><span class="n">set_label</span><span class="p">(</span><span class="s1">&#39;Resident Fraction&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">workload_dir</span> <span class="o">/</span> <span class="s2">&quot;resident_history.png&quot;</span><span class="p">)</span>
+
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Workload Generation Summary:&quot;</span><span class="p">)</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total Operations: </span><span class="si">{</span><span class="n">n_operations</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inserts: </span><span class="si">{</span><span class="n">n_inserts</span><span class="si">}</span><span class="s2">, Deletes: </span><span class="si">{</span><span class="n">n_deletes</span><span class="si">}</span><span class="s2">, Queries: </span><span class="si">{</span><span class="n">n_queries</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -452,6 +509,7 @@ window.addEventListener("load", () => mermaid.run());
             <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">runbook</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span></div>
 </div>
 
+        <span class="c1"># ----------------------------------------------------------------------------</span>
 
 
 <div class="viewcode-block" id="WorkloadEvaluator">
@@ -476,7 +534,7 @@ window.addEventListener("load", () => mermaid.run());
 
 <div class="viewcode-block" id="WorkloadEvaluator.initialize_index">
 <a class="viewcode-back" href="../../api.html#quake.workload_generator.WorkloadEvaluator.initialize_index">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">initialize_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">build_params</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialize_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">build_params</span><span class="p">,</span> <span class="n">m_params</span><span class="p">):</span>
         <span class="n">index_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">workload_dir</span> <span class="o">/</span> <span class="s2">&quot;init_indexes&quot;</span>
         <span class="n">index_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">index_path</span> <span class="o">=</span> <span class="n">index_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.index&quot;</span>
@@ -490,12 +548,17 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">else</span><span class="p">:</span>
             <span class="n">index</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">index_path</span><span class="p">)</span>
             <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Index </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> loaded from </span><span class="si">{</span><span class="n">index_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">QuakeWrapper</span><span class="p">)</span> <span class="ow">and</span> <span class="n">m_params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="n">index</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">initialize_maintenance_policy</span><span class="p">(</span><span class="n">m_params</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Maintenance policy initialized: </span><span class="si">{</span><span class="n">m_params</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
         <span class="k">return</span> <span class="n">index</span></div>
 
 
 <div class="viewcode-block" id="WorkloadEvaluator.evaluate_workload">
 <a class="viewcode-back" href="../../api.html#quake.workload_generator.WorkloadEvaluator.evaluate_workload">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_workload</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">build_params</span><span class="p">,</span> <span class="n">search_params</span><span class="p">,</span> <span class="n">do_maintenance</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_workload</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">build_params</span><span class="p">,</span> <span class="n">search_params</span><span class="p">,</span> <span class="n">do_maintenance</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">m_params</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Evaluate the workload on the index. At the end a summary is printed and a multi-panel plot is saved.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -506,7 +569,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">base_vectors</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_vectors_path</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
         <span class="n">initial_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_indices_path</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
 
-        <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialize_index</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">build_params</span><span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialize_index</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">build_params</span><span class="p">,</span> <span class="n">m_params</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">runbook</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">runbook_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">))</span>
         <span class="n">query_vectors</span> <span class="o">=</span> <span class="p">(</span><span class="n">base_vectors</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">runbook</span><span class="p">[</span><span class="s2">&quot;parameters&quot;</span><span class="p">][</span><span class="s2">&quot;sample_queries&quot;</span><span class="p">]</span>
@@ -559,6 +622,7 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Query Time: </span><span class="si">{</span><span class="n">mean_time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> ns, Recall: </span><span class="si">{</span><span class="n">mean_recall</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
             <span class="k">if</span> <span class="n">do_maintenance</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Running maintenance...&quot;</span><span class="p">)</span>
                 <span class="n">index</span><span class="o">.</span><span class="n">maintenance</span><span class="p">()</span>
 
             <span class="n">n_resident</span> <span class="o">=</span> <span class="n">operation</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n_resident&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>

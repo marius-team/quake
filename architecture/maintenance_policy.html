@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DynamicInvertedLists &mdash; Quake 0.0.1 documentation</title>
+  <title>MaintenancePolicy &mdash; Quake 0.0.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
@@ -21,8 +21,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="IndexPartition" href="index_partition.html" />
-    <link rel="prev" title="PartitionManager" href="partition_manager.html" /> 
+    <link rel="next" title="PartitionManager" href="partition_manager.html" />
+    <link rel="prev" title="Quake Index Architecture" href="architecture.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -54,14 +54,14 @@
 <li class="toctree-l2"><a class="reference internal" href="architecture.html#overview">Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="architecture.html#quakeindex-class-components">QuakeIndex Class Components</a></li>
 <li class="toctree-l2 current"><a class="reference internal" href="architecture.html#detailed-components">Detailed Components</a><ul class="current">
-<li class="toctree-l3"><a class="reference internal" href="maintenance_policy.html">MaintenancePolicy</a></li>
-<li class="toctree-l3"><a class="reference internal" href="partition_manager.html">PartitionManager</a></li>
-<li class="toctree-l3 current"><a class="current reference internal" href="#">DynamicInvertedLists</a><ul>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">MaintenancePolicy</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#overview">Overview</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#key-responsibilities">Key Responsibilities</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#limitations">Limitations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#key-methods">Key Methods</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#configuration-and-parameters">Configuration and Parameters</a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="partition_manager.html">PartitionManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dynamic_inverted_list.html">DynamicInvertedLists</a></li>
 <li class="toctree-l3"><a class="reference internal" href="index_partition.html">IndexPartition</a></li>
 </ul>
 </li>
@@ -87,9 +87,9 @@
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="architecture.html">Quake Index Architecture</a></li>
-      <li class="breadcrumb-item active">DynamicInvertedLists</li>
+      <li class="breadcrumb-item active">MaintenancePolicy</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/architecture/dynamic_inverted_list.rst.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/architecture/maintenance_policy.rst.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -97,41 +97,64 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="dynamicinvertedlists">
-<h1>DynamicInvertedLists<a class="headerlink" href="#dynamicinvertedlists" title="Link to this heading"></a></h1>
+  <section id="maintenancepolicy">
+<h1>MaintenancePolicy<a class="headerlink" href="#maintenancepolicy" title="Link to this heading"></a></h1>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">DynamicInvertedLists</span></code> class provides a dynamic, NUMA-aware inverted list implementation
-by extending the Faiss <code class="docutils literal notranslate"><span class="pre">InvertedLists</span></code> interface. Internally, it manages a collection of partitions,
-each represented by an instance of the <code class="docutils literal notranslate"><span class="pre">IndexPartition</span></code> class, which holds a contiguous block
-of vector codes and corresponding IDs.</p>
-</section>
-<section id="key-responsibilities">
-<h2>Key Responsibilities<a class="headerlink" href="#key-responsibilities" title="Link to this heading"></a></h2>
+<p>The <strong>MaintenancePolicy</strong> is a central component of the Quake indexing system that
+automates index upkeep by monitoring query “hit” patterns and deciding when to
+perform maintenance actions such as splitting or deleting partitions. It ties together
+several key components:</p>
 <ul class="simple">
-<li><p><strong>Data Management:</strong>
-Each partition stores a set of encoded vectors and their IDs. Partitions are stored in an
-unordered map, enabling dynamic creation and deletion.</p></li>
-<li><p><strong>Dynamic Operations:</strong>
-Supports adding, updating, and removing entries both within a single partition and across
-partitions (batch updates).</p></li>
-<li><p><strong>NUMA Awareness:</strong>
-Offers methods to set and get NUMA node details for each partition. This facilitates better data
-locality in NUMA systems, allowing memory allocations to be placed on specific nodes.</p></li>
-<li><p><strong>Faiss Compatibility:</strong>
-Implements all the required virtual methods from the Faiss <code class="docutils literal notranslate"><span class="pre">InvertedLists</span></code> interface so that
-it can be seamlessly used in Faiss-based search and clustering workflows.</p></li>
-<li><p><strong>Serialization:</strong>
-Provides functionality to serialize (save) and deserialize (load) the entire inverted list structure,
-including partition data and metadata.</p></li>
+<li><p><strong>PartitionManager</strong>: Manages the set of index partitions. The maintenance policy
+uses it to query partition sizes, delete outdated partitions, and trigger splits.</p></li>
+<li><p><strong>MaintenanceCostEstimator</strong>: Provides latency-based estimates for how much a
+particular maintenance action (split or delete) will cost. It uses measured or
+extrapolated scan latencies as a function of partition size and search parameters.</p></li>
+<li><p><strong>HitCountTracker</strong>: Records per-query “hit” counts (i.e. which partitions were
+scanned) over a sliding window. It computes the average scan fraction and maintains
+history of split and delete events for later analysis.</p></li>
 </ul>
 </section>
-<section id="limitations">
-<h2>Limitations<a class="headerlink" href="#limitations" title="Link to this heading"></a></h2>
+<section id="key-methods">
+<h2>Key Methods<a class="headerlink" href="#key-methods" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p><strong>Record Query Hits:</strong>
+Each time a query is processed, the <cite>record_query_hits()</cite> method is called
+with the partition IDs that were “hit” during the search. The <em>HitCountTracker</em>
+accumulates these events to compute the current scan fraction across the sliding window.</p></li>
+<li><p><strong>Perform Maintenance:</strong>
+When the window is full, <cite>perform_maintenance()</cite> is invoked. This method:</p>
 <ul class="simple">
-<li><p>The <code class="docutils literal notranslate"><span class="pre">resize</span></code> method is currently a no-op because the partitions are stored in a map.</p></li>
-<li><p>The lookup within each partition (using a linear search via <code class="docutils literal notranslate"><span class="pre">find_id</span></code>) is simple but may become
-inefficient for very large partitions.</p></li>
+<li><p>Aggregates hit counts from the <em>HitCountTracker</em>.</p></li>
+<li><p>For each partition, uses the <em>MaintenanceCostEstimator</em> to compute a “delta”
+(change in cost) for both deletion and splitting. The decision is based on whether
+the estimated cost delta exceeds configured thresholds.</p></li>
+<li><p>Determines which partitions should be split (to improve query efficiency)
+or deleted (if underutilized).</p></li>
+<li><p>Triggers the corresponding operations through the <em>PartitionManager</em> and then,
+if needed, calls local refinement on newly split partitions.</p></li>
+<li><p>Returns timing information via a <em>MaintenanceTimingInfo</em> structure.</p></li>
+</ul>
+</li>
+<li><p><strong>Reset:</strong>
+After maintenance operations complete, the policy can be reset (via <cite>reset()</cite>)
+to clear the hit history and start a fresh monitoring window.</p></li>
+</ol>
+</section>
+<section id="configuration-and-parameters">
+<h2>Configuration and Parameters<a class="headerlink" href="#configuration-and-parameters" title="Link to this heading"></a></h2>
+<p>Maintenance behavior is governed by a set of parameters (encapsulated in the
+<strong>MaintenancePolicyParams</strong> structure):</p>
+<ul class="simple">
+<li><p><strong>window_size</strong>: Number of queries over which hits are aggregated.</p></li>
+<li><p><strong>refinement_radius</strong> and <strong>refinement_iterations</strong>: Control local refinement of new partitions.</p></li>
+<li><p><strong>delete_threshold_ns</strong> and <strong>split_threshold_ns</strong>: Latency thresholds (in nanoseconds)
+that trigger deletion or splitting.</p></li>
+<li><p><strong>alpha</strong>: Scaling factor applied to cost estimates.</p></li>
+<li><p><strong>enable_split_rejection / enable_delete_rejection</strong>: Flags to allow rejecting an
+otherwise triggered action if additional checks (such as vector reassignments) suggest it
+may not be beneficial.</p></li>
 </ul>
 </section>
 </section>
@@ -140,8 +163,8 @@ inefficient for very large partitions.</p></li>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="partition_manager.html" class="btn btn-neutral float-left" title="PartitionManager" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="index_partition.html" class="btn btn-neutral float-right" title="IndexPartition" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="architecture.html" class="btn btn-neutral float-left" title="Quake Index Architecture" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="partition_manager.html" class="btn btn-neutral float-right" title="PartitionManager" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

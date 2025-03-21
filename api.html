@@ -92,16 +92,11 @@
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.delete_threshold_ns"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.delete_threshold_ns</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.enable_delete_rejection"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.enable_delete_rejection</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.enable_split_rejection"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.enable_split_rejection</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.k_large"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.k_large</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.k_small"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.k_small</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.maintenance_policy"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.maintenance_policy</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.max_partition_ratio"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.max_partition_ratio</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.min_partition_size"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.min_partition_size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.modify_centroids"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.modify_centroids</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.refinement_iterations"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.refinement_iterations</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.refinement_radius"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.refinement_radius</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.split_threshold_ns"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.split_threshold_ns</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.target_partition_size"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.target_partition_size</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.window_size"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.window_size</span></code></a></li>
 </ul>
 </li>
@@ -456,7 +451,7 @@ Returns timing information for the maintenance operation.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchParams.initial_search_fraction">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">initial_search_fraction</span></span><a class="headerlink" href="#quake.SearchParams.initial_search_fraction" title="Link to this definition"></a></dt>
-<dd><p>Initial fraction of partitions to search. default = 0.200000</p>
+<dd><p>Initial fraction of partitions to search. default = 0.020000</p>
 </dd></dl>
 
 <dl class="py property">
@@ -486,13 +481,13 @@ Returns timing information for the maintenance operation.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchParams.recompute_threshold">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">recompute_threshold</span></span><a class="headerlink" href="#quake.SearchParams.recompute_threshold" title="Link to this definition"></a></dt>
-<dd><p>Threshold to trigger recomputation of APS. default = 0.010000</p>
+<dd><p>Threshold to trigger recomputation of APS. default = 0.001000</p>
 </dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchParams.use_precomputed">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">use_precomputed</span></span><a class="headerlink" href="#quake.SearchParams.use_precomputed" title="Link to this definition"></a></dt>
-<dd><p>Flag to use precomputed inc beta fn for APS. default = 0</p>
+<dd><p>Flag to use precomputed inc beta fn for APS. default = 1</p>
 </dd></dl>
 
 </dd></dl>
@@ -538,7 +533,7 @@ Returns timing information for the maintenance operation.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenancePolicyParams.delete_threshold_ns">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">delete_threshold_ns</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.delete_threshold_ns" title="Link to this definition"></a></dt>
-<dd><p>Delete threshold (ns). default = 20.000000</p>
+<dd><p>Delete threshold (ns). default = 10.000000</p>
 </dd></dl>
 
 <dl class="py property">
@@ -554,39 +549,15 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="quake.MaintenancePolicyParams.k_large">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">k_large</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.k_large" title="Link to this definition"></a></dt>
-<dd><p>Large k value for maintenance. default = 50</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="quake.MaintenancePolicyParams.k_small">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">k_small</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.k_small" title="Link to this definition"></a></dt>
-<dd><p>Small k value for maintenance. default = 50</p>
-</dd></dl>
-
-<dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenancePolicyParams.maintenance_policy">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">maintenance_policy</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.maintenance_policy" title="Link to this definition"></a></dt>
 <dd><p>Maintenance policy type. default = query_cost</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="quake.MaintenancePolicyParams.max_partition_ratio">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">max_partition_ratio</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.max_partition_ratio" title="Link to this definition"></a></dt>
-<dd><p>Maximum allowed partition ratio. default = 2.000000</p>
-</dd></dl>
-
-<dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenancePolicyParams.min_partition_size">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">min_partition_size</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.min_partition_size" title="Link to this definition"></a></dt>
 <dd><p>Minimum allowed partition size. default = 32</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="quake.MaintenancePolicyParams.modify_centroids">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">modify_centroids</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.modify_centroids" title="Link to this definition"></a></dt>
-<dd><p>Flag to modify centroids during maintenance. default = 1</p>
 </dd></dl>
 
 <dl class="py property">
@@ -598,19 +569,13 @@ Returns timing information for the maintenance operation.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenancePolicyParams.refinement_radius">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">refinement_radius</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.refinement_radius" title="Link to this definition"></a></dt>
-<dd><p>Radius for local partition refinement. default = 100</p>
+<dd><p>Radius for local partition refinement. default = 25</p>
 </dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenancePolicyParams.split_threshold_ns">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">split_threshold_ns</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.split_threshold_ns" title="Link to this definition"></a></dt>
-<dd><p>Split threshold (ns). default = 20.000000</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="quake.MaintenancePolicyParams.target_partition_size">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">target_partition_size</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.target_partition_size" title="Link to this definition"></a></dt>
-<dd><p>Target partition size. default = 1000</p>
+<dd><p>Split threshold (ns). default = 10.000000</p>
 </dd></dl>
 
 <dl class="py property">
@@ -940,13 +905,13 @@ to sample in a stratified fashion.</p>
 <p>Evaluates a generated workload on a given index and produces summary statistics and plots.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="quake.workload_generator.WorkloadEvaluator.evaluate_workload">
-<span class="sig-name descname"><span class="pre">evaluate_workload</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">build_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">search_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">do_maintenance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#WorkloadEvaluator.evaluate_workload"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.WorkloadEvaluator.evaluate_workload" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">evaluate_workload</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">build_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">search_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">do_maintenance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#WorkloadEvaluator.evaluate_workload"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.WorkloadEvaluator.evaluate_workload" title="Link to this definition"></a></dt>
 <dd><p>Evaluate the workload on the index. At the end a summary is printed and a multi-panel plot is saved.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="quake.workload_generator.WorkloadEvaluator.initialize_index">
-<span class="sig-name descname"><span class="pre">initialize_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">build_params</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#WorkloadEvaluator.initialize_index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.WorkloadEvaluator.initialize_index" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">initialize_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">build_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m_params</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#WorkloadEvaluator.initialize_index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.WorkloadEvaluator.initialize_index" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1150,7 +1115,7 @@ to sample in a stratified fashion.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="quake.index_wrappers.quake.QuakeWrapper.load">
-<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_numa</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verify_numa</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">same_core</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_centroid_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_adaptive_n_probe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.load" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_numa</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verify_numa</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">same_core</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_centroid_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_adaptive_n_probe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.load" title="Link to this definition"></a></dt>
 <dd><p>Load the index from a file.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1212,7 +1177,7 @@ to sample in a stratified fashion.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="quake.index_wrappers.quake.QuakeWrapper.search">
-<span class="sig-name descname"><span class="pre">search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprobe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batched_scan</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recall_target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_precomputed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.search"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.search" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprobe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batched_scan</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recall_target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_precomputed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_search_fraction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.05</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.search"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.search" title="Link to this definition"></a></dt>
 <dd><p>Find the k-nearest neighbors of the query vectors.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
