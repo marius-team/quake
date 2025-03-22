@@ -4,10 +4,11 @@ version = "0.0.1"
 description = "Dynamic index for vector search"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { file = "LICENSE" }
 authors = [
     { name = "Jason Mohoney", email = "mohoney2@wisc.edu" }
 ]
+license = "MIT"
+license_files = "LICENSE"
 dependencies = [
     "torch>=2.0",
     "numpy",
