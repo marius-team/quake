@@ -57,6 +57,8 @@ class CMakeBuild(build_ext):
         # if the gpu version of torch is installed, add the flag to the cmake args to enable the GPU build
         if torch.cuda.is_available():
             cmake_args += ["-DQUAKE_ENABLE_GPU=ON"]
+        else:
+            cmake_args += ["-DTorch_NO_CUDA=ON"]
 
         # check if numa is available
         try:
