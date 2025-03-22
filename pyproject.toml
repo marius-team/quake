@@ -8,7 +8,7 @@ authors = [
     { name = "Jason Mohoney", email = "mohoney2@wisc.edu" }
 ]
 license = "MIT"
-license_files = "LICENSE"
+
 dependencies = [
     "torch>=2.0",
     "numpy",
