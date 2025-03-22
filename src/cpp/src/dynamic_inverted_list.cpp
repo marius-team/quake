@@ -570,7 +570,7 @@ int DynamicInvertedLists::get_thread(size_t list_no) {
     if (it == partitions_.end()) {
         throw std::runtime_error("List does not exist in get_thread");
     }
-    return it->second->thread_id_;
+    return it->second->core_id_;
 }
 
 void DynamicInvertedLists::set_thread(size_t list_no, int new_thread_id) {
@@ -578,7 +578,7 @@ void DynamicInvertedLists::set_thread(size_t list_no, int new_thread_id) {
     if (it == partitions_.end()) {
         throw std::runtime_error("List does not exist in set_thread");
     }
-    it->second->thread_id_ = new_thread_id;
+    it->second->core_id_ = new_thread_id;
 }
 
 #endif

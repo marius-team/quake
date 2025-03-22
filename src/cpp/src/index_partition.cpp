@@ -16,7 +16,7 @@ IndexPartition::IndexPartition(int64_t num_vectors,
     codes_ = nullptr;
     ids_ = nullptr;
     numa_node_ = -1;
-    thread_id_ = -1;
+    core_id_ = -1;
     ensure_capacity(num_vectors);
     append(num_vectors, ids, codes);
 }
@@ -118,7 +118,7 @@ void IndexPartition::resize(int64_t new_capacity) {
 void IndexPartition::clear() {
     free_memory();
     numa_node_ = -1;
-    thread_id_ = -1;
+    core_id_ = -1;
     buffer_size_ = 0;
     num_vectors_ = 0;
     code_size_ = 0;
@@ -142,6 +142,10 @@ int64_t IndexPartition::find_id(idx_t id) const {
         }
     }
     return -1;
+}
+
+void IndexPartition::set_core_id(int core_id) {
+    core_id_ = core_id;
 }
 
 #ifdef QUAKE_USE_NUMA
@@ -182,7 +186,7 @@ void IndexPartition::set_numa_node(int new_numa_node) {
 
 void IndexPartition::move_from(IndexPartition&& other) {
     numa_node_ = other.numa_node_;
-    thread_id_ = other.thread_id_;
+    core_id_ = other.core_id_;
     buffer_size_ = other.buffer_size_;
     num_vectors_ = other.num_vectors_;
     code_size_ = other.code_size_;

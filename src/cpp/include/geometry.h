@@ -94,7 +94,19 @@ inline vector<float> compute_boundary_distances(const Tensor &query, vector<floa
             boundary_distances[j] = d;
         }
     } else {
-
+        // for dot product distance
+        float residual_angle = faiss::fvec_inner_product(query_ptr, nearest_centroid_ptr, dimension);
+        for (int j = 1; j < centroids.size(); j++) {
+            // get angle of the bisector using dot product
+            subtract_arrays(centroids[j], nearest_centroid_ptr, line_vector.data(), dimension);
+            divide_array_by_constant(line_vector.data(), 2.0f, midpoint.data(), dimension);
+            add_arrays(nearest_centroid_ptr, midpoint.data(), midpoint.data(), dimension);
+            float norm = faiss::fvec_inner_product(midpoint.data(), midpoint.data(), dimension);
+            norm = std::sqrt(norm);
+            divide_array_by_constant(midpoint.data(), norm, midpoint.data(), dimension);
+            float boundary_angle = faiss::fvec_inner_product(query_ptr, midpoint.data(), dimension);
+            boundary_distances[j] = std::acos(boundary_angle);
+        }
     }
 
     return boundary_distances;

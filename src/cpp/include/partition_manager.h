@@ -24,7 +24,7 @@ class QuakeIndex;
 class PartitionManager {
 public:
     shared_ptr<QuakeIndex> parent_ = nullptr; ///< Pointer to a higher-level parent index.
-    std::shared_ptr<faiss::DynamicInvertedLists> partitions_ = nullptr; ///< Pointer to the inverted lists.
+    std::shared_ptr<faiss::DynamicInvertedLists> partition_store_ = nullptr; ///< Pointer to the inverted lists.
     int64_t curr_partition_id_ = 0; ///< Current partition ID.
 
     bool debug_ = false; ///< If true, print debug information.
@@ -110,16 +110,22 @@ public:
     shared_ptr<Clustering> select_partitions(const Tensor &partition_ids, bool copy = false);
 
     /**
-     * @brief Randomly breaks up the single partition into multiple partitions and distributes the partitions. Only applicable for flat indexes.
-     * @param n_partitions The number of partitions to split the single partition into.
-     */
-    void distribute_flat(int n_partitions);
-
-    /**
      * @brief Distribute the partitions across multiple workers.
      * @param num_workers The number of workers to distribute the partitions across.
      */
     void distribute_partitions(int num_workers);
+
+    /**
+     * @brief Set the core ID for a given partition.
+     * @param partition_id The ID of the partition.
+     */
+    void set_partition_core_id(int64_t partition_id, int core_id);
+
+    /**
+     * @brief Return the core ID for a given partition.
+     * @param partition_id The ID of the partition.
+     */
+    int get_partition_core_id(int64_t partition_id);
 
     /**
      * @brief Return total number of vectors across all partitions.

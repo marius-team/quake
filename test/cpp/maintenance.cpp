@@ -127,7 +127,7 @@ TEST(MaintenancePolicyRefactoredTest, TriggerDeletion) {
   }
 
   // make partition 0 small
-  manager->partitions_->partitions_[0]->resize(10);
+  manager->partition_store_->partitions_[0]->resize(10);
 
   // Run maintenance. Partition 0, being unhit, should be deleted.
   shared_ptr<MaintenanceTimingInfo> info = policy->perform_maintenance();

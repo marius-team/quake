@@ -56,6 +56,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         parent_ = make_shared<QuakeIndex>(current_level_ + 1);
         auto parent_build_params = make_shared<IndexBuildParams>();
         parent_build_params->metric = build_params_->metric;
+        parent_build_params->num_workers = build_params_->num_workers;
         parent_->build(clustering->centroids, clustering->partition_ids, parent_build_params);
 
         // initialize the partition manager
@@ -248,7 +249,7 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers) {
         std::string parent_dir = (fs::path(dir_path) / "parent").string();
         if (fs::exists(parent_dir) && fs::is_directory(parent_dir)) {
             parent_ = std::make_shared<QuakeIndex>();
-            parent_->load(parent_dir);
+            parent_->load(parent_dir, n_workers);
             partition_manager_->parent_ = parent_;
         } else {
             parent_ = nullptr;
