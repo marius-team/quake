@@ -37,7 +37,8 @@ def main():
         "--name",
         type=str,
         required=True,
-        help="Name of this run (e.g. 'baseline' or 'PR-123'). This will be appended to the results directory for each config.",
+        help="Name of this run (e.g. 'baseline' or 'PR-123'). "
+        "This will be appended to the results directory for each config.",
     )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()

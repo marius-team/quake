@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 import argparse
-import json
 import logging
-import os
-import time
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +8,6 @@ import pandas as pd
 import torch
 import yaml
 
-from quake import IndexBuildParams, SearchParams
 from quake.datasets.ann_datasets import load_dataset
 
 # Import your project-specific modules.

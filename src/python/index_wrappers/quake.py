@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 
@@ -71,7 +71,8 @@ class QuakeWrapper(IndexWrapper):
         vec_dim = vectors.shape[1]
         metric = metric.lower()
         print(
-            f"Building index with {vectors.shape[0]} vectors of dimension {vec_dim} and {nc} centroids, with metric {metric}."
+            f"Building index with {vectors.shape[0]} vectors of dimension {vec_dim} "
+            f"and {nc} centroids, with metric {metric}."
         )
         build_params = quake.IndexBuildParams()
         build_params.metric = metric
@@ -179,7 +180,8 @@ class QuakeWrapper(IndexWrapper):
         :param filename: The name of the file to load the index from.
         """
         print(
-            f"Loading index from {filename}, with {n_workers} workers, use_numa={use_numa}, verbose={verbose}, verify_numa={verify_numa}, same_core={same_core}, use_centroid_workers={use_centroid_workers}"
+            f"Loading index from {filename}, with {n_workers} workers, use_numa={use_numa}, verbose={verbose}, "
+            f"verify_numa={verify_numa}, same_core={same_core}, use_centroid_workers={use_centroid_workers}"
         )
         self.index = QuakeIndex()
         self.index.load(str(filename), n_workers)

@@ -7,7 +7,7 @@ import scann
 import torch
 
 from quake.index_wrappers.wrapper import IndexWrapper
-from quake.utils import to_numpy, to_path, to_torch
+from quake.utils import to_numpy, to_torch
 
 
 class Scann(IndexWrapper):

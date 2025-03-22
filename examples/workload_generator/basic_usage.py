@@ -68,14 +68,6 @@ def main():
     print("Generating workload...")
     generator.generate_workload()
 
-    # Define an example index configuration.
-    index_cfg = {
-        "name": "Quake",
-        "build_params": {
-            "nc": int(math.sqrt(initial_size)) * 1,
-        },
-    }
-
     # Create a WorkloadEvaluator instance and evaluate the workload
     evaluator = WorkloadEvaluator(workload_dir=workload_dir, output_dir=output_dir)
 
@@ -83,8 +75,7 @@ def main():
 
     nc = 1000
     build_params = {"nc": nc, "metric": "l2"}
-    # search_params = {"nprobe": 20, "k": search_k}
-    search_params = {"k": search_k, "recall_target": 0.9}
+    search_params = {"k": search_k, "recall_target": recall_target}
 
     index = QuakeWrapper()
 
@@ -95,6 +86,9 @@ def main():
         search_params=search_params,
         do_maintenance=True,
     )
+
+    print("Evaluation results:")
+    print(results)
 
 
 if __name__ == "__main__":

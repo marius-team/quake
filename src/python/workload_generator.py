@@ -1,4 +1,3 @@
-import hashlib
 import json
 import time
 from abc import ABC, abstractmethod
@@ -9,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from quake import MaintenancePolicyParams, SearchParams
+from quake import SearchParams
 from quake.index_wrappers.quake import QuakeWrapper
 from quake.utils import compute_recall, knn, to_path
 
@@ -20,9 +19,6 @@ def run_query(
     search_k: int,
     search_params: dict,
     gt_ids: torch.Tensor,
-    single_query: bool = True,
-    tune_nprobe: bool = False,
-    nprobes: Optional[torch.Tensor] = None,
 ):
     """
     Run queries on the index and compute the recall.
@@ -480,7 +476,7 @@ class WorkloadEvaluator:
                 mean_recall = None
             elif operation_type == "query":
                 gt_ids = torch.load(self.operations_dir / f"{operation_id}_gt_ids.pt", weights_only=True)
-                gt_dist = torch.load(self.operations_dir / f"{operation_id}_gt_dists.pt", weights_only=True)
+                # gt_dist = torch.load(self.operations_dir / f"{operation_id}_gt_dists.pt", weights_only=True)
                 queries = query_vectors[operation_ids]
 
                 start_time = time.time()
@@ -526,7 +522,6 @@ class WorkloadEvaluator:
 
         # --- Print Evaluation Summary ---
         # Gather per-operation metrics
-        op_nums = [r["operation_number"] for r in results]
         latencies_insert = [r["latency_ms"] for r in results if r["operation_type"] == "insert"]
         op_nums_insert = [r["operation_number"] for r in results if r["operation_type"] == "insert"]
         latencies_delete = [r["latency_ms"] for r in results if r["operation_type"] == "delete"]

@@ -74,7 +74,8 @@ def compare_metrics(
 
 def plot_aggregate_matrix(df: pd.DataFrame, metrics: List[str], output_path: Path) -> None:
     """
-    Create an aggregate matrix plot showing the average value for each metric (row) per maintenance configuration (column).
+    Create an aggregate matrix plot showing the average value for each metric (row) p
+    er maintenance configuration (column).
     """
     # Group by maintenance_config and compute the mean of each metric.
     agg_data = {}

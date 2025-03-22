@@ -6,7 +6,7 @@ from typing import List, Union
 import numpy as np
 import torch
 
-from quake.utils import download_url, extract_file, fvecs_to_tensor, ivecs_to_tensor, to_path, to_torch
+from quake.utils import download_url, extract_file, fvecs_to_tensor, ivecs_to_tensor, to_path
 
 DEFAULT_DOWNLOAD_DIR = Path("data/")
 

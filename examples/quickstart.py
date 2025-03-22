@@ -15,7 +15,6 @@ Usage:
     python examples/quickstart.py
 """
 
-import math
 import time
 
 import torch

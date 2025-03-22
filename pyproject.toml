@@ -8,6 +8,13 @@ license = { file = "LICENSE" }
 authors = [
     { name = "Jason Mohoney", email = "mohoney2@wisc.edu" }
 ]
+dependencies = [
+    "torch>=2.0",
+    "numpy",
+    "pandas",
+    "faiss-cpu",
+    "matplotlib"
+]
 
 [tool.black]
 line-length = 120
@@ -30,14 +37,6 @@ exclude = '''
 profile = "black"
 skip = ["src/cpp/*", "build/*", "dist/*"]
 line_length = 120
-
-dependencies = [
-    "torch>=2.0",
-    "numpy",
-    "pandas",
-    "faiss-cpu",
-    "matplotlib"
-]
 
 [project.optional-dependencies]
 docs = [

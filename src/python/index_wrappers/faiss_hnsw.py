@@ -5,7 +5,7 @@ import faiss
 import torch
 
 from quake import SearchTimingInfo
-from quake.index_wrappers.faiss_wrapper import faiss_metric_to_str, metric_str_to_faiss
+from quake.index_wrappers.faiss_ivf import metric_str_to_faiss
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_numpy, to_torch
 

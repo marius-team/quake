@@ -1,7 +1,4 @@
 import logging
-import os
-import time
-from multiprocessing import Pool
 from pathlib import Path
 
 import hydra
@@ -13,7 +10,7 @@ import torch
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig
 
-from quake import IndexBuildParams, MaintenancePolicyParams, QuakeIndex, SearchParams
+from quake import IndexBuildParams, QuakeIndex, SearchParams
 from quake.datasets.ann_datasets import load_dataset
 from quake.utils import compute_recall, to_path
 
@@ -61,8 +58,6 @@ def run_single_experiment(args):
     index = build_or_load_index(cfg, n_workers)
     _, queries, gt = get_dataset(cfg)
     k = cfg.experiment.k
-    metric = cfg.index.metric
-    nlist = index.nlist()
 
     result_dir = get_original_cwd() / cfg.paths.results_dir / method
     result_dir.mkdir(parents=True, exist_ok=True)
@@ -445,7 +440,7 @@ def plot_query_overheads(stats, plot_dir):
 
             method_lookup = method.split("+")[0].strip()
             pos = positions[method_lookup]
-            bars = ax.bar(
+            ax.bar(
                 pos,
                 comp_means,
                 bar_width,
@@ -476,9 +471,7 @@ def plot_query_overheads(stats, plot_dir):
     method_handles = [
         Patch(facecolor="white", edgecolor="black", hatch=method_hatches[method], label=method) for method in methods
     ]
-    method_legend = ax.legend(
-        method_handles, methods, title="Method", title_fontsize=14, fontsize=12, loc="upper right"
-    )
+    ax.legend(method_handles, methods, title="Method", title_fontsize=14, fontsize=12, loc="upper right")
 
     # Add the component legend back to the plot
     ax.add_artist(component_legend)
@@ -612,7 +605,8 @@ def run_experiment_for_configuration(
 
         # debug print search params
         print(
-            f"Search Params: {search_params.nprobe}, {search_params.k}, {search_params.recall_target}, {search_params.recompute_threshold}, {search_params.use_precomputed}"
+            f"Search Params: {search_params.nprobe}, {search_params.k}, {search_params.recall_target}, "
+            f"{search_params.recompute_threshold}, {search_params.use_precomputed}"
         )
 
         for query in queries:
@@ -623,7 +617,7 @@ def run_experiment_for_configuration(
             timing_infos.append(timing_info)
 
         ids = torch.cat(all_ids, dim=0)
-        dists = torch.cat(all_dists, dim=0)
+        # dists = torch.cat(all_dists, dim=0)
         recalls = compute_recall(ids, gt, k)
 
     per_query_data = []

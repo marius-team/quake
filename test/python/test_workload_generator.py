@@ -2,12 +2,9 @@ import json
 import tempfile
 from pathlib import Path
 
-import numpy as np
 import pytest
 import torch
 
-# Import your workload generator and evaluator
-import quake
 from quake.index_wrappers.quake import QuakeWrapper
 from quake.workload_generator import DynamicWorkloadGenerator, UniformSampler, WorkloadEvaluator
 
@@ -95,7 +92,6 @@ def test_workload_evaluation(synthetic_dataset):
 
     index = QuakeWrapper()
 
-    experiment_params = {"n_workers": 2}
     evaluator = WorkloadEvaluator(
         workload_dir=workload_dir,
         output_dir=workload_dir,
