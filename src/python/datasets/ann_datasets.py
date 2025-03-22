@@ -10,6 +10,7 @@ from quake.utils import download_url, extract_file, fvecs_to_tensor, ivecs_to_te
 
 DEFAULT_DOWNLOAD_DIR = Path("data/")
 
+
 class Dataset(abc.ABC):
     url: str = None
     download_dir: Path = None
@@ -72,7 +73,7 @@ class Sift1m(Dataset):
 
 
 def load_dataset(
-        name: str, download_dir: str = DEFAULT_DOWNLOAD_DIR, overwrite_download: bool = False
+    name: str, download_dir: str = DEFAULT_DOWNLOAD_DIR, overwrite_download: bool = False
 ) -> List[Union[np.ndarray, torch.Tensor]]:
     if name.lower() == "sift1m":
         dataset = Sift1m(download_dir=download_dir)

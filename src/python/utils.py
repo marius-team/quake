@@ -2,15 +2,15 @@ import gzip
 import shutil
 import tarfile
 import zipfile
+from pathlib import Path
+from typing import Tuple, Union
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
 from zipfile import ZipFile
 
-from pathlib import Path
-from typing import Union, Tuple
-
 import numpy as np
 import torch
+
 
 def to_path(path: Union[str, Path]) -> Path:
     """
@@ -158,6 +158,7 @@ def ibin_to_tensor(filename, header_size=0):
     numpy_array = np.fromfile(filename, dtype=np.int32, offset=8).reshape(2 * n, d)[:n]
     return torch.from_numpy(numpy_array)
 
+
 def compute_recall(ids: torch.Tensor, gt_ids: torch.Tensor, k: int) -> torch.Tensor:
     ids = to_torch(ids)
     gt_ids = to_torch(gt_ids)
@@ -191,7 +192,7 @@ def compute_distance(x: torch.Tensor, y: torch.Tensor, metric: str = "l2") -> to
 
 
 def knn(
-        queries: torch.Tensor, vectors: torch.Tensor, k: int = 1, metric: str = "l2"
+    queries: torch.Tensor, vectors: torch.Tensor, k: int = 1, metric: str = "l2"
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Compute the k-nearest neighbors of the queries in the vectors.

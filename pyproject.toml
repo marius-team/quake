@@ -1,0 +1,21 @@
+[tool.black]
+line-length = 120
+target-version = ['py311']
+include = '\.pyi?$'
+exclude = '''
+/(
+  | \.git
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | build
+  | dist
+  | src/cpp
+)/
+'''
+
+[tool.isort]
+profile = "black"
+skip = ["src/cpp/*", "build/*", "dist/*"]
+line_length = 120

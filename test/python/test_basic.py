@@ -1,11 +1,13 @@
-from quake import QuakeIndex, IndexBuildParams, SearchParams
+import time as t
+
+import faiss
+import torch
+
+from quake import IndexBuildParams, QuakeIndex, SearchParams
 from quake.datasets.ann_datasets import load_dataset
 from quake.utils import compute_recall
-import torch
-import time as t
-import faiss
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("Testing bindings")
 
     search_params = SearchParams()
@@ -47,4 +49,3 @@ if __name__ == '__main__':
     end = t.time()
     recall = compute_recall(torch.from_numpy(I), gt, search_params.k)
     print("Faiss IVF search", recall.mean(), "Time", end - start)
-

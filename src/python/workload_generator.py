@@ -1,27 +1,28 @@
+import hashlib
 import json
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from quake.utils import compute_recall, knn, to_path
-from quake.index_wrappers.quake import QuakeWrapper
 from quake import MaintenancePolicyParams, SearchParams
-import hashlib
-import matplotlib.pyplot as plt
+from quake.index_wrappers.quake import QuakeWrapper
+from quake.utils import compute_recall, knn, to_path
+
 
 def run_query(
-        index,
-        queries: torch.Tensor,
-        search_k: int,
-        search_params: dict,
-        gt_ids: torch.Tensor,
-        single_query: bool = True,
-        tune_nprobe: bool = False,
-        nprobes: Optional[torch.Tensor] = None,
+    index,
+    queries: torch.Tensor,
+    search_k: int,
+    search_params: dict,
+    gt_ids: torch.Tensor,
+    single_query: bool = True,
+    tune_nprobe: bool = False,
+    nprobes: Optional[torch.Tensor] = None,
 ):
     """
     Run queries on the index and compute the recall.
@@ -42,6 +43,7 @@ def run_query(
 
 class VectorSampler(ABC):
     """Abstract class for sampling vectors."""
+
     @abstractmethod
     def sample(self, size: int):
         """Sample vectors for an operation."""
@@ -49,6 +51,7 @@ class VectorSampler(ABC):
 
 class UniformSampler(VectorSampler):
     """Uniformly sample vectors."""
+
     def __init__(self):
         pass
 
@@ -65,6 +68,7 @@ class StratifiedClusterSampler(VectorSampler):
     This sampler uses cluster assignments and centroid distances
     to sample in a stratified fashion.
     """
+
     def __init__(self, assignments: torch.Tensor, centroids: torch.Tensor):
         self.assignments = assignments
         self.centroids = centroids
@@ -134,25 +138,26 @@ class DynamicWorkloadGenerator:
       3. Generate operations (insert, delete, query) according to given ratios.
       4. Save each operation and a runbook that includes a summary.
     """
+
     def __init__(
-            self,
-            workload_dir: Union[str, Path],
-            base_vectors: np.ndarray,
-            metric: str,
-            insert_ratio: float,
-            delete_ratio: float,
-            query_ratio: float,
-            update_batch_size: int,
-            query_batch_size: int,
-            number_of_operations: int,
-            initial_size: int,
-            cluster_size: int,
-            cluster_sample_distribution: str,
-            queries: np.ndarray,
-            query_cluster_sample_distribution: str = "uniform",
-            seed: int = 1738,
-            initial_clustering_path: Optional[Union[str, Path]] = None,
-            overwrite: bool = False,
+        self,
+        workload_dir: Union[str, Path],
+        base_vectors: np.ndarray,
+        metric: str,
+        insert_ratio: float,
+        delete_ratio: float,
+        query_ratio: float,
+        update_batch_size: int,
+        query_batch_size: int,
+        number_of_operations: int,
+        initial_size: int,
+        cluster_size: int,
+        cluster_sample_distribution: str,
+        queries: np.ndarray,
+        query_cluster_sample_distribution: str = "uniform",
+        seed: int = 1738,
+        initial_clustering_path: Optional[Union[str, Path]] = None,
+        overwrite: bool = False,
     ):
         # (Initialization code unchanged)
         self.workload_dir = to_path(workload_dir)
@@ -216,10 +221,9 @@ class DynamicWorkloadGenerator:
         else:
             n_clusters = self.base_vectors.shape[0] // self.cluster_size
             index = QuakeWrapper()
-            index.build(self.base_vectors,
-                        nc=n_clusters,
-                        metric=self.metric,
-                        ids=torch.arange(self.base_vectors.shape[0]))
+            index.build(
+                self.base_vectors, nc=n_clusters, metric=self.metric, ids=torch.arange(self.base_vectors.shape[0])
+            )
             index.save(str(self.workload_dir / "clustered_index.bin"))
 
         search_params = SearchParams()
@@ -235,7 +239,9 @@ class DynamicWorkloadGenerator:
         elif operation_type == "delete":
             sample_pool = self.all_ids[self.resident_set]
         elif operation_type == "query":
-            sample_pool = torch.arange(self.queries.shape[0]) if self.queries is not None else self.all_ids[~self.resident_set]
+            sample_pool = (
+                torch.arange(self.queries.shape[0]) if self.queries is not None else self.all_ids[~self.resident_set]
+            )
         else:
             raise ValueError(f"Invalid operation type {operation_type}.")
         if sample_pool.shape[0] == 0:
@@ -301,8 +307,9 @@ class DynamicWorkloadGenerator:
         all_sizes = torch.zeros(initial_uniques.shape[0])
         all_sizes[initial_uniques] = initial_counts.float()
         for i in range(self.number_of_operations):
-            operation_type = np.random.choice(["insert", "delete", "query"],
-                                              p=[self.insert_ratio, self.delete_ratio, self.query_ratio])
+            operation_type = np.random.choice(
+                ["insert", "delete", "query"], p=[self.insert_ratio, self.delete_ratio, self.query_ratio]
+            )
             if operation_type == "insert":
                 sample_size = self.update_batch_size
                 resident = True
@@ -365,11 +372,11 @@ class DynamicWorkloadGenerator:
         # Convert the history to a NumPy array with shape (n_clusters, n_operations)
         heatmap_array = np.array(self.resident_history).T
         fig, ax = plt.subplots(figsize=(10, 6))
-        cax = ax.imshow(heatmap_array, cmap='viridis', aspect='auto')
-        ax.set_xlabel('Operation Number')
-        ax.set_ylabel('Cluster ID')
+        cax = ax.imshow(heatmap_array, cmap="viridis", aspect="auto")
+        ax.set_xlabel("Operation Number")
+        ax.set_ylabel("Cluster ID")
         cbar = fig.colorbar(cax)
-        cbar.set_label('Resident Fraction')
+        cbar.set_label("Resident Fraction")
         plt.tight_layout()
         plt.savefig(self.workload_dir / "resident_history.png")
 
@@ -386,18 +393,21 @@ class WorkloadEvaluator:
     """
     Evaluates a generated workload on a given index and produces summary statistics and plots.
     """
+
     def __init__(
-            self,
-            workload_dir: Union[str, Path],
-            output_dir: Union[str, Path],
-            base_vectors_path: Optional[Union[str, Path]] = None,
+        self,
+        workload_dir: Union[str, Path],
+        output_dir: Union[str, Path],
+        base_vectors_path: Optional[Union[str, Path]] = None,
     ):
         self.workload_dir = to_path(workload_dir)
         self.output_dir = to_path(output_dir)
         self.runbook_path = self.workload_dir / "runbook.json"
         self.operations_dir = self.workload_dir / "operations"
         self.initial_indices_path = self.workload_dir / "initial_indices.pt"
-        self.base_vectors_path = to_path(base_vectors_path) if base_vectors_path else self.workload_dir / "base_vectors.pt"
+        self.base_vectors_path = (
+            to_path(base_vectors_path) if base_vectors_path else self.workload_dir / "base_vectors.pt"
+        )
         self.runbook = None
 
     def initialize_index(self, name, index, build_params, m_params):
@@ -415,18 +425,20 @@ class WorkloadEvaluator:
             index.load(index_path, n_workers=build_params.get("num_workers", 0))
             print(f"Index {name} loaded from {index_path}")
 
-        if (isinstance(index, QuakeWrapper) and m_params is not None):
+        if isinstance(index, QuakeWrapper) and m_params is not None:
             index.index.initialize_maintenance_policy(m_params)
             print(f"Maintenance policy initialized: {m_params}")
 
         return index
 
-    def evaluate_workload(self, name, index, build_params, search_params, do_maintenance=False, m_params=None, batch=False):
+    def evaluate_workload(
+        self, name, index, build_params, search_params, do_maintenance=False, m_params=None, batch=False
+    ):
         """
         Evaluate the workload on the index. At the end a summary is printed and a multi-panel plot is saved.
         """
         # validate search_params
-        assert 'k' in search_params, "search_params must contain 'k' for number of neighbors"
+        assert "k" in search_params, "search_params must contain 'k' for number of neighbors"
 
         # --- Load Workload and Index ---
         base_vectors = torch.load(self.base_vectors_path, weights_only=True).to(torch.float32)
@@ -435,8 +447,11 @@ class WorkloadEvaluator:
         index = self.initialize_index(name, index, build_params, m_params)
 
         self.runbook = json.load(open(self.runbook_path, "r"))
-        query_vectors = (base_vectors if self.runbook["parameters"]["sample_queries"]
-                         else torch.load(self.workload_dir / "query_vectors.pt", weights_only=True))
+        query_vectors = (
+            base_vectors
+            if self.runbook["parameters"]["sample_queries"]
+            else torch.load(self.workload_dir / "query_vectors.pt", weights_only=True)
+        )
         query_vectors = query_vectors.to(torch.float32)
         start_time = time.time()
         init_time = time.time() - start_time
@@ -485,7 +500,7 @@ class WorkloadEvaluator:
                     pred_ids = torch.cat(Is)
                 op_time = time.time() - start_time
 
-                recalls = compute_recall(pred_ids, gt_ids, search_params['k'])
+                recalls = compute_recall(pred_ids, gt_ids, search_params["k"])
                 mean_recall = recalls.mean().item()
                 self.runbook["operations"][operation_id]["recall"] = mean_recall
                 total_time = sum([ti.total_time_ns for ti in timing_infos])
@@ -499,11 +514,11 @@ class WorkloadEvaluator:
             n_resident = operation.get("n_resident", None)
             index_state = index.index_state()
             result = {
-                'operation_number': operation_id_int,
-                'operation_type': operation_type,
-                'latency_ms': op_time * 1000,
-                'recall': mean_recall,
-                'n_resident': n_resident,
+                "operation_number": operation_id_int,
+                "operation_type": operation_type,
+                "latency_ms": op_time * 1000,
+                "recall": mean_recall,
+                "n_resident": n_resident,
             }
             result.update(index_state)
             result.update(search_params)
@@ -511,15 +526,15 @@ class WorkloadEvaluator:
 
         # --- Print Evaluation Summary ---
         # Gather per-operation metrics
-        op_nums = [r['operation_number'] for r in results]
-        latencies_insert = [r['latency_ms'] for r in results if r['operation_type']=='insert']
-        op_nums_insert = [r['operation_number'] for r in results if r['operation_type']=='insert']
-        latencies_delete = [r['latency_ms'] for r in results if r['operation_type']=='delete']
-        op_nums_delete = [r['operation_number'] for r in results if r['operation_type']=='delete']
-        latencies_query = [r['latency_ms'] for r in results if r['operation_type']=='query']
-        op_nums_query = [r['operation_number'] for r in results if r['operation_type']=='query']
-        query_recalls = [r['recall'] for r in results if r['operation_type']=='query' and r['recall'] is not None]
-        n_vectors = [r['n_resident'] for r in results if r['n_resident'] is not None]
+        op_nums = [r["operation_number"] for r in results]
+        latencies_insert = [r["latency_ms"] for r in results if r["operation_type"] == "insert"]
+        op_nums_insert = [r["operation_number"] for r in results if r["operation_type"] == "insert"]
+        latencies_delete = [r["latency_ms"] for r in results if r["operation_type"] == "delete"]
+        op_nums_delete = [r["operation_number"] for r in results if r["operation_type"] == "delete"]
+        latencies_query = [r["latency_ms"] for r in results if r["operation_type"] == "query"]
+        op_nums_query = [r["operation_number"] for r in results if r["operation_type"] == "query"]
+        query_recalls = [r["recall"] for r in results if r["operation_type"] == "query" and r["recall"] is not None]
+        n_vectors = [r["n_resident"] for r in results if r["n_resident"] is not None]
 
         avg_latency_insert = np.mean(latencies_insert) if latencies_insert else None
         avg_latency_delete = np.mean(latencies_delete) if latencies_delete else None
@@ -541,48 +556,48 @@ class WorkloadEvaluator:
         # Plot A: Latency per operation type
         ax = axs[0, 0]
         if op_nums_insert:
-            ax.plot(op_nums_insert, latencies_insert, label='Insert', marker='o')
+            ax.plot(op_nums_insert, latencies_insert, label="Insert", marker="o")
         if op_nums_delete:
-            ax.plot(op_nums_delete, latencies_delete, label='Delete', marker='s')
+            ax.plot(op_nums_delete, latencies_delete, label="Delete", marker="s")
         if op_nums_query:
-            ax.plot(op_nums_query, latencies_query, label='Query', marker='^')
-        ax.set_xlabel('Operation Number')
-        ax.set_ylabel('Latency (ms)')
-        ax.set_title('Operation Latency')
+            ax.plot(op_nums_query, latencies_query, label="Query", marker="^")
+        ax.set_xlabel("Operation Number")
+        ax.set_ylabel("Latency (ms)")
+        ax.set_title("Operation Latency")
         ax.legend()
         # Plot B: Number of partitions per operation (if available)
         ax = axs[0, 1]
-        partitions = [r['n_list'] for r in results if r['n_list'] is not None]
-        op_nums_part = [r['operation_number'] for r in results if r['n_list'] is not None]
+        partitions = [r["n_list"] for r in results if r["n_list"] is not None]
+        op_nums_part = [r["operation_number"] for r in results if r["n_list"] is not None]
         if partitions:
-            ax.plot(op_nums_part, partitions, marker='o')
-            ax.set_xlabel('Operation Number')
-            ax.set_ylabel('Number of Partitions')
-            ax.set_title('Partitions per Operation')
+            ax.plot(op_nums_part, partitions, marker="o")
+            ax.set_xlabel("Operation Number")
+            ax.set_ylabel("Number of Partitions")
+            ax.set_title("Partitions per Operation")
         else:
-            ax.text(0.5, 0.5, 'No partition info', ha='center', va='center')
-            ax.axis('off')
+            ax.text(0.5, 0.5, "No partition info", ha="center", va="center")
+            ax.axis("off")
         # Plot C: Resident set size per operation
         ax = axs[1, 0]
         if n_vectors:
-            op_nums_vect = [r['operation_number'] for r in results if r['n_resident'] is not None]
-            ax.plot(op_nums_vect, n_vectors, marker='o')
-            ax.set_xlabel('Operation Number')
-            ax.set_ylabel('Resident Vectors')
-            ax.set_title('Resident Set Size')
+            op_nums_vect = [r["operation_number"] for r in results if r["n_resident"] is not None]
+            ax.plot(op_nums_vect, n_vectors, marker="o")
+            ax.set_xlabel("Operation Number")
+            ax.set_ylabel("Resident Vectors")
+            ax.set_title("Resident Set Size")
         else:
-            ax.text(0.5, 0.5, 'No resident set info', ha='center', va='center')
-            ax.axis('off')
+            ax.text(0.5, 0.5, "No resident set info", ha="center", va="center")
+            ax.axis("off")
         # Plot D: Query recall per query operation
         ax = axs[1, 1]
         if op_nums_query and query_recalls:
-            ax.plot(op_nums_query, query_recalls, marker='o')
-            ax.set_xlabel('Operation Number')
-            ax.set_ylabel('Query Recall')
-            ax.set_title('Query Recall')
+            ax.plot(op_nums_query, query_recalls, marker="o")
+            ax.set_xlabel("Operation Number")
+            ax.set_ylabel("Query Recall")
+            ax.set_title("Query Recall")
         else:
-            ax.text(0.5, 0.5, 'No query recall info', ha='center', va='center')
-            ax.axis('off')
+            ax.text(0.5, 0.5, "No query recall info", ha="center", va="center")
+            ax.axis("off")
         plt.tight_layout()
 
         # create output directory if it doesn't exist

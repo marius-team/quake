@@ -1,14 +1,14 @@
 # from pathlib import Path
+import time
 from typing import Tuple
 
 import diskannpy as dap
 import numpy as np
 import torch
-import time
 
+from quake import SearchTimingInfo
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_numpy, to_torch
-from quake import SearchTimingInfo
 
 
 class DiskANNDynamic(IndexWrapper):
@@ -96,7 +96,6 @@ class DiskANNDynamic(IndexWrapper):
         """
         assert self.index is not None
         assert query.ndim == 2
-
 
         query = to_numpy(query)
         timing_info = SearchTimingInfo()
