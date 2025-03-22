@@ -7,7 +7,8 @@ import scann
 import torch
 
 from quake.index_wrappers.wrapper import IndexWrapper
-from quake.utils import to_numpy, to_path, to_torch
+from quake.utils import to_numpy, to_torch
+
 
 class Scann(IndexWrapper):
     index: scann.scann_ops_pybind.ScannSearcher
@@ -98,7 +99,7 @@ class Scann(IndexWrapper):
                 num_leaves=num_leaves,
                 num_leaves_to_search=num_leaves_to_search,
                 training_sample_size=training_sample_size,
-                incremental_threshold=1000
+                incremental_threshold=1000,
             )
             .score_brute_force()
             .build(docids=ids)

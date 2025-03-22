@@ -1,9 +1,9 @@
-from typing import Optional, Tuple, Union, List
+from typing import Optional, Tuple, Union
+
+import torch
 
 import quake
-import torch
 from quake import QuakeIndex
-
 from quake.index_wrappers.wrapper import IndexWrapper
 
 
@@ -47,8 +47,16 @@ class QuakeWrapper(IndexWrapper):
             "n_total": self.index.ntotal(),
         }
 
-    def build(self, vectors: torch.Tensor, nc: int, metric: str = "l2", ids: Optional[torch.Tensor] = None,
-              num_workers: int = 0, m: int = -1, code_size: int = 8):
+    def build(
+        self,
+        vectors: torch.Tensor,
+        nc: int,
+        metric: str = "l2",
+        ids: Optional[torch.Tensor] = None,
+        num_workers: int = 0,
+        m: int = -1,
+        code_size: int = 8,
+    ):
         """
         Build the index with the given vectors and arguments.
 
@@ -63,7 +71,9 @@ class QuakeWrapper(IndexWrapper):
         vec_dim = vectors.shape[1]
         metric = metric.lower()
         print(
-            f"Building index with {vectors.shape[0]} vectors of dimension {vec_dim} and {nc} centroids, with metric {metric}.")
+            f"Building index with {vectors.shape[0]} vectors of dimension {vec_dim} "
+            f"and {nc} centroids, with metric {metric}."
+        )
         build_params = quake.IndexBuildParams()
         build_params.metric = metric
         build_params.nlist = nc
@@ -102,18 +112,20 @@ class QuakeWrapper(IndexWrapper):
         assert ids.ndim == 1
         return self.index.remove(ids)
 
-    def search(self, query: torch.Tensor,
-               k: int,
-               nprobe: int = 1,
-               batched_scan = False,
-               recall_target: float = -1,
-               k_factor=4.0,
-               use_precomputed = True,
-               initial_search_fraction = .05,
-               recompute_threshold = .1,
-               aps_flush_period_us = 50,
-               n_threads=1) -> Tuple[
-        torch.Tensor, torch.Tensor]:
+    def search(
+        self,
+        query: torch.Tensor,
+        k: int,
+        nprobe: int = 1,
+        batched_scan=False,
+        recall_target: float = -1,
+        k_factor=4.0,
+        use_precomputed=True,
+        initial_search_fraction=0.05,
+        recompute_threshold=0.1,
+        aps_flush_period_us=50,
+        n_threads=1,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Find the k-nearest neighbors of the query vectors.
 
@@ -151,15 +163,26 @@ class QuakeWrapper(IndexWrapper):
         """
         self.index.save(str(filename))
 
-    def load(self, filename: str, n_workers: int = 0, use_numa: bool = False, verbose: bool = False,
-             verify_numa: bool = False, same_core: bool = True, use_centroid_workers: bool = False, use_adaptive_n_probe : bool = False):
+    def load(
+        self,
+        filename: str,
+        n_workers: int = 0,
+        use_numa: bool = False,
+        verbose: bool = False,
+        verify_numa: bool = False,
+        same_core: bool = True,
+        use_centroid_workers: bool = False,
+        use_adaptive_n_probe: bool = False,
+    ):
         """
         Load the index from a file.
 
         :param filename: The name of the file to load the index from.
         """
         print(
-            f"Loading index from {filename}, with {n_workers} workers, use_numa={use_numa}, verbose={verbose}, verify_numa={verify_numa}, same_core={same_core}, use_centroid_workers={use_centroid_workers}")
+            f"Loading index from {filename}, with {n_workers} workers, use_numa={use_numa}, verbose={verbose}, "
+            f"verify_numa={verify_numa}, same_core={same_core}, use_centroid_workers={use_centroid_workers}"
+        )
         self.index = QuakeIndex()
         self.index.load(str(filename), n_workers)
 

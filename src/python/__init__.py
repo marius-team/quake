@@ -1,12 +1,7 @@
 try:
-    import torch
+    import torch  # noqa: F401
 
-    """
-    Quake Python API
-    
-    This module provides the Python bindings for the Quake index
-    """
-    from ._bindings import *
+    from ._bindings import *  # noqa: F401 F403
 
 except ModuleNotFoundError as e:
     print(e)

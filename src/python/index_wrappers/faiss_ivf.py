@@ -1,13 +1,13 @@
+import time
 from enum import Enum
 from typing import Optional, Tuple, Union
 
 import faiss
 import torch
-import time
 
+from quake import SearchResult, SearchTimingInfo
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_torch
-from quake import SearchTimingInfo, SearchResult
 
 
 def metric_str_to_faiss(metric: str) -> int:
@@ -91,20 +91,20 @@ class FaissIVF(IndexWrapper):
         return {
             "n_list": self.index.nlist,
             "n_total": self.index.ntotal,
-            "metric": faiss_metric_to_str(self.index.metric_type)
+            "metric": faiss_metric_to_str(self.index.metric_type),
         }
 
     def maintenance(self):
         return
 
     def build(
-            self,
-            vectors: torch.Tensor,
-            nc: int,
-            m: int = 0,
-            b: int = 0,
-            metric: str = "l2",
-            ids: Optional[torch.Tensor] = None,
+        self,
+        vectors: torch.Tensor,
+        nc: int,
+        m: int = 0,
+        b: int = 0,
+        metric: str = "l2",
+        ids: Optional[torch.Tensor] = None,
     ):
         """
         Build the index with the given vectors and arguments.
@@ -196,7 +196,9 @@ class FaissIVF(IndexWrapper):
 
         return None
 
-    def search(self, query: torch.Tensor, k: int, nprobe: int = 1, rf: int = 1, batched_scan: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
+    def search(
+        self, query: torch.Tensor, k: int, nprobe: int = 1, rf: int = 1, batched_scan: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Find the k-nearest neighbors of the query vectors.
 

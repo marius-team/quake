@@ -1,13 +1,13 @@
+import time
 from typing import Optional, Tuple, Union
 
 import faiss
 import torch
-import time
 
+from quake import SearchTimingInfo
+from quake.index_wrappers.faiss_ivf import metric_str_to_faiss
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_numpy, to_torch
-from quake.index_wrappers.faiss_wrapper import faiss_metric_to_str, metric_str_to_faiss
-from quake import SearchTimingInfo
 
 
 class FaissHNSW(IndexWrapper):
@@ -36,7 +36,14 @@ class FaissHNSW(IndexWrapper):
         """
         return self.index.d
 
-    def build(self, vectors: torch.Tensor, m: int = 32, ef_construction: int = 40, metric: str = "l2", ids: Optional[torch.Tensor] = None):
+    def build(
+        self,
+        vectors: torch.Tensor,
+        m: int = 32,
+        ef_construction: int = 40,
+        metric: str = "l2",
+        ids: Optional[torch.Tensor] = None,
+    ):
         """
         Build the index with the given vectors and arguments.
 
@@ -81,7 +88,6 @@ class FaissHNSW(IndexWrapper):
         timing_info.total_time_us = int((end - start) * 1e6)
         distances = to_torch(distances)
         indices = to_torch(indices)
-
 
         return indices, distances, timing_info
 

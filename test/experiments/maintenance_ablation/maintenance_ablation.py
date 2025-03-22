@@ -1,13 +1,14 @@
-import yaml
-import torch
-import numpy as np
-import pandas as pd
 import subprocess
 from pathlib import Path
-from quake.index_wrappers.quake import QuakeWrapper
-from quake.datasets.ann_datasets import load_dataset
+
+import pandas as pd
+import yaml
+
 from quake import MaintenancePolicyParams
+from quake.datasets.ann_datasets import load_dataset
+from quake.index_wrappers.quake import QuakeWrapper
 from quake.workload_generator import DynamicWorkloadGenerator, WorkloadEvaluator
+
 
 def create_maintenance_params(m_config):
     """
@@ -27,6 +28,7 @@ def create_maintenance_params(m_config):
         m_params.enable_delete_rejection = m_config["enable_delete_rejection"]
 
     return m_params
+
 
 def run_experiment_for_config(m_config, config):
     print(f"\n=== Running maintenance config: {m_config['name']} ===")
@@ -59,7 +61,7 @@ def run_experiment_for_config(m_config, config):
         cluster_size=workload_cfg["cluster_size"],
         cluster_sample_distribution=workload_cfg["cluster_sample_distribution"],
         queries=queries,
-        seed=config.get("seed", 1738)
+        seed=config.get("seed", 1738),
     )
 
     # Generate the workload if it doesn't already exist.
@@ -91,10 +93,11 @@ def run_experiment_for_config(m_config, config):
         build_params=build_params,
         search_params=search_params,
         do_maintenance=do_maint,
-        m_params=m_params
+        m_params=m_params,
     )
 
     return results
+
 
 def run_experiments_and_compare():
     # Load the overall configuration.
@@ -130,12 +133,20 @@ def run_experiments_and_compare():
     results_root = Path(config.get("results_dir", "results"))
     output_aggregate = results_root / "aggregate_matrix.png"
     print("Generating detailed comparison plots using compare_results.py ...")
-    subprocess.run([
-        "python", "test/python/regression/compare_results.py",
-        "--results_dir", str(results_root),
-        "--plot_type", "both",
-        "--output_aggregate", str(output_aggregate)
-    ], check=True)
+    subprocess.run(
+        [
+            "python",
+            "test/python/regression/compare_results.py",
+            "--results_dir",
+            str(results_root),
+            "--plot_type",
+            "both",
+            "--output_aggregate",
+            str(output_aggregate),
+        ],
+        check=True,
+    )
+
 
 if __name__ == "__main__":
     run_experiments_and_compare()

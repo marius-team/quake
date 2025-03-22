@@ -15,12 +15,14 @@ Usage:
     python examples/quickstart.py
 """
 
-import torch
-import math
 import time
-from quake import QuakeIndex, IndexBuildParams, SearchParams
+
+import torch
+
+from quake import IndexBuildParams, QuakeIndex, SearchParams
 from quake.datasets.ann_datasets import load_dataset
 from quake.utils import compute_recall
+
 
 def main():
     print("=== Quake Basic Example ===")
@@ -40,7 +42,10 @@ def main():
     build_params = IndexBuildParams()
     build_params.nlist = 1024
     build_params.metric = "l2"
-    print("Building index with num_clusters=%d over %d vectors of dimension %d..." % (build_params.nlist, vectors.size(0), vectors.size(1)))
+    print(
+        "Building index with num_clusters=%d over %d vectors of dimension %d..."
+        % (build_params.nlist, vectors.size(0), vectors.size(1))
+    )
     start_time = time.time()
     index = QuakeIndex()
     index.build(vectors, ids, build_params)
@@ -55,7 +60,10 @@ def main():
     # or set a recall target
     # search_params.recall_target = 0.9
 
-    print("Performing search of %d queries with k=%d and nprobe=%d..." % (queries.size(0), search_params.k, search_params.nprobe))
+    print(
+        "Performing search of %d queries with k=%d and nprobe=%d..."
+        % (queries.size(0), search_params.k, search_params.nprobe)
+    )
     start_time = time.time()
     search_result = index.search(queries, search_params)
     end_time = time.time()
@@ -102,5 +110,6 @@ def main():
     # index = QuakeIndex()
     # index.load("quake_index")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
