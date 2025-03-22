@@ -1,3 +1,14 @@
+[project]
+name = "quake"
+version = "0.0.1"
+description = "Dynamic index for vector search"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Jason Mohoney", email = "mohoney2@wisc.edu" }
+]
+
 [tool.black]
 line-length = 120
 target-version = ['py311']
@@ -19,6 +30,26 @@ exclude = '''
 profile = "black"
 skip = ["src/cpp/*", "build/*", "dist/*"]
 line_length = 120
+
+dependencies = [
+    "torch>=2.0",
+    "numpy",
+    "pandas",
+    "faiss-cpu",
+    "matplotlib"
+]
+
+[project.optional-dependencies]
+docs = [
+    "sphinx",
+    "sphinx_rtd_theme",
+    "sphinxcontrib-mermaid",
+    "graphviz",
+    "pyyaml"
+]
+tests = [
+    "pytest"
+]
 
 [build-system]
 requires = ["setuptools", "wheel", "torch"]
