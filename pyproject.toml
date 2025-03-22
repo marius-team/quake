@@ -19,3 +19,7 @@ exclude = '''
 profile = "black"
 skip = ["src/cpp/*", "build/*", "dist/*"]
 line_length = 120
+
+[build-system]
+requires = ["setuptools", "wheel", "torch"]
+build-backend = "setuptools.build_meta"
