@@ -46,7 +46,14 @@ namespace faiss {
         // Initialize empty partitions
         for (size_t i = 0; i < nlist; i++) {
             // IndexPartition ip;
+//            shared_ptr<IndexPartition> ip = std::make_shared<IndexPartition>();
+
+        #ifdef QUAKE_ENABLE_GPU
+            shared_ptr<IndexPartition> ip = std::make_shared<GPUIndexPartition>();
+        #else
             shared_ptr<IndexPartition> ip = std::make_shared<IndexPartition>();
+        #endif
+
             ip->set_code_size(code_size);
             partitions_[i] = ip;
         }
@@ -270,7 +277,14 @@ namespace faiss {
         if (partitions_.find(list_no) != partitions_.end()) {
             throw std::runtime_error("List already exists in add_list");
         }
-        shared_ptr<IndexPartition> ip = std::make_shared<IndexPartition>();
+//        shared_ptr<IndexPartition> ip = std::make_shared<IndexPartition>();
+
+        #ifdef QUAKE_ENABLE_GPU
+            shared_ptr<IndexPartition> ip = std::make_shared<GPUIndexPartition>();
+        #else
+            shared_ptr<IndexPartition> ip = std::make_shared<IndexPartition>();
+        #endif
+
         ip->set_code_size((int64_t) code_size);
         partitions_[list_no] = ip;
         nlist++;

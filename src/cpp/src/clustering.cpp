@@ -10,6 +10,12 @@
 #include "index_partition.h"
 #include <list_scanning.h>
 
+#ifdef QUAKE_ENABLE_GPU
+#include <faiss/gpu/GpuClustering.h>
+#include <faiss/gpu/StandardGpuResources.h>
+#include <faiss/gpu/GpuIndexFlatL2.h>
+#endif
+
 shared_ptr<Clustering> kmeans(Tensor vectors,
                               Tensor ids,
                               int n_clusters,
@@ -26,6 +32,51 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
 
     int n = vectors.size(0);
     int d = vectors.size(1);
+
+    #ifdef QUAKE_ENABLE_GPU
+    bool use_gpu = true;
+    #else
+    bool use_gpu = false;
+    #endif
+
+    if (use_gpu) {
+        // GPU clustering using Faiss GPU modules:
+        faiss::gpu::StandardGpuResources res;
+        faiss::ClusteringParameters cp;
+        cp.niter = niter;
+        faiss::gpu::GpuClustering gpu_clus(d, n_clusters, cp);
+
+        // Create a GPU index for clustering.
+        faiss::gpu::GpuIndexFlatL2 gpu_index(&res, d);
+        gpu_clus.train(n, vectors.data_ptr<float>(), gpu_index);
+
+        Tensor centroids = torch::from_blob(gpu_clus.centroids.data(), {n_clusters, d}, torch::kFloat32).clone();
+        if (metric_type == faiss::METRIC_INNER_PRODUCT)
+            centroids = centroids / centroids.norm(2, 1).unsqueeze(1);
+
+        // Assign each vector to the nearest centroid using the GPU index.
+        std::vector<faiss::idx_t> assign_vec(n);
+        std::vector<float> distance_vec(n);
+        gpu_index.search(n, vectors.data_ptr<float>(), 1, distance_vec.data(), assign_vec.data());
+        Tensor assignments = torch::from_blob(assign_vec.data(), {n}, torch::kInt64).clone();
+
+        // Partition vectors and ids by cluster.
+        vector<Tensor> cluster_vectors(n_clusters);
+        vector<Tensor> cluster_ids(n_clusters);
+        for (int i = 0; i < n_clusters; i++) {
+            cluster_vectors[i] = vectors.index({assignments == i});
+            cluster_ids[i] = ids.index({assignments == i});
+        }
+        Tensor partition_ids = torch::arange(n_clusters, torch::kInt64);
+
+        shared_ptr<Clustering> clustering = std::make_shared<Clustering>();
+        clustering->centroids = centroids;
+        clustering->partition_ids = partition_ids;
+        clustering->vectors = cluster_vectors;
+        clustering->vector_ids = cluster_ids;
+
+        return clustering;
+    }
 
     // Create a flat index appropriate to the metric.
     faiss::IndexFlat *index_ptr = nullptr;

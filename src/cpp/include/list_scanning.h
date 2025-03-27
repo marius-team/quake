@@ -288,7 +288,38 @@ inline void scan_list_with_ids_l2(const float *query_vec,
     }
 }
 
-// The main scan_list function that dispatches to one of the specialized functions.
+#ifdef QUAKE_ENABLE_GPU
+// New GPU scan function using Faiss GPU functions.
+inline void gpu_scan_list(const float *query_vec,
+                            const float *list_vecs,
+                            const int64_t *list_ids,
+                            int list_size,
+                            int d,
+                            TopkBuffer &buffer,
+                            faiss::MetricType metric = faiss::METRIC_L2) {
+    faiss::gpu::StandardGpuResources res;
+    if (metric == faiss::METRIC_INNER_PRODUCT) {
+        faiss::gpu::GpuIndexFlatIP gpu_index(&res, d);
+        gpu_index.add(list_size, list_vecs);
+        std::vector<faiss::idx_t> labels(buffer.k_);
+        std::vector<float> distances(buffer.k_);
+        gpu_index.search(1, query_vec, buffer.k_, distances.data(), labels.data());
+        for (int i = 0; i < buffer.k_; i++) {
+            buffer.add(distances[i], labels[i]);
+        }
+    } else {
+        faiss::gpu::GpuIndexFlatL2 gpu_index(&res, d);
+        gpu_index.add(list_size, list_vecs);
+        std::vector<faiss::idx_t> labels(buffer.k_);
+        std::vector<float> distances(buffer.k_);
+        gpu_index.search(1, query_vec, buffer.k_, distances.data(), labels.data());
+        for (int i = 0; i < buffer.k_; i++) {
+            buffer.add(sqrt(distances[i]), labels[i]);
+        }
+    }
+}
+#endif
+
 inline void scan_list(const float *query_vec,
                             const float *list_vecs,
                             const int64_t *list_ids,
@@ -296,6 +327,10 @@ inline void scan_list(const float *query_vec,
                             int d,
                             TopkBuffer &buffer,
                             faiss::MetricType metric = faiss::METRIC_L2) {
+
+#ifdef QUAKE_ENABLE_GPU
+    gpu_scan_list(query_vec, list_vecs, list_ids, list_size, d, buffer, metric);
+#else
     // Dispatch based on metric type and whether list_ids is provided.
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         if (list_ids == nullptr)
@@ -308,6 +343,7 @@ inline void scan_list(const float *query_vec,
         else
             scan_list_with_ids_l2(query_vec, list_vecs, list_ids, list_size, d, buffer);
     }
+#endif
 }
 
 inline void batched_scan_list(const float *query_vecs,

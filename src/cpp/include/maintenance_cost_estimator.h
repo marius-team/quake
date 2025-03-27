@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <vector>
+#include <string>
 
 using std::vector;
 using std::shared_ptr;
