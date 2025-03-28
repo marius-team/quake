@@ -50,7 +50,3 @@ docs = [
 tests = [
     "pytest"
 ]
-
-[build-system]
-requires = ["setuptools", "wheel", "torch", "numpy"]
-build-backend = "setuptools.build_meta"
