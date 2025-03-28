@@ -58,13 +58,7 @@ class CMakeBuild(build_ext):
         if torch.cuda.is_available():
             cmake_args += ["-DQUAKE_ENABLE_GPU=ON"]
         else:
-            cmake_args += [
-                "-DQUAKE_ENABLE_GPU=OFF",
-                "-DTorch_NO_CUDA=ON",
-                "-DTorch_USE_CUDA=OFF",
-                "-DUSE_CUDA=OFF"
-            ]
-
+            cmake_args += ["-DQUAKE_ENABLE_GPU=OFF", "-DTorch_NO_CUDA=ON", "-DTorch_USE_CUDA=OFF", "-DUSE_CUDA=OFF"]
         # check if numa is available
         try:
             subprocess.check_output(["numactl", "--show"])

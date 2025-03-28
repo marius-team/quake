@@ -21,7 +21,7 @@ jobs:
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-          pip install .
+          pip install --no-use-pep517 .
 
       - name: Run Baseline Driver Script
         run: |
