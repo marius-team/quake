@@ -10,11 +10,11 @@
 #include "index_partition.h"
 #include <list_scanning.h>
 
-#ifdef QUAKE_ENABLE_GPU
-#include <faiss/gpu/GpuClustering.h>
 #include <faiss/gpu/StandardGpuResources.h>
-#include <faiss/gpu/GpuIndexFlatL2.h>
-#endif
+#include <faiss/gpu/GpuIndexFlat.h>
+
+// for debug
+#include <cstdio>
 
 shared_ptr<Clustering> kmeans(Tensor vectors,
                               Tensor ids,
@@ -39,85 +39,76 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     bool use_gpu = false;
     #endif
 
-    if (use_gpu) {
-        // GPU clustering using Faiss GPU modules:
-        faiss::gpu::StandardGpuResources res;
-        faiss::ClusteringParameters cp;
-        cp.niter = niter;
-        faiss::gpu::GpuClustering gpu_clus(d, n_clusters, cp);
-
-        // Create a GPU index for clustering.
-        faiss::gpu::GpuIndexFlatL2 gpu_index(&res, d);
-        gpu_clus.train(n, vectors.data_ptr<float>(), gpu_index);
-
-        Tensor centroids = torch::from_blob(gpu_clus.centroids.data(), {n_clusters, d}, torch::kFloat32).clone();
-        if (metric_type == faiss::METRIC_INNER_PRODUCT)
-            centroids = centroids / centroids.norm(2, 1).unsqueeze(1);
-
-        // Assign each vector to the nearest centroid using the GPU index.
-        std::vector<faiss::idx_t> assign_vec(n);
-        std::vector<float> distance_vec(n);
-        gpu_index.search(n, vectors.data_ptr<float>(), 1, distance_vec.data(), assign_vec.data());
-        Tensor assignments = torch::from_blob(assign_vec.data(), {n}, torch::kInt64).clone();
-
-        // Partition vectors and ids by cluster.
-        vector<Tensor> cluster_vectors(n_clusters);
-        vector<Tensor> cluster_ids(n_clusters);
-        for (int i = 0; i < n_clusters; i++) {
-            cluster_vectors[i] = vectors.index({assignments == i});
-            cluster_ids[i] = ids.index({assignments == i});
-        }
-        Tensor partition_ids = torch::arange(n_clusters, torch::kInt64);
-
-        shared_ptr<Clustering> clustering = std::make_shared<Clustering>();
-        clustering->centroids = centroids;
-        clustering->partition_ids = partition_ids;
-        clustering->vectors = cluster_vectors;
-        clustering->vector_ids = cluster_ids;
-
-        return clustering;
-    }
-
-    // Create a flat index appropriate to the metric.
-    faiss::IndexFlat *index_ptr = nullptr;
-    if (metric_type == faiss::METRIC_INNER_PRODUCT)
-        index_ptr = new faiss::IndexFlatIP(d);
-    else
-        index_ptr = new faiss::IndexFlatL2(d);
-
     faiss::ClusteringParameters cp;
     cp.niter = niter;
 
-    faiss::Clustering clus(d, n_clusters, cp);
-    clus.train(n, vectors.data_ptr<float>(), *index_ptr);
-
-    // Retrieve centroids as a torch Tensor.
-    Tensor centroids = torch::from_blob(clus.centroids.data(), {n_clusters, d}, torch::kFloat32).clone();
-    if (metric_type == faiss::METRIC_INNER_PRODUCT)
-        centroids = centroids / centroids.norm(2, 1).unsqueeze(1);
-
-    // Use the index to assign each vector to its nearest centroid.
-    std::vector<idx_t> assign_vec(n);
+    Tensor centroids;
+    std::vector<faiss::idx_t> assign_vec(n);
     std::vector<float> distance_vec(n);
-    index_ptr->search(n, vectors.data_ptr<float>(), 1, distance_vec.data(), assign_vec.data());
+
+    if (use_gpu) {
+        // for debug
+        printf("\nUSING GPU!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+
+        faiss::gpu::StandardGpuResources res;
+        faiss::gpu::GpuIndexFlatConfig index_config;
+        index_config.device = 0;
+
+        std::unique_ptr<faiss::gpu::GpuIndexFlat> gpu_index;
+        if (metric_type == faiss::METRIC_INNER_PRODUCT) {
+            gpu_index.reset(new faiss::gpu::GpuIndexFlatIP(&res, d, index_config));
+        } else {
+            gpu_index.reset(new faiss::gpu::GpuIndexFlatL2(&res, d, index_config));
+        }
+
+        faiss::Clustering clus(d, n_clusters, cp);
+        clus.train(n, vectors.data_ptr<float>(), *gpu_index);
+
+        centroids = torch::from_blob(clus.centroids.data(), {n_clusters, d}, torch::kFloat32).clone();
+        if (metric_type == faiss::METRIC_INNER_PRODUCT) {
+            centroids = centroids / centroids.norm(2, 1).unsqueeze(1);
+        }
+
+        gpu_index->search(n, vectors.data_ptr<float>(), 1, distance_vec.data(), assign_vec.data());
+    } else {
+        // for debug
+        printf("\nUSING CPU!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+
+        std::unique_ptr<faiss::IndexFlat> index_ptr;
+        if (metric_type == faiss::METRIC_INNER_PRODUCT) {
+            index_ptr.reset(new faiss::IndexFlatIP(d));
+        } else {
+            index_ptr.reset(new faiss::IndexFlatL2(d));
+        }
+
+        faiss::Clustering clus(d, n_clusters, cp);
+        clus.train(n, vectors.data_ptr<float>(), *index_ptr);
+
+        centroids = torch::from_blob(clus.centroids.data(), {n_clusters, d}, torch::kFloat32).clone();
+        if (metric_type == faiss::METRIC_INNER_PRODUCT) {
+            centroids = centroids / centroids.norm(2, 1).unsqueeze(1);
+        }
+
+        index_ptr->search(n, vectors.data_ptr<float>(), 1, distance_vec.data(), assign_vec.data());
+    }
+
     Tensor assignments = torch::from_blob(assign_vec.data(), {n}, torch::kInt64).clone();
 
-    // Partition vectors and ids by cluster.
     vector<Tensor> cluster_vectors(n_clusters);
     vector<Tensor> cluster_ids(n_clusters);
     for (int i = 0; i < n_clusters; i++) {
         cluster_vectors[i] = vectors.index({assignments == i});
         cluster_ids[i] = ids.index({assignments == i});
     }
+
     Tensor partition_ids = torch::arange(n_clusters, torch::kInt64);
 
-    shared_ptr<Clustering> clustering = std::make_shared<Clustering>();
+    auto clustering = std::make_shared<Clustering>();
     clustering->centroids = centroids;
     clustering->partition_ids = partition_ids;
     clustering->vectors = cluster_vectors;
     clustering->vector_ids = cluster_ids;
 
-    delete index_ptr;
     return clustering;
 }
 
