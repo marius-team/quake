@@ -7,7 +7,7 @@ requires-python = ">=3.9"
 authors = [
     { name = "Jason Mohoney", email = "mohoney2@wisc.edu" }
 ]
-license = "MIT"
+license = { file = "LICENSE" }
 
 dependencies = [
     "torch>=2.0",
