@@ -8,11 +8,11 @@
 #define MAINTENANCE_COST_ESTIMATOR_H
 
 #include <memory>
+#include <string>
 #include <vector>
 
 using std::vector;
 using std::shared_ptr;
-using std::string;
 
 /**
  * @brief Estimates the scan latency for a list based on its size and the number of elements to retrieve.
