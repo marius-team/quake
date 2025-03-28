@@ -123,7 +123,7 @@ Python Build
 
 .. code-block:: bash
 
-   pip install .
+   pip install --no-use-pep517 .
 
 
 5. **Run Tests:**
