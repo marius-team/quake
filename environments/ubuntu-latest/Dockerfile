@@ -43,6 +43,11 @@ COPY environments/ubuntu-latest/conda.yaml /tmp/conda.yaml
 # Create quake-env
 RUN conda env create -f /tmp/conda.yaml && conda clean -afy
 
+# -----------------------------
+# Install PyTorch (CPU-only)
+# -----------------------------
+RUN conda run -n quake-env pip install torch --index-url https://download.pytorch.org/whl/cpu
+
 RUN echo "===== DEBUG: which conda =====" && which conda
 RUN echo "===== DEBUG: conda info =====" && conda info
 RUN echo "===== DEBUG: conda env list =====" && conda env list

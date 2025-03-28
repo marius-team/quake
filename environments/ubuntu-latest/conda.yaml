@@ -17,8 +17,3 @@ dependencies:
     - sphinxcontrib-mermaid
     - graphviz
     - pyyaml
-    - torch
-    - torchvision
-    - torchaudio
-    - --index-url https://download.pytorch.org/whl/cpu
-
