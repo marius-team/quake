@@ -14,9 +14,6 @@ if(QUAKE_ENABLE_GPU)
     set(FAISS_ENABLE_GPU ON)
 else()
     set(FAISS_ENABLE_GPU OFF)
-    set(Torch_USE_CUDA OFF)
-    set(Torch_NO_CUDA ON)
-    set(USE_CUDA OFF)
 endif()
 
 if(QUAKE_USE_NUMA)
@@ -79,6 +76,13 @@ endif()
 # Compiler options and definitions
 add_compile_options(-march=native)
 add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+
+# ---------------------------------------------------------------
+# Force-disable CUDA detection from PyTorch
+# ---------------------------------------------------------------
+set(Torch_USE_CUDA OFF CACHE BOOL "Disable CUDA for PyTorch")
+set(Torch_NO_CUDA ON CACHE BOOL "Disable CUDA for PyTorch")
+set(USE_CUDA OFF CACHE BOOL "Disable CUDA globally")
 
 # ---------------------------------------------------------------
 # Find Required Packages
