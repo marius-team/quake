@@ -22,7 +22,7 @@ jobs:
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-          pip install .
+          pip install --no-use-pep517 .
 
       - name: Get Baseline Artifacts
         uses: dawidd6/action-download-artifact@v9

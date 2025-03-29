@@ -8,6 +8,10 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+set(Torch_USE_CUDA OFF CACHE BOOL "Force disable CUDA in Torch")
+set(Torch_NO_CUDA ON CACHE BOOL "Force disable CUDA in Torch")
+set(USE_CUDA OFF CACHE BOOL "Force disable CUDA globally")
+
 # QUAKE_ENABLE_GPU: Enable GPU support for Faiss
 # Default: OFF
 if(QUAKE_ENABLE_GPU)

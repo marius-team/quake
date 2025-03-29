@@ -46,6 +46,6 @@ jobs:
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-          pip install .
+          pip install --no-use-pep517 .
           pip install pytest
           python -m pytest test/python

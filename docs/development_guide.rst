@@ -82,11 +82,11 @@ Testing
 Workflow
 --------------------------
 
-1. **Clone and Set Up:**
+1. **Fork and Set Up:**
 
 .. code-block:: bash
 
-   git clone https://github.com/marius-team/quake.git
+   git fork https://github.com/marius-team/quake.git
    cd quake
    git submodule update --init --recursive
 
@@ -111,15 +111,19 @@ C++ Build (optional, if you only want to work on Python code):
 
 .. code-block:: bash
 
-   mkdir build && cd build
-   cmake -DCMAKE_BUILD_TYPE=Release ..
-   make -j$(nproc) bindings
+    mkdir build && cd build
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DQUAKE_ENABLE_GPU=ON \
+          -DQUAKE_USE_NUMA=ON \
+          -DQUAKE_USE_AVX512=ON \
+          -DBUILD_TESTS=ON ..
+    make -j$(nproc) bindings
 
 Python Build
 
 .. code-block:: bash
 
-   pip install .
+   pip install --no-use-pep517 .
 
 
 5. **Run Tests:**
@@ -141,10 +145,19 @@ Quake must be installed with pip to run the Python tests. Run them using pytest:
 
  pytest test/python/
 
-6. **Make Changes and submit a PR:**
+6. **Run Autoformatting and Linters:**
+
+Lint checks need to pass before submitting a PR.
+
+We use `black`, `isort` and `flake8`.
+
+Run the following scripts to autoformat and run linters:
+
+.. code-block:: bash
+
+   source scripts/autoformat.sh
+   source scripts/lint.sh
+
+7. **Make Changes and submit a PR:**
 
 After making changes, commit them and push to your branch. Then, create a PR on the main branch.
-
-Conclusion
-----------
-This guide is a living document. As Quake evolves, update it to reflect improvements and new practices. Our goal is to keep the codebase and its documentation clear, correct, and easy to contribute to.

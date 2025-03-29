@@ -7,8 +7,6 @@ dependencies:
   - python=3.11
   - numpy
   - pandas
-  - pytorch
-  - cpuonly
   - faiss-cpu
   - matplotlib
   - pytest
@@ -19,4 +17,3 @@ dependencies:
     - sphinxcontrib-mermaid
     - graphviz
     - pyyaml
-

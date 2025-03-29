@@ -55,7 +55,7 @@ Quake has the following limitations which will be addressed in future developmen
 3. **Install Quake:**
 
    ```bash
-   pip install .
+   pip install --no-use-pep517 .
    ```
 
 ---
