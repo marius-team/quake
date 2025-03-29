@@ -149,37 +149,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#module-quake.workload_generator">Workload Generation and Evaluation</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#quake.workload_generator.DynamicWorkloadGenerator"><code class="docutils literal notranslate"><span class="pre">DynamicWorkloadGenerator</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.DynamicWorkloadGenerator.generate_workload"><code class="docutils literal notranslate"><span class="pre">DynamicWorkloadGenerator.generate_workload()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.DynamicWorkloadGenerator.initialize_clustered_index"><code class="docutils literal notranslate"><span class="pre">DynamicWorkloadGenerator.initialize_clustered_index()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.DynamicWorkloadGenerator.initialize_workload"><code class="docutils literal notranslate"><span class="pre">DynamicWorkloadGenerator.initialize_workload()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.DynamicWorkloadGenerator.sample"><code class="docutils literal notranslate"><span class="pre">DynamicWorkloadGenerator.sample()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.DynamicWorkloadGenerator.validate_parameters"><code class="docutils literal notranslate"><span class="pre">DynamicWorkloadGenerator.validate_parameters()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.DynamicWorkloadGenerator.workload_exists"><code class="docutils literal notranslate"><span class="pre">DynamicWorkloadGenerator.workload_exists()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#quake.workload_generator.StratifiedClusterSampler"><code class="docutils literal notranslate"><span class="pre">StratifiedClusterSampler</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.StratifiedClusterSampler.sample"><code class="docutils literal notranslate"><span class="pre">StratifiedClusterSampler.sample()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.StratifiedClusterSampler.update_ranks"><code class="docutils literal notranslate"><span class="pre">StratifiedClusterSampler.update_ranks()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#quake.workload_generator.UniformSampler"><code class="docutils literal notranslate"><span class="pre">UniformSampler</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.UniformSampler.sample"><code class="docutils literal notranslate"><span class="pre">UniformSampler.sample()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#quake.workload_generator.VectorSampler"><code class="docutils literal notranslate"><span class="pre">VectorSampler</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.VectorSampler.sample"><code class="docutils literal notranslate"><span class="pre">VectorSampler.sample()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#quake.workload_generator.WorkloadEvaluator"><code class="docutils literal notranslate"><span class="pre">WorkloadEvaluator</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.WorkloadEvaluator.evaluate_workload"><code class="docutils literal notranslate"><span class="pre">WorkloadEvaluator.evaluate_workload()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.workload_generator.WorkloadEvaluator.initialize_index"><code class="docutils literal notranslate"><span class="pre">WorkloadEvaluator.initialize_index()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#quake.workload_generator.run_query"><code class="docutils literal notranslate"><span class="pre">run_query()</span></code></a></li>
-</ul>
-</li>
+<li class="toctree-l2"><a class="reference internal" href="#workload-generation-and-evaluation">Workload Generation and Evaluation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#built-in-datasets">Built-in Datasets</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.Dataset"><code class="docutils literal notranslate"><span class="pre">Dataset</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Dataset.download"><code class="docutils literal notranslate"><span class="pre">Dataset.download()</span></code></a></li>
@@ -249,6 +219,19 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.index_wrappers.faiss_ivf.faiss_metric_to_str"><code class="docutils literal notranslate"><span class="pre">faiss_metric_to_str()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.index_wrappers.faiss_ivf.metric_str_to_faiss"><code class="docutils literal notranslate"><span class="pre">metric_str_to_faiss()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW"><code class="docutils literal notranslate"><span class="pre">FaissHNSW</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.add"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.add()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.build"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.build()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.centroids"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.centroids()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.d"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.d()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.index"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.index</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.load"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.load()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.n_total"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.n_total()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.remove"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.remove()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.save"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.save()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.search"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.search()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -803,125 +786,8 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 </section>
-<section id="module-quake.workload_generator">
-<span id="workload-generation-and-evaluation"></span><h2>Workload Generation and Evaluation<a class="headerlink" href="#module-quake.workload_generator" title="Link to this heading"></a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="quake.workload_generator.DynamicWorkloadGenerator">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.workload_generator.</span></span><span class="sig-name descname"><span class="pre">DynamicWorkloadGenerator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">workload_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_vectors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">insert_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">query_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">query_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">number_of_operations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cluster_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cluster_sample_distribution</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queries</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">query_cluster_sample_distribution</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'uniform'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1738</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_clustering_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#DynamicWorkloadGenerator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.DynamicWorkloadGenerator" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Generates a dynamic workload from a static vector search dataset.</p>
-<dl class="simple">
-<dt>Workflow:</dt><dd><ol class="arabic simple">
-<li><p>Cluster the base vectors.</p></li>
-<li><p>Initialize the workload with an initial resident set.</p></li>
-<li><p>Generate operations (insert, delete, query) according to given ratios.</p></li>
-<li><p>Save each operation and a runbook that includes a summary.</p></li>
-</ol>
-</dd>
-</dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.DynamicWorkloadGenerator.generate_workload">
-<span class="sig-name descname"><span class="pre">generate_workload</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#DynamicWorkloadGenerator.generate_workload"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.DynamicWorkloadGenerator.generate_workload" title="Link to this definition"></a></dt>
-<dd><p>Generate the workload and print a summary at the end.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.DynamicWorkloadGenerator.initialize_clustered_index">
-<span class="sig-name descname"><span class="pre">initialize_clustered_index</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#DynamicWorkloadGenerator.initialize_clustered_index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.DynamicWorkloadGenerator.initialize_clustered_index" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.DynamicWorkloadGenerator.initialize_workload">
-<span class="sig-name descname"><span class="pre">initialize_workload</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#DynamicWorkloadGenerator.initialize_workload"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.DynamicWorkloadGenerator.initialize_workload" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.DynamicWorkloadGenerator.sample">
-<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">operation_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#DynamicWorkloadGenerator.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.DynamicWorkloadGenerator.sample" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.DynamicWorkloadGenerator.validate_parameters">
-<span class="sig-name descname"><span class="pre">validate_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#DynamicWorkloadGenerator.validate_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.DynamicWorkloadGenerator.validate_parameters" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.DynamicWorkloadGenerator.workload_exists">
-<span class="sig-name descname"><span class="pre">workload_exists</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#DynamicWorkloadGenerator.workload_exists"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.DynamicWorkloadGenerator.workload_exists" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="quake.workload_generator.StratifiedClusterSampler">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.workload_generator.</span></span><span class="sig-name descname"><span class="pre">StratifiedClusterSampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">assignments</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">centroids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#StratifiedClusterSampler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.StratifiedClusterSampler" title="Link to this definition"></a></dt>
-<dd><p>Bases: <a class="reference internal" href="#quake.workload_generator.VectorSampler" title="quake.workload_generator.VectorSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">VectorSampler</span></code></a></p>
-<p>Sample vectors from clusters.</p>
-<p>This sampler uses cluster assignments and centroid distances
-to sample in a stratified fashion.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.StratifiedClusterSampler.sample">
-<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_pool</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_ranks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#StratifiedClusterSampler.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.StratifiedClusterSampler.sample" title="Link to this definition"></a></dt>
-<dd><p>Sample vectors for an operation.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.StratifiedClusterSampler.update_ranks">
-<span class="sig-name descname"><span class="pre">update_ranks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root_cluster</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#StratifiedClusterSampler.update_ranks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.StratifiedClusterSampler.update_ranks" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="quake.workload_generator.UniformSampler">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.workload_generator.</span></span><span class="sig-name descname"><span class="pre">UniformSampler</span></span><a class="reference internal" href="_modules/quake/workload_generator.html#UniformSampler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.UniformSampler" title="Link to this definition"></a></dt>
-<dd><p>Bases: <a class="reference internal" href="#quake.workload_generator.VectorSampler" title="quake.workload_generator.VectorSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">VectorSampler</span></code></a></p>
-<p>Uniformly sample vectors.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.UniformSampler.sample">
-<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_pool</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_ranks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#UniformSampler.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.UniformSampler.sample" title="Link to this definition"></a></dt>
-<dd><p>Sample vectors for an operation.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="quake.workload_generator.VectorSampler">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.workload_generator.</span></span><span class="sig-name descname"><span class="pre">VectorSampler</span></span><a class="reference internal" href="_modules/quake/workload_generator.html#VectorSampler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.VectorSampler" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
-<p>Abstract class for sampling vectors.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.VectorSampler.sample">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#VectorSampler.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.VectorSampler.sample" title="Link to this definition"></a></dt>
-<dd><p>Sample vectors for an operation.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="quake.workload_generator.WorkloadEvaluator">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.workload_generator.</span></span><span class="sig-name descname"><span class="pre">WorkloadEvaluator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">workload_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_vectors_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#WorkloadEvaluator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.WorkloadEvaluator" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Evaluates a generated workload on a given index and produces summary statistics and plots.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.WorkloadEvaluator.evaluate_workload">
-<span class="sig-name descname"><span class="pre">evaluate_workload</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">build_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">search_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">do_maintenance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#WorkloadEvaluator.evaluate_workload"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.WorkloadEvaluator.evaluate_workload" title="Link to this definition"></a></dt>
-<dd><p>Evaluate the workload on the index. At the end a summary is printed and a multi-panel plot is saved.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="quake.workload_generator.WorkloadEvaluator.initialize_index">
-<span class="sig-name descname"><span class="pre">initialize_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">build_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m_params</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#WorkloadEvaluator.initialize_index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.WorkloadEvaluator.initialize_index" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="quake.workload_generator.run_query">
-<span class="sig-prename descclassname"><span class="pre">quake.workload_generator.</span></span><span class="sig-name descname"><span class="pre">run_query</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queries</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">search_k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">search_params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gt_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">single_query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tune_nprobe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprobes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/workload_generator.html#run_query"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.workload_generator.run_query" title="Link to this definition"></a></dt>
-<dd><p>Run queries on the index and compute the recall.</p>
-</dd></dl>
-
+<section id="workload-generation-and-evaluation">
+<h2>Workload Generation and Evaluation<a class="headerlink" href="#workload-generation-and-evaluation" title="Link to this heading"></a></h2>
 </section>
 <section id="built-in-datasets">
 <h2>Built-in Datasets<a class="headerlink" href="#built-in-datasets" title="Link to this heading"></a></h2>
@@ -1399,6 +1265,119 @@ When nc is not 0, the index is an IVF or IVFPQ index.
 <dd><p>Convert the metric to the corresponding faiss metric.
 :param metric: The metric to convert.
 :return: The faiss metric.</p>
+</dd></dl>
+
+<dl class="py class" id="module-quake.index_wrappers.faiss_hnsw">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.index_wrappers.faiss_hnsw.</span></span><span class="sig-name descname"><span class="pre">FaissHNSW</span></span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IndexWrapper</span></code></p>
+<p>Wrapper class for faiss hnsw indexes.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.add">
+<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vectors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.add" title="Link to this definition"></a></dt>
+<dd><p>Add vectors to the index.
+HNSW does only support sequential adds.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>vectors</strong> – The vectors to add.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.build">
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vectors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ef_construction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">40</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'l2'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.build"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.build" title="Link to this definition"></a></dt>
+<dd><p>Build the index with the given vectors and arguments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>vectors</strong> – The vectors to build the index with.</p></li>
+<li><p><strong>m</strong> – The number of neighbors for the HNSW graph, optional. Default is 32.</p></li>
+<li><p><strong>ef_construction</strong> – The number of neighbors to explore during construction, optional. Default is 40.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.centroids">
+<span class="sig-name descname"><span class="pre">centroids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.centroids"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.centroids" title="Link to this definition"></a></dt>
+<dd><p>Return the centroids the index</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.d">
+<span class="sig-name descname"><span class="pre">d</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.d"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.d" title="Link to this definition"></a></dt>
+<dd><p>Return the dimension of the vectors in the index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The dimension of the vectors in the index.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.index">
+<span class="sig-name descname"><span class="pre">index</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">IndexHNSW</span></em><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.index" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.load" title="Link to this definition"></a></dt>
+<dd><p>Load the index from a file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>filename</strong> – The name of the file to load the index from.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.n_total">
+<span class="sig-name descname"><span class="pre">n_total</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.n_total"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.n_total" title="Link to this definition"></a></dt>
+<dd><p>Return the number of vectors in the index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The number of vectors in the index.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.remove">
+<span class="sig-name descname"><span class="pre">remove</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.remove"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.remove" title="Link to this definition"></a></dt>
+<dd><p>Remove vectors from the index.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.save">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.save" title="Link to this definition"></a></dt>
+<dd><p>Save the index to a file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>filename</strong> – The name of the file to save the index to.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.search">
+<span class="sig-name descname"><span class="pre">search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ef_search</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">16</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.search"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.search" title="Link to this definition"></a></dt>
+<dd><p>Find the k-nearest neighbors using the provided search arguments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>query</strong> – The query vectors.</p></li>
+<li><p><strong>k</strong> – The number of neighbors to find.</p></li>
+<li><p><strong>ef_search</strong> – The number of neighbors to explore during search, optional. Default is 16.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The indices and distances of the k-nearest neighbors.</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </section>

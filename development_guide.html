@@ -58,7 +58,6 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#workflow">Workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#conclusion">Conclusion</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">Python API</a></li>
@@ -170,9 +169,9 @@ Provides user-friendly wrappers, dataset loaders, and utility functions for inte
 <section id="workflow">
 <h2>Workflow<a class="headerlink" href="#workflow" title="Link to this heading"></a></h2>
 <ol class="arabic simple">
-<li><p><strong>Clone and Set Up:</strong></p></li>
+<li><p><strong>Fork and Set Up:</strong></p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/marius-team/quake.git
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>fork<span class="w"> </span>https://github.com/marius-team/quake.git
 <span class="nb">cd</span><span class="w"> </span>quake
 git<span class="w"> </span>submodule<span class="w"> </span>update<span class="w"> </span>--init<span class="w"> </span>--recursive
 </pre></div>
@@ -196,12 +195,16 @@ conda<span class="w"> </span>activate<span class="w"> </span>quake-env
 </ol>
 <p>C++ Build (optional, if you only want to work on Python code):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>build<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>build
-cmake<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span>..
+cmake<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span><span class="se">\</span>
+<span class="w">      </span>-DQUAKE_ENABLE_GPU<span class="o">=</span>ON<span class="w"> </span><span class="se">\</span>
+<span class="w">      </span>-DQUAKE_USE_NUMA<span class="o">=</span>ON<span class="w"> </span><span class="se">\</span>
+<span class="w">      </span>-DQUAKE_USE_AVX512<span class="o">=</span>ON<span class="w"> </span><span class="se">\</span>
+<span class="w">      </span>-DBUILD_TESTS<span class="o">=</span>ON<span class="w"> </span>..
 make<span class="w"> </span>-j<span class="k">$(</span>nproc<span class="k">)</span><span class="w"> </span>bindings
 </pre></div>
 </div>
 <p>Python Build</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>.
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>--no-use-pep517<span class="w"> </span>.
 </pre></div>
 </div>
 <ol class="arabic simple" start="5">
@@ -219,13 +222,19 @@ test/cpp/quake_tests<span class="w"> </span>--gtest_filter<span class="o">=</spa
 </pre></div>
 </div>
 <ol class="arabic simple" start="6">
+<li><p><strong>Run Autoformatting and Linters:</strong></p></li>
+</ol>
+<p>Lint checks need to pass before submitting a PR.</p>
+<p>We use <cite>black</cite>, <cite>isort</cite> and <cite>flake8</cite>.</p>
+<p>Run the following scripts to autoformat and run linters:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">source</span><span class="w"> </span>scripts/autoformat.sh
+<span class="nb">source</span><span class="w"> </span>scripts/lint.sh
+</pre></div>
+</div>
+<ol class="arabic simple" start="7">
 <li><p><strong>Make Changes and submit a PR:</strong></p></li>
 </ol>
 <p>After making changes, commit them and push to your branch. Then, create a PR on the main branch.</p>
-</section>
-<section id="conclusion">
-<h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading"></a></h2>
-<p>This guide is a living document. As Quake evolves, update it to reflect improvements and new practices. Our goal is to keep the codebase and its documentation clear, correct, and easy to contribute to.</p>
 </section>
 </section>
 
