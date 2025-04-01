@@ -1,13 +1,13 @@
-#ifndef DISK_INDEX_PARTITION_H
-#define DISK_INDEX_PARTITION_H
+#ifndef FILE_INDEX_PARTITION_H
+#define FILE_INDEX_PARTITION_H
 
 #include <index_partition.h>
 
 
-class DiskIndexPartition : public IndexPartition {
+class FileIndexPartition : public IndexPartition {
 public:
     /// Default constructor.
-    DiskIndexPartition() = default;
+    FileIndexPartition() = default;
 
     /**
      * @brief Parameterized constructor.
@@ -19,7 +19,7 @@ public:
      * @param ids Pointer to the vector IDs.
      * @param code_size Size of each code in bytes.
      */
-    DiskIndexPartition(int64_t num_vectors,
+    FileIndexPartition(int64_t num_vectors,
                     uint8_t* codes,
                     idx_t* ids,
                     int64_t code_size);
@@ -31,7 +31,7 @@ public:
      *
      * @param other The partition to move from.
      */
-    DiskIndexPartition(DiskIndexPartition&& other) noexcept;
+    FileIndexPartition(FileIndexPartition&& other) noexcept;
 
     /**
      * @brief Move assignment operator.
@@ -41,10 +41,10 @@ public:
      * @param other The partition to move from.
      * @return Reference to this partition.
      */
-    DiskIndexPartition& operator=(DiskIndexPartition&& other) noexcept;
+    FileIndexPartition& operator=(FileIndexPartition&& other) noexcept;
 
     /// Destructor. Frees all allocated memory.
-    ~DiskIndexPartition();
+    ~FileIndexPartition();
 
     // overriden methods
     void set_code_size(int64_t code_size) override;
@@ -54,14 +54,13 @@ public:
     void resize(int64_t new_capacity) override;
     void clear() override;
     int64_t find_id(idx_t id) const override;
-    void reallocate_memory(int64_t new_capacity) override;
+    void reallocate(int64_t new_capacity) override;
     
     
     
     // disk specific method
-    void rellocate_disk(); //
-    void read_from_disk(); // load the partition to memory from disk
-    void write_to_disk(); // store the vectors on disk
+    void load(); // load the partition to memory from disk
+    void save(); // store the vectors on disk
     
 
 
