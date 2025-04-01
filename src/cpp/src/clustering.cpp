@@ -103,7 +103,6 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
         auto filtered_table_result = arrow::compute::Filter(attributes_table, mask_table);
 
         cluster_attributes_tables[i] = filtered_table_result->table();
-        std::cout<<cluster_attributes_tables[i]->ToString()<<std::endl;
     }
 
 
