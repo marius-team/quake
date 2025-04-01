@@ -77,10 +77,10 @@ public:
 #endif
 
 private:
-    string file_handler // TODO: should this be a pointer to file handler class
+    string file_path
     bool is_in_memory // indicate whether the partitionis in memory
-
+    bool is_dirty // indicate whether the partition is dirty (changes haven't been synced to disk)
     
 }
 
-#endif // DISK_INDEX_PARTITION_H
+#endif // FILE_INDEX_PARTITION_H
