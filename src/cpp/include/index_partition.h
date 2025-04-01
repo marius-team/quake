@@ -27,7 +27,7 @@ public:
 
     uint8_t* codes_ = nullptr;  ///< Pointer to the encoded vectors (raw memory block)
     idx_t* ids_ = nullptr;      ///< Pointer to the vector IDs
-    std::vector<std::shared_ptr<arrow::Table>> attributes_tables_ = {};
+    std::shared_ptr<arrow::Table> attributes_table_ = {};
 
     /// Default constructor.
     IndexPartition() = default;

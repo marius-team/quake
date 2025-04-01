@@ -55,10 +55,14 @@ void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t
     const size_t code_bytes = static_cast<size_t>(code_size_);
     std::memcpy(codes_ + num_vectors_ * code_bytes, new_codes, n_entry * code_bytes);
     std::memcpy(ids_ + num_vectors_, new_ids, n_entry * sizeof(idx_t));
-    if(attributes_table!=nullptr){
-        attributes_tables_.push_back(attributes_table);
+    // append attributes_table to attributes_table_ 
+    if (attributes_table_ == nullptr) {
+        attributes_table_ = attributes_table;
+    } else {
+        // Concatenate the new attributes table with the existing one
+        auto concatenated_table = arrow::ConcatenateTables({attributes_table_, attributes_table});
+        attributes_table_ = concatenated_table.ValueOrDie();
     }
-
     num_vectors_ += n_entry;
 }
 
