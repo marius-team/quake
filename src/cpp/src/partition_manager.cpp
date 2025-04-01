@@ -127,7 +127,8 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
     const Tensor &vectors,
     const Tensor &vector_ids,
     const Tensor &assignments,
-    bool check_uniques
+    bool check_uniques,
+    std::shared_ptr<arrow::Table> attributes_table
 ) {
 
     auto timing_info = std::make_shared<ModifyTimingInfo>();
@@ -145,12 +146,26 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
         throw runtime_error("[PartitionManager] add: partitions_ is null. Did you call init_partitions?");
     }
 
+    if(!attributes_table){
+        throw runtime_error("[PartitionManager] add: attributes_table is null. Please add attributes for the vectors");
+    }
+
     if (!vectors.defined() || !vector_ids.defined()) {
         throw runtime_error("[PartitionManager] add: vectors or vector_ids is undefined.");
     }
+
     if (vectors.size(0) != vector_ids.size(0)) {
         throw runtime_error("[PartitionManager] add: mismatch in vectors.size(0) and vector_ids.size(0).");
     }
+
+    if(attributes_table->num_rows!= vector_ids.size(0)){
+        throw runtime_error("[PartitionManager] add: mismatch in attributes_table and vector_ids size.");
+    }
+
+    if(!attributes_table->GetColumnByName("id")){
+        throw runtime_error("[PartitionManager] add: No vector_id column in attributes_table");
+    }
+
     int64_t n = vectors.size(0);
     if (n == 0) {
         if (debug_) {
@@ -185,6 +200,9 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
             resident_ids_.insert(id_val);
         }
     }
+
+    // TODO: input validations for attributes table - is it null, size==0, check if vector_ids in table are unique?
+
 
     // checks assignments are less than partitions_->curr_list_id_
     if (assignments.defined() && (assignments >= curr_partition_id_).any().item<bool>()) {
@@ -256,8 +274,10 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
             pid,
             /*n_entry=*/1,
             id_ptr + i,
-            code_ptr + i * code_size_bytes
+            code_ptr + i * code_size_bytes,
+            attributes_table
         );
+
     }
     auto e3 = std::chrono::high_resolution_clock::now();
     timing_info->modify_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e3 - s3).count();
@@ -297,6 +317,8 @@ shared_ptr<ModifyTimingInfo> PartitionManager::remove(const Tensor &ids) {
                 throw runtime_error("[PartitionManager] remove: vector ID does not exist in the index.");
             }
             resident_ids_.erase(id_val);
+
+            // TODO: Remove associated attribute data as well
         }
     }
     auto e1 = std::chrono::high_resolution_clock::now();
@@ -313,6 +335,7 @@ shared_ptr<ModifyTimingInfo> PartitionManager::remove(const Tensor &ids) {
 
     auto s3 = std::chrono::high_resolution_clock::now();
     partitions_->remove_vectors(to_remove);
+    // TODO: Remove associated attribute data as well??? 
     if (debug_) {
         std::cout << "[PartitionManager] remove: Completed removal." << std::endl;
     }

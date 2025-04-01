@@ -118,12 +118,12 @@ Tensor QuakeIndex::get(Tensor ids) {
     return partition_manager_->get(ids);
 }
 
-shared_ptr<ModifyTimingInfo> QuakeIndex::add(Tensor x, Tensor ids) {
+shared_ptr<ModifyTimingInfo> QuakeIndex::add(Tensor x, Tensor ids, std::shared_ptr<arrow::Table> attributes_table) {
     if (!partition_manager_) {
         throw std::runtime_error("[QuakeIndex::add()] No partition manager. Build the index first.");
     }
 
-    auto modify_info = partition_manager_->add(x, ids);
+    auto modify_info = partition_manager_->add(x, ids, attributes_table);
     modify_info->n_vectors = x.size(0);
     return modify_info;
 }

@@ -111,6 +111,15 @@ public:
     void remove(int64_t index);
 
     /**
+     * @brief Remove an attribute of an entry from the partition. Used in conjuntion with the 
+     *
+     * Removes the attribute by performing masking & filtering
+     *
+     * @param index Index of the vector to remove.
+     */
+    void removeAttribute(int64_t index);
+
+    /**
      * @brief Resize the partition.
      *
      * Ensures that the internal buffer has capacity for at least new_capacity entries.

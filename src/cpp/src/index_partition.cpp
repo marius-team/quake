@@ -55,6 +55,7 @@ void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t
     const size_t code_bytes = static_cast<size_t>(code_size_);
     std::memcpy(codes_ + num_vectors_ * code_bytes, new_codes, n_entry * code_bytes);
     std::memcpy(ids_ + num_vectors_, new_ids, n_entry * sizeof(idx_t));
+    // TODO recheck where codes_, ids_ and attributes_tables_ are used 
     if(attributes_table!=nullptr){
         attributes_tables_.push_back(attributes_table);
     }
@@ -89,6 +90,42 @@ void IndexPartition::remove(int64_t index) {
     ids_[index] = ids_[last_idx];
 
     num_vectors_--;
+
+    removeAttribute(index);
+}
+
+void IndexPartition::removeAttribute(int64_t index) {
+    if (index < 0 || index >= static_cast<int64_t>(attributes_tables_.size())) {
+        throw std::runtime_error("Index out of range in remove");
+    }
+
+    for (size_t table_idx = 0; table_idx < attributes_tables_.size(); ++table_idx) {
+        auto& table = attributes_tables_[table_idx];
+        
+        // Find "id" column
+        auto id_col_idx = table->schema()->GetFieldIndex("id");
+        if (id_col_idx == -1) {
+            throw std::runtime_error("id column not present in this attribute table");
+        }
+
+        auto id_column = std::static_pointer_cast<arrow::Int64Array>(table->column(id_col_idx)->chunk(0));
+
+        // Search for the row with matching id
+        for (int64_t row = 0; row < id_column->length(); ++row) {
+            if (!id_column->IsNull(row) && id_column->Value(row) == index) {
+                // Remove the row and update the table
+                arrow::compute::ExecContext ctx;
+                auto filter_mask = arrow::compute::NotEqual(arrow::compute::MakeScalar(index)).ValueOrDie();
+                auto filtered_table = arrow::compute::Filter(table, filter_mask, &ctx).ValueOrDie();
+
+                // Replace the table in attributes_tables_
+                attributes_tables_[table_idx] = filtered_table;
+                return;  // Stop after removing the row
+            }
+        }
+    }
+
+    throw std::runtime_error("Index not found in any table.");
 }
 
 void IndexPartition::resize(int64_t new_capacity) {
