@@ -123,6 +123,50 @@ void PartitionManager::init_partitions(
     }
 }
 
+std::shared_ptr<arrow::Table> filterRowById(std::shared_ptr<arrow::Table> table, int64_t idToFind) {
+    // Find the column index for "id"
+    auto schema = attributes_tables_->schema();
+    int id_column_index = schema->GetFieldIndex("id");
+
+    if (id_column_index == -1) {
+        std::cerr << "Error: Column 'id' not found in table.\n";
+        return nullptr;
+    }
+
+    // Get the column as a ChunkedArray
+    auto id_chunked_array = attributes_tables_->column(id_column_index);
+
+    // Concatenate all chunks into a single array
+    auto concat_result = arrow::Concatenate(id_chunked_array->chunks());
+    if (!concat_result.ok()) {
+        std::cerr << "Error concatenating chunks: " << concat_result.status().ToString() << std::endl;
+        return nullptr;
+    }
+
+    std::shared_ptr<arrow::Array> id_array = concat_result.ValueOrDie();
+
+    // Create a boolean mask for filtering
+    auto filter_result = arrow::compute::Equal(arrow::Datum(id_array), arrow::Datum(target_id));
+    if (!filter_result.ok()) {
+        std::cerr << "Error computing filter mask: " << filter_result.status().ToString() << std::endl;
+        return nullptr;
+    }
+
+    // Apply the filter to create a new table
+    auto filtered_table_result = arrow::compute::Filter(table, filter_result.ValueOrDie());
+    if (!filtered_table_result.ok()) {
+        std::cerr << "Error filtering table: " << filtered_table_result.status().ToString() << std::endl;
+        return nullptr;
+    }
+
+    std::shared_ptr<arrow::Table> filtered_table = filtered_table_result.ValueOrDie();
+
+    assert(filtered_table->num_rows() == 1 && "Table size is not 1 after the filter");
+
+    return filtered_table;
+}
+
+
 shared_ptr<ModifyTimingInfo> PartitionManager::add(
     const Tensor &vectors,
     const Tensor &vector_ids,
@@ -201,9 +245,6 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
         }
     }
 
-    // TODO: input validations for attributes table - is it null, size==0, check if vector_ids in table are unique?
-
-
     // checks assignments are less than partitions_->curr_list_id_
     if (assignments.defined() && (assignments >= curr_partition_id_).any().item<bool>()) {
         throw runtime_error("[PartitionManager] add: assignments must be less than partitions_->curr_list_id_.");
@@ -270,12 +311,14 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
                       << " into partition " << pid << std::endl;
         }
 
+        std::shared_ptr<Table> filtered_table_result = filterRowById(attributes_table, search_id);
+
         partitions_->add_entries(
             pid,
             /*n_entry=*/1,
             id_ptr + i,
             code_ptr + i * code_size_bytes,
-            attributes_table
+            filtered_table_result
         );
 
     }
@@ -317,8 +360,6 @@ shared_ptr<ModifyTimingInfo> PartitionManager::remove(const Tensor &ids) {
                 throw runtime_error("[PartitionManager] remove: vector ID does not exist in the index.");
             }
             resident_ids_.erase(id_val);
-
-            // TODO: Remove associated attribute data as well
         }
     }
     auto e1 = std::chrono::high_resolution_clock::now();

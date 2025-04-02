@@ -60,6 +60,14 @@ public:
     shared_ptr<ModifyTimingInfo> add(const Tensor &vectors, const Tensor &vector_ids, const Tensor &assignments = Tensor(), bool check_uniques = true, std::shared_ptr<arrow::Table> attributes_table);
 
     /**
+    * @brief Filter the appropriate row from the attribute table
+    * @param table Arrow table for the attributes.
+    * @param vector_id Vector_id by which we are filtering.
+    * @return Table containing only the row pertaining to the vector_id
+    */
+    std::shared_ptr<arrow::Table> filterRowById(std::shared_ptr<arrow::Table> table, int64_t vector_id);
+
+    /**
      * @brief Remove vectors by ID from the index.
      * @param ids Tensor of shape [num_to_remove].
      * @return Timing information for the operation.

@@ -97,38 +97,57 @@ void IndexPartition::remove(int64_t index) {
     removeAttribute(index);
 }
 
+// https://github.com/apache/arrow/issues/44243
+// Arrow data is immutable. So you can't delete a row from existing Arrow data.
+// You need to create a new Arrow data that doesn't have the target row.
 void IndexPartition::removeAttribute(int64_t index) {
-    if (index < 0 || index >= static_cast<int64_t>(attributes_tables_.size())) {
-        throw std::runtime_error("Index out of range in remove");
+    assert(table && "Input table is null");
+
+    int64_t original_size = table->num_rows();
+    if(original_size==0){
+        std::cerr << "No attributes found in the table.\n";
+        return;
     }
 
-    for (size_t table_idx = 0; table_idx < attributes_tables_.size(); ++table_idx) {
-        auto& table = attributes_tables_[table_idx];
-        
-        // Find "id" column
-        auto id_col_idx = table->schema()->GetFieldIndex("id");
-        if (id_col_idx == -1) {
-            throw std::runtime_error("id column not present in this attribute table");
-        }
+    // Find the column index for "id"
+    auto schema = attributes_tables_->schema();
+    int id_column_index = schema->GetFieldIndex("id");
 
-        auto id_column = std::static_pointer_cast<arrow::Int64Array>(table->column(id_col_idx)->chunk(0));
-
-        // Search for the row with matching id
-        for (int64_t row = 0; row < id_column->length(); ++row) {
-            if (!id_column->IsNull(row) && id_column->Value(row) == index) {
-                // Remove the row and update the table
-                arrow::compute::ExecContext ctx;
-                auto filter_mask = arrow::compute::NotEqual(arrow::compute::MakeScalar(index)).ValueOrDie();
-                auto filtered_table = arrow::compute::Filter(table, filter_mask, &ctx).ValueOrDie();
-
-                // Replace the table in attributes_tables_
-                attributes_tables_[table_idx] = filtered_table;
-                return;  // Stop after removing the row
-            }
-        }
+    if (id_column_index == -1) {
+        std::cerr << "Error: Column 'id' not found in table.\n";
+        return;
     }
 
-    throw std::runtime_error("Index not found in any table.");
+    // Get the column as a ChunkedArray
+    auto id_chunked_array = attributes_tables_->column(id_column_index);
+
+    // Concatenate all chunks into a single array
+    auto concat_result = arrow::Concatenate(id_chunked_array->chunks());
+    if (!concat_result.ok()) {
+        std::cerr << "Error concatenating chunks: " << concat_result.status().ToString() << std::endl;
+        return;
+    }
+
+    std::shared_ptr<arrow::Array> id_array = concat_result.ValueOrDie();
+
+    // Create a boolean mask for filtering
+    auto filter_result = arrow::compute::NotEqual(arrow::Datum(id_array), arrow::Datum(target_id));
+    if (!filter_result.ok()) {
+        std::cerr << "Error computing filter mask: " << filter_result.status().ToString() << std::endl;
+        return;
+    }
+
+    // Apply the filter to create a new table
+    auto filtered_table_result = arrow::compute::Filter(table, filter_result.ValueOrDie());
+    if (!filtered_table_result.ok()) {
+        std::cerr << "Error filtering table: " << filtered_table_result.status().ToString() << std::endl;
+        return;
+    }
+
+    assert(filtered_table_result->num_rows() < original_size && "Table size did not decrease after filtering");
+
+    attributes_tables_ = filtered_table_result.ValueOrDie();
+
 }
 
 void IndexPartition::resize(int64_t new_capacity) {

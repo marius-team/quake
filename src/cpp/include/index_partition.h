@@ -111,7 +111,7 @@ public:
     void remove(int64_t index);
 
     /**
-     * @brief Remove an attribute of an entry from the partition. Used in conjuntion with the 
+     * @brief Remove the associated attribute of an entry from the partition. Used in conjuntion with the remove(index) function 
      *
      * Removes the attribute by performing masking & filtering
      *

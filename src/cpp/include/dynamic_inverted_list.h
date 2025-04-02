@@ -135,7 +135,7 @@ namespace faiss {
          * @param n_entry Number of entries to add.
          * @param ids Pointer to the vector IDs.
          * @param codes Pointer to the encoded vectors.
-         * @param data_frames Arrow data frames.
+         * @param data_frames Arrow data frames for the attributes.
          * @return Number of entries added.
          * @throws std::runtime_error if the partition does not exist.
          */
