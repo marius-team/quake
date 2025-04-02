@@ -123,7 +123,7 @@ shared_ptr<ModifyTimingInfo> QuakeIndex::add(Tensor x, Tensor ids, std::shared_p
         throw std::runtime_error("[QuakeIndex::add()] No partition manager. Build the index first.");
     }
 
-    auto modify_info = partition_manager_->add(x, ids, attributes_table);
+    auto modify_info = partition_manager_->add(x, ids, Tensor(), true, attributes_table);
     modify_info->n_vectors = x.size(0);
     return modify_info;
 }

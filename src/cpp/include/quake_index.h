@@ -73,9 +73,10 @@ public:
      * @brief Add vectors to the index.
      * @param x Tensor of shape [num_vectors, dimension].
      * @param ids Tensor of shape [num_vectors].
+     * * @param attributes_table Associated attribute_table for each vector_id.
      * @return Timing information for the add operation.
      */
-    shared_ptr<ModifyTimingInfo> add(Tensor x, Tensor ids);
+    shared_ptr<ModifyTimingInfo> add(Tensor x, Tensor ids, std::shared_ptr<arrow::Table> attributes_table = {});
 
     /**
      * @brief Remove vectors from the index.

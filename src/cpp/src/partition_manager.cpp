@@ -12,6 +12,8 @@
 #include <iostream>
 #include "quake_index.h"
 #include <arrow/api.h>
+#include <arrow/compute/api_vector.h>
+#include <arrow/compute/api.h>
 
 using std::runtime_error;
 
@@ -123,47 +125,34 @@ void PartitionManager::init_partitions(
     }
 }
 
-std::shared_ptr<arrow::Table> filterRowById(std::shared_ptr<arrow::Table> table, int64_t idToFind) {
-    // Find the column index for "id"
-    auto schema = attributes_tables_->schema();
-    int id_column_index = schema->GetFieldIndex("id");
-
-    if (id_column_index == -1) {
-        std::cerr << "Error: Column 'id' not found in table.\n";
+std::shared_ptr<arrow::Table> PartitionManager::filterRowById(
+    std::shared_ptr<arrow::Table> table, 
+    int64_t target_id
+) { 
+    auto id_column = table->GetColumnByName("id");
+    if (!id_column) {
+        std::cerr << "Column 'id' not found in table." << std::endl;
         return nullptr;
     }
-
-    // Get the column as a ChunkedArray
-    auto id_chunked_array = attributes_tables_->column(id_column_index);
-
-    // Concatenate all chunks into a single array
-    auto concat_result = arrow::Concatenate(id_chunked_array->chunks());
-    if (!concat_result.ok()) {
-        std::cerr << "Error concatenating chunks: " << concat_result.status().ToString() << std::endl;
+    
+    // Create a filter expression (id == target_id)
+    arrow::Datum column_data = id_column->chunk(0);
+    arrow::Datum scalar_value = arrow::MakeScalar(target_id);
+    auto filter_expr = arrow::compute::CallFunction("equal", {column_data, scalar_value});
+    
+    if (!filter_expr.ok()) {
+        std::cerr << "Error creating filter expression: " << filter_expr.status().ToString() << std::endl;
         return nullptr;
     }
-
-    std::shared_ptr<arrow::Array> id_array = concat_result.ValueOrDie();
-
-    // Create a boolean mask for filtering
-    auto filter_result = arrow::compute::Equal(arrow::Datum(id_array), arrow::Datum(target_id));
-    if (!filter_result.ok()) {
-        std::cerr << "Error computing filter mask: " << filter_result.status().ToString() << std::endl;
+    
+    // Apply the filter
+    auto result = arrow::compute::Filter(table, filter_expr.ValueOrDie());
+    if (!result.ok()) {
+        std::cerr << "Error filtering table: " << result.status().ToString() << std::endl;
         return nullptr;
     }
-
-    // Apply the filter to create a new table
-    auto filtered_table_result = arrow::compute::Filter(table, filter_result.ValueOrDie());
-    if (!filtered_table_result.ok()) {
-        std::cerr << "Error filtering table: " << filtered_table_result.status().ToString() << std::endl;
-        return nullptr;
-    }
-
-    std::shared_ptr<arrow::Table> filtered_table = filtered_table_result.ValueOrDie();
-
-    assert(filtered_table->num_rows() == 1 && "Table size is not 1 after the filter");
-
-    return filtered_table;
+    
+    return result.ValueOrDie().table();
 }
 
 
@@ -202,7 +191,7 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
         throw runtime_error("[PartitionManager] add: mismatch in vectors.size(0) and vector_ids.size(0).");
     }
 
-    if(attributes_table->num_rows!= vector_ids.size(0)){
+    if(attributes_table->num_rows()!= vector_ids.size(0)){
         throw runtime_error("[PartitionManager] add: mismatch in attributes_table and vector_ids size.");
     }
 
@@ -311,7 +300,7 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
                       << " into partition " << pid << std::endl;
         }
 
-        std::shared_ptr<Table> filtered_table_result = filterRowById(attributes_table, search_id);
+        std::shared_ptr<arrow::Table> filtered_table_result = filterRowById(attributes_table, id_accessor[i]);
 
         partitions_->add_entries(
             pid,

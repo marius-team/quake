@@ -5,6 +5,9 @@
 // - Use descriptive variable names
 
 #include <index_partition.h>
+#include <arrow/api.h>
+#include <arrow/compute/api_vector.h>
+#include <arrow/compute/api.h>
 
 IndexPartition::IndexPartition(int64_t num_vectors,
                                uint8_t* codes,
@@ -100,54 +103,42 @@ void IndexPartition::remove(int64_t index) {
 // https://github.com/apache/arrow/issues/44243
 // Arrow data is immutable. So you can't delete a row from existing Arrow data.
 // You need to create a new Arrow data that doesn't have the target row.
-void IndexPartition::removeAttribute(int64_t index) {
-    assert(table && "Input table is null");
+void IndexPartition::removeAttribute(int64_t target_id) {
 
-    int64_t original_size = table->num_rows();
+    assert(attributes_table_ && "Input table is null");
+
+    int64_t original_size = attributes_table_->num_rows();
     if(original_size==0){
         std::cerr << "No attributes found in the table.\n";
         return;
     }
 
-    // Find the column index for "id"
-    auto schema = attributes_tables_->schema();
-    int id_column_index = schema->GetFieldIndex("id");
-
-    if (id_column_index == -1) {
-        std::cerr << "Error: Column 'id' not found in table.\n";
+    
+    auto id_column = attributes_table_->GetColumnByName("id");
+    if (!id_column) {
+        std::cerr << "Column 'id' not found in table." << std::endl;
         return;
     }
+    
+    // Create a filter expression (id != target_id)
+    auto column_data = id_column->chunk(0);
+    auto scalar_value = arrow::MakeScalar(target_id);
+    auto filter_expr = arrow::compute::CallFunction("not_equal", {column_data, scalar_value});
 
-    // Get the column as a ChunkedArray
-    auto id_chunked_array = attributes_tables_->column(id_column_index);
 
-    // Concatenate all chunks into a single array
-    auto concat_result = arrow::Concatenate(id_chunked_array->chunks());
-    if (!concat_result.ok()) {
-        std::cerr << "Error concatenating chunks: " << concat_result.status().ToString() << std::endl;
+    if (!filter_expr.ok()) {
+        std::cerr << "Error creating filter expression: " << filter_expr.status().ToString() << std::endl;
         return;
     }
-
-    std::shared_ptr<arrow::Array> id_array = concat_result.ValueOrDie();
-
-    // Create a boolean mask for filtering
-    auto filter_result = arrow::compute::NotEqual(arrow::Datum(id_array), arrow::Datum(target_id));
-    if (!filter_result.ok()) {
-        std::cerr << "Error computing filter mask: " << filter_result.status().ToString() << std::endl;
+    
+    // Apply the filter
+    auto result = arrow::compute::Filter(attributes_table_, filter_expr.ValueOrDie());
+    if (!result.ok()) {
+        std::cerr << "Error filtering table: " << result.status().ToString() << std::endl;
         return;
     }
-
-    // Apply the filter to create a new table
-    auto filtered_table_result = arrow::compute::Filter(table, filter_result.ValueOrDie());
-    if (!filtered_table_result.ok()) {
-        std::cerr << "Error filtering table: " << filtered_table_result.status().ToString() << std::endl;
-        return;
-    }
-
-    assert(filtered_table_result->num_rows() < original_size && "Table size did not decrease after filtering");
-
-    attributes_tables_ = filtered_table_result.ValueOrDie();
-
+        
+    attributes_table_ = result.ValueOrDie().table();
 }
 
 void IndexPartition::resize(int64_t new_capacity) {

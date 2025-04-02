@@ -229,7 +229,7 @@ TEST_F(QuakeIndexTest, AddTest) {
     Tensor add_vectors = generate_random_data(10, dimension_);
     Tensor add_ids = generate_sequential_ids(10, 1000);
 
-    auto modify_info = index.add(add_vectors, add_ids);
+    auto modify_info = index.add(add_vectors, add_ids, attributes_table);
     EXPECT_EQ(modify_info->n_vectors, 10);
     EXPECT_GE(modify_info->modify_time_us, 0);
 }
@@ -241,7 +241,7 @@ TEST_F(QuakeIndexTest, RemoveTest) {
     // Build
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = nlist_;
-    index.build(data_vectors_, data_ids_, build_params);
+    index.build(data_vectors_, data_ids_, build_params, attributes_table);
 
     // remove half of them
     int64_t remove_count = num_vectors_ / 2;

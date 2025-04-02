@@ -57,7 +57,7 @@ public:
     * @param assignments Tensor of shape [num_vectors] containing partition IDs. If not provided, vectors are assigned using the parent index.
     * @return Timing information for the operation.
     */
-    shared_ptr<ModifyTimingInfo> add(const Tensor &vectors, const Tensor &vector_ids, const Tensor &assignments = Tensor(), bool check_uniques = true, std::shared_ptr<arrow::Table> attributes_table);
+    shared_ptr<ModifyTimingInfo> add(const Tensor &vectors, const Tensor &vector_ids, const Tensor &assignments = Tensor(), bool check_uniques = true,std::shared_ptr<arrow::Table> attributes_table = {});
 
     /**
     * @brief Filter the appropriate row from the attribute table
