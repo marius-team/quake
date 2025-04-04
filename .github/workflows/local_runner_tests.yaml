@@ -15,7 +15,12 @@ jobs:
     runs-on: local-gpu-numa-runner
     container:
       image: ${{ needs.setup-container.outputs.container_image }}
-      options: --volume /var/run/docker.sock:/var/run/docker.sock:rw,z --user root
+      options: --user root
+    services:
+      docker:
+        image: docker:20.10-dind
+        ports:
+          - 2375:2375
 
     steps:
       - name: Who am I?
