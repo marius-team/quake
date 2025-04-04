@@ -16,7 +16,7 @@ jobs:
     container:
       image: ${{ needs.setup-container.outputs.container_image }}
       options: >-
-        --volume /var/run/docker.sock:/var/run/docker.sock:rw,z
+        --volume /usr/local/bin/node:/__e/node20/bin/node:ro
         --user root
     steps:
       - name: Checkout Repository
