@@ -27,6 +27,37 @@ protected:
     std::shared_ptr<PartitionManager> partition_manager_;
     MetricType metric_ = faiss::METRIC_L2;
 
+
+    // static std::shared_ptr<arrow::Table> generate_data_frame(int64_t num_vectors, torch::Tensor ids) {
+    //     arrow::MemoryPool* pool = arrow::default_memory_pool();
+
+    //     // Builders for the "price" and "id" columns
+    //     arrow::DoubleBuilder price_builder(pool);
+    //     arrow::Int64Builder id_builder(pool);
+
+    //     // Append values to the builders
+    //     for (int64_t i = 0; i < num_vectors; i++) {
+    //         price_builder.Append(static_cast<double>(i) * 1.5); // Price column
+    //         id_builder.Append(ids[i].item<int64_t>());          // ID column from the input tensor
+    //     }
+
+    //     // Finalize the arrays
+    //     std::shared_ptr<arrow::Array> price_array;
+    //     std::shared_ptr<arrow::Array> id_array;
+    //     price_builder.Finish(&price_array);
+    //     id_builder.Finish(&id_array);
+
+    //     // Define the schema with two fields: "price" and "id"
+    //     std::vector<std::shared_ptr<arrow::Field>> schema_vector = {
+    //         arrow::field("id", arrow::int64()),
+    //         arrow::field("price", arrow::float64()),
+    //     };
+    //     auto schema = std::make_shared<arrow::Schema>(schema_vector);
+
+    //     // Create and return the table with both columns
+    //     return arrow::Table::Make(schema, {id_array, price_array});
+    // }
+
     void SetUp() override {
 
         // Create dummy vectors and IDs

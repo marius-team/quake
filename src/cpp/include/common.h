@@ -83,6 +83,7 @@ constexpr bool DEFAULT_PRECOMPUTED = false;              ///< Default flag to us
 constexpr float DEFAULT_INITIAL_SEARCH_FRACTION = 0.2f;  ///< Default initial fraction of partitions to search.
 constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.01f;     ///< Default threshold to trigger recomputation of search parameters.
 constexpr int DEFAULT_APS_FLUSH_PERIOD_US = 100;         ///< Default period (in microseconds) for flushing the APS buffer.
+// constexpr int DEFAULT_PRICE_THRESHOLD = INT_MAX;
 
 // Default constants for maintenance policy parameters
 constexpr const char* DEFAULT_MAINTENANCE_POLICY = "query_cost"; ///< Default maintenance policy type.
@@ -176,6 +177,12 @@ inline string metric_type_to_str(faiss::MetricType metric) {
     }
 }
 
+enum class FilteringType {
+    PRE_FILTERING,
+    POST_FILTERING,
+    IN_FILTERING
+};
+
 /**
 * @brief Parameters for the search operation
 */
@@ -190,6 +197,8 @@ struct SearchParams {
     float recompute_threshold = DEFAULT_RECOMPUTE_THRESHOLD;
     float initial_search_fraction = DEFAULT_INITIAL_SEARCH_FRACTION;
     int aps_flush_period_us = DEFAULT_APS_FLUSH_PERIOD_US;
+    // int price_threshold = DEFAULT_PRICE_THRESHOLD;
+    // FilteringType filteringType = FilteringType::PRE_FILTERING;
 
     SearchParams() = default;
 };
