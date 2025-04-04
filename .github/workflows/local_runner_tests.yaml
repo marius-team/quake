@@ -15,7 +15,7 @@ jobs:
     runs-on: local-gpu-numa-runner
     container:
       image: ${{ needs.setup-container.outputs.container_image }}
-      options: --volume /var/run/docker.sock:/var/run/docker.sock
+      options: --volume /var/run/docker.sock:/var/run/docker.sock --user root
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
