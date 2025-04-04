@@ -19,10 +19,10 @@ jobs:
 
     steps:
       - name: Who am I?
-      - run: id -a
+        run: id -a
 
       - name: Check Docker Version
-      - run: /usr/local/bin/docker version --format '{{.Server.APIVersion}}'
+        run: /usr/local/bin/docker version --format '{{.Server.APIVersion}}'
 
       - name: Checkout Repository
         uses: actions/checkout@v4
