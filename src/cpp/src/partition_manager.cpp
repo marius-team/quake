@@ -132,6 +132,11 @@ std::shared_ptr<arrow::Table> PartitionManager::filterRowById(
     std::shared_ptr<arrow::Table> table, 
     int64_t target_id
 ) { 
+
+    if(attributes_table==nullptr ) {
+        return nullptr;
+    }
+
     auto id_column = table->GetColumnByName("id");
     if (!id_column) {
         std::cerr << "Column 'id' not found in table." << std::endl;
@@ -182,10 +187,6 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
         throw runtime_error("[PartitionManager] add: partitions_ is null. Did you call init_partitions?");
     }
 
-    if(!attributes_table){
-        throw runtime_error("[PartitionManager] add: attributes_table is null. Please add attributes for the vectors");
-    }
-
     if (!vectors.defined() || !vector_ids.defined()) {
         throw runtime_error("[PartitionManager] add: vectors or vector_ids is undefined.");
     }
@@ -194,11 +195,11 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
         throw runtime_error("[PartitionManager] add: mismatch in vectors.size(0) and vector_ids.size(0).");
     }
 
-    if(attributes_table->num_rows()!= vector_ids.size(0)){
+    if(attributes_table!=nullptr && attributes_table->num_rows()!= vector_ids.size(0)){
         throw runtime_error("[PartitionManager] add: mismatch in attributes_table and vector_ids size.");
     }
 
-    if(!attributes_table->GetColumnByName("id")){
+    if(attributes_table!=nullptr && !attributes_table->GetColumnByName("id")){
         throw runtime_error("[PartitionManager] add: No vector_id column in attributes_table");
     }
 
