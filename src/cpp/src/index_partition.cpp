@@ -105,7 +105,10 @@ void IndexPartition::remove(int64_t index) {
 // You need to create a new Arrow data that doesn't have the target row.
 void IndexPartition::removeAttribute(int64_t target_id) {
 
-    assert(attributes_table_ && "Input table is null");
+    if(attributes_table_ == nullptr) {
+        // if there is no table, nothing to remove, so exit gracefully
+        return;
+    }
 
     int64_t original_size = attributes_table_->num_rows();
     if(original_size==0){
