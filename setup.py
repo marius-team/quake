@@ -1,7 +1,7 @@
 import os
 import platform
-import subprocess
 import shutil
+import subprocess
 import sys
 
 from setuptools import Extension, setup
@@ -57,10 +57,11 @@ class CMakeBuild(build_ext):
         # if the gpu version of torch is installed, add the flag to the cmake args to enable the GPU build
         if torch.cuda.is_available():
             cmake_args += ["-DQUAKE_ENABLE_GPU=ON"]
-
+        else:
+            cmake_args += ["-DQUAKE_ENABLE_GPU=OFF", "-DTorch_NO_CUDA=ON", "-DTorch_USE_CUDA=OFF", "-DUSE_CUDA=OFF"]
         # check if numa is available
         try:
-            subprocess.check_output(["numactl", "--version"])
+            subprocess.check_output(["numactl", "--show"])
             cmake_args += ["-DQUAKE_USE_NUMA=ON"]
         except OSError:
             cmake_args += ["-DQUAKE_USE_NUMA=OFF"]
@@ -92,7 +93,6 @@ class CMakeBuild(build_ext):
         subprocess.check_call(["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
         subprocess.check_call(["cmake", "--build", ".", "--target", "bindings"] + build_args, cwd=self.build_temp)
 
-
     def generate_stubs(self):
         # Get the full path to the built extension.
         ext = self.extensions[0]
@@ -113,11 +113,7 @@ class CMakeBuild(build_ext):
         os.makedirs(stub_output_dir, exist_ok=True)
 
         # Run stubgen on your module.
-        cmd = [
-            "pybind11-stubgen",
-            "-o", stub_output_dir,
-            "quake._bindings"
-        ]
+        cmd = ["pybind11-stubgen", "-o", stub_output_dir, "quake._bindings"]
         subprocess.check_call(cmd, env=env)
 
         # The generated stub should be at <stub_output_dir>/quake/_bindings.pyi.
@@ -129,6 +125,7 @@ class CMakeBuild(build_ext):
         dest = os.path.join(ext_output_dir, "_bindings.pyi")
         shutil.copyfile(generated_stub, dest)
         print(f"Stub file copied to {dest}")
+
 
 setup(
     name="quake",

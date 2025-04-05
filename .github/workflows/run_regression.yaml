@@ -1,0 +1,42 @@
+name: PR Regression Test
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  setup-container:
+    uses: ./.github/workflows/container_setup.yaml
+
+  regression-test:
+    needs: setup-container
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.setup-container.outputs.container_image }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Quake
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+          pip install --no-use-pep517 .
+
+      - name: Get Baseline Artifacts
+        uses: dawidd6/action-download-artifact@v9
+        with:
+          name: baseline-artifacts
+          workflow: regression_baseline.yaml
+
+      - name: Run Regression Tests
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+          mv workloads test/python/regression
+          mv results test/python/regression
+          mv data test/python/regression
+          cd test/python/regression
+          python run_all_workloads.py --name "PR-${{ github.event.number }}"

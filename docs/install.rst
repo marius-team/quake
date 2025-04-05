@@ -21,7 +21,7 @@ Clone the repository and build the extension:
     git submodule update --init --recursive
     conda env create -f environments/ubuntu-latest/conda.yaml
     conda activate quake-env
-    pip install .
+    pip install --no-use-pep517 .
 
 For advanced build options (e.g. enabling GPU, NUMA, or AVX512), use the cmake build:
 

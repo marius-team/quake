@@ -2,27 +2,24 @@ name: Build and Test
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
-
-env:
-  BUILD_TYPE: Debug
+    branches: [ main ]
 
 jobs:
-  test:
+  setup-container:
+    uses: ./.github/workflows/container_setup.yaml
+
+  build_and_test:
+    needs: setup-container
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+      image: ${{ needs.setup-container.outputs.container_image }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-          fetch-depth: 0
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Build project
+      - name: Build C++
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
@@ -38,30 +35,17 @@ jobs:
           make bindings -j2
           make quake_tests -j2
 
-      - name: Run tests
+      - name: Run C++ Tests
+        shell: bash
         run: |
-            cd build
-            test/cpp/quake_tests
+          ./build/test/cpp/quake_tests
 
-  python_build:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-          fetch-depth: 0
-
-      - name: Debug Checkout
-        run: |
-          ls -R
-
-      - name: Build project
+      - name: Run Python Tests
+        shell: bash
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-          pip install .
+          pip install --no-use-pep517 .
           pip install pytest
           python -m pytest test/python

@@ -6,8 +6,7 @@ channels:
 dependencies:
   - python=3.11
   - numpy
-  - pytorch
-  - cpuonly
+  - pandas
   - faiss-cpu
   - matplotlib
   - pytest
@@ -18,4 +17,4 @@ dependencies:
     - sphinx_rtd_theme
     - sphinxcontrib-mermaid
     - graphviz
-
+    - pyyaml

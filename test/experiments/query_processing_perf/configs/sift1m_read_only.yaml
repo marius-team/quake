@@ -1,0 +1,82 @@
+seed: 1739
+mode: run
+name: sift1m_read_only
+overwrite: True
+
+dataset:
+  name: sift1m
+  path: data/sift
+
+index:
+  metric: l2
+  nc: 1024
+  do_maintenance: False
+
+  search:
+    k: 10
+    nprobe: 20
+    batched_scan: True
+
+configs:
+#  - name: serial_scan1
+#    build:
+#      n_workers: 0
+#    search:
+#      n_threads: 1
+#
+#  - name: serial_scan2
+#    build:
+#      n_workers: 0
+#    search:
+#      n_threads: 2
+##
+#  - name: serial_scan4
+#    build:
+#      n_workers: 0
+#    search:
+#      n_threads: 4
+##
+#  - name: serial_scan8
+#    build:
+#      n_workers: 0
+#    search:
+#      n_threads: 8
+
+  - name: worker_scan1
+    build:
+      n_workers: 1
+    search:
+      n_threads: 1
+
+  - name: worker_scan2
+    build:
+      n_workers: 2
+    search:
+      n_threads: 1
+
+  - name: worker_scan4
+    build:
+      n_workers: 4
+    search:
+      n_threads: 1
+
+
+  - name: worker_scan8
+    build:
+      n_workers: 8
+    search:
+      n_threads: 1
+
+workload:
+  insert_ratio: 0.0
+  delete_ratio: 0.0
+  query_ratio: 1.0
+  update_batch_size: 10000
+  query_batch_size: 100
+  number_of_operations: 100
+  initial_size: 1000000
+  cluster_size: 1000
+  cluster_sample_distribution: uniform
+
+results_dir: results
+workload_dir: workloads

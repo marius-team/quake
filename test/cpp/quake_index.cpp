@@ -431,7 +431,6 @@ TEST(QuakeIndexStressTest, RapidAddRemoveAddTest) {
         // Add
         auto add_vectors = generate_random_data(batch_size, dimension);
         auto add_ids = generate_sequential_ids(batch_size, i * batch_size);
-        std::cout << add_ids << std::endl;
         auto add_info = index.add(add_vectors, add_ids);
         ASSERT_EQ(add_info->n_vectors, batch_size);
 
@@ -498,8 +497,8 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
     // Repeatedly search, add, remove, and perform maintenance to see if the index remains consistent.
 
     int64_t dimension = 16;
-    int64_t num_vectors = 10000;
-    int64_t num_queries = 1;
+    int64_t num_vectors = 100000;
+    int64_t num_queries = 100;
     int64_t batch_size = 10;
 
     QuakeIndex index;
@@ -515,7 +514,8 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
 
     for (int i = 0; i < 100; i++) {
         // Search
-        auto query_vectors = generate_random_data(num_queries, dimension) * .0001;
+        std::cout << "Iteration " << i << std::endl;
+        auto query_vectors = generate_random_data(num_queries, dimension) * .1;
         auto search_params = std::make_shared<SearchParams>();
         search_params->nprobe = 1;
         search_params->k = 5;
