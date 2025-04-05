@@ -523,10 +523,10 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
     bool use_aps = (search_params->recall_target > 0.0 && parent_);
 
     // Ensure partition_ids is 2D.
-    if (partition_ids.dim() == 1) {
-        partition_ids = partition_ids.unsqueeze(0).expand({num_queries, partition_ids.size(0)});
+    if (partition_ids_to_scan.dim() == 1) {
+        partition_ids_to_scan = partition_ids_to_scan.unsqueeze(0).expand({num_queries, partition_ids_to_scan.size(0)});
     }
-    auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
+    auto partition_ids_accessor = partition_ids_to_scan.accessor<int64_t, 2>();
     float *x_ptr = x.data_ptr<float>();
 
     // Allocate per-query result vectors.
@@ -538,7 +538,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
         // Create a local TopK buffer for query q.
         auto topk_buf = std::make_shared<TopkBuffer>(k, is_descending);
         const float* query_vec = x_ptr + q * dimension;
-        int num_parts = partition_ids.size(1);
+        int num_parts = partition_ids_to_scan.size(1);
 
         vector<float> boundary_distances;
         vector<float> partition_probs;
@@ -547,10 +547,10 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             query_radius = -1000000.0;
         }
 
-        Tensor partition_sizes = partition_manager_->get_partition_sizes(partition_ids[q]);
+        Tensor partition_sizes = partition_manager_->get_partition_sizes(partition_ids_to_scan[q]);
         if (use_aps) {
-            vector<int64_t> partition_ids_to_scan_vec = std::vector<int64_t>(partition_ids[q].data_ptr<int64_t>(),
-                                                                partition_ids[q].data_ptr<int64_t>() + partition_ids[q].size(0));
+            vector<int64_t> partition_ids_to_scan_vec = std::vector<int64_t>(partition_ids_to_scan[q].data_ptr<int64_t>(),
+                                                                partition_ids_to_scan[q].data_ptr<int64_t>() + partition_ids_to_scan[q].size(0));
             vector<float *> cluster_centroids = parent_->partition_manager_->get_vectors(partition_ids_to_scan_vec);
             boundary_distances = compute_boundary_distances(x[q],
                                                             cluster_centroids,
