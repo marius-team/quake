@@ -477,37 +477,22 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     return search_result;
 }
 
-// bool* create_bitmap(std::shared_ptr<arrow::Table> attributes_table, int64_t* list_ids, 
-//                                         int64_t num_ids, shared_ptr<SearchParams> search_params) {
-//     // Get 'id' and 'price' columns
-//     std::shared_ptr<arrow::ChunkedArray> id_column = attributes_table->GetColumnByName("id");
-//     std::shared_ptr<arrow::ChunkedArray> price_column = attributes_table->GetColumnByName("price");
-
-//     if (!id_column || !price_column) {
-//         throw std::runtime_error("Columns not found in the table.");
-//     }
-
-//     auto id_array = std::static_pointer_cast<arrow::Int64Array>(id_column->chunk(0));
-//     auto price_array = std::static_pointer_cast<arrow::Int64Array>(price_column->chunk(0));
+bool* create_bitmap(std::unordered_map<int64_t, int64_t> id_to_price, int64_t* list_ids, 
+                                        int64_t num_ids, shared_ptr<SearchParams> search_params) {
     
-//     bool* bitmap = new bool[num_ids];
+    bool* bitmap = new bool[num_ids];
 
-//     std::unordered_map<int64_t, int64_t> id_to_price;
-//     for (int64_t i = 0; i < id_array->length(); i++) {
-//         id_to_price[id_array->Value(i)] = price_array->Value(i);
-//     }
+    for (int64_t i = 0; i < num_ids; i++) {
+        int64_t id = list_ids[i];
+        if (id_to_price.count(id) && id_to_price[id] <= search_params->price_threshold) {
+            bitmap[i] = 1;
+        } else {
+            bitmap[i] = 0;
+        }
+    }
 
-//     for (int64_t i = 0; i < num_ids; i++) {
-//         int64_t id = list_ids[i];
-//         if (id_to_price.count(id) && id_to_price[id] <= search_params->price_threshold) {
-//             bitmap[i] = 1;
-//         } else {
-//             bitmap[i] = 0;
-//         }
-//     }
-
-//     return bitmap;
-// }
+    return bitmap;
+}
 
 shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partition_ids_to_scan,
                                                          shared_ptr<SearchParams> search_params) {
@@ -588,20 +573,28 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             start_time = std::chrono::high_resolution_clock::now();
             float *list_vectors = (float *) partition_manager_->partitions_->get_codes(pi);
             int64_t *list_ids = (int64_t *) partition_manager_->partitions_->get_ids(pi);
-            // std::shared_ptr<arrow::Table> partition_attributes_table = 
-            //                 partition_manager_->partitions_->partitions_[pi]->attributes_tables_.front();
-            // int64_t list_size = partition_manager_->partitions_->list_size(pi);
+            std::shared_ptr<arrow::Table> partition_attributes_table = 
+                            partition_manager_->partitions_->partitions_[pi]->attributes_table_;
             int64_t list_size = partition_manager_->partitions_->list_size(pi);
-            // bool* bitmap = nullptr;
-            // if (search_params->filteringType == FilteringType::PRE_FILTERING) {
-            //     std::shared_ptr<arrow::ChunkedArray> vector_id_column = partition_attributes_table->GetColumnByName("id");
-            //     std::shared_ptr<arrow::ChunkedArray> price_column = partition_attributes_table->GetColumnByName("price");
 
-            //     if (!vector_id_column || !price_column) {
-            //        throw std::runtime_error("Columns not found in the table.");
-            //     }
-            //     bitmap = create_bitmap(partition_attributes_table, list_ids, list_size, search_params);
-            // }
+            std::shared_ptr<arrow::Int64Array> id_array = nullptr;
+            std::shared_ptr<arrow::Int64Array> price_array = nullptr;
+
+            std::unordered_map<int64_t, int64_t> id_to_price;
+
+            if (partition_attributes_table != nullptr) {
+                id_array = std::static_pointer_cast<arrow::Int64Array>(partition_attributes_table->GetColumnByName("id")->chunk(0));
+                price_array = std::static_pointer_cast<arrow::Int64Array>(partition_attributes_table->GetColumnByName("price")->chunk(0));
+                for (int64_t i = 0; i < id_array->length(); i++) {
+                    id_to_price[id_array->Value(i)] = price_array->Value(i);
+                }
+            }
+            
+            bool* bitmap = nullptr;            
+
+            if (search_params->filteringType == FilteringType::PRE_FILTERING) {
+                bitmap = create_bitmap(id_to_price, list_ids, list_size, search_params);
+            }
 
             scan_list(query_vec,
                       list_vectors,
@@ -609,7 +602,18 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                       partition_manager_->partitions_->list_size(pi),
                       dimension,
                       *topk_buf,
-                      metric_);
+                      metric_,
+                      bitmap);
+            if (search_params->filteringType ==FilteringType::POST_FILTERING) {
+                auto scanned_vectors = topk_buf->topk_;
+                int buffer_size = topk_buf->curr_offset_;
+                for (int i = 0;i < buffer_size; i++) {
+                    auto vector_id = scanned_vectors[i].second;
+                    if (id_to_price.count(vector_id) and id_to_price[vector_id] > search_params->price_threshold) {
+                        topk_buf->remove(i);
+                    }
+                }
+            }
 
             float curr_radius = topk_buf->get_kth_distance();
             float percent_change = abs(curr_radius - query_radius) / curr_radius;

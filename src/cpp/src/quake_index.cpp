@@ -91,7 +91,6 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
 
 shared_ptr<SearchResult>
 QuakeIndex::search(Tensor x, shared_ptr<SearchParams> search_params) {
-    std::cout<<"HELLO"<<std::endl;
     if (!query_coordinator_) {
         throw std::runtime_error("[QuakeIndex::search()] No query coordinator. Did you build the index?");
     }
