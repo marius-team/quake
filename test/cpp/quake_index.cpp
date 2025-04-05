@@ -228,8 +228,9 @@ TEST_F(QuakeIndexTest, AddTest) {
 
     Tensor add_vectors = generate_random_data(10, dimension_);
     Tensor add_ids = generate_sequential_ids(10, 1000);
+    auto attr_table = generate_data_frame(10,add_ids);
 
-    auto modify_info = index.add(add_vectors, add_ids, attributes_table);
+    auto modify_info = index.add(add_vectors, add_ids, attr_table);
     EXPECT_EQ(modify_info->n_vectors, 10);
     EXPECT_GE(modify_info->modify_time_us, 0);
 }

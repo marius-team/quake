@@ -133,7 +133,7 @@ std::shared_ptr<arrow::Table> PartitionManager::filterRowById(
     int64_t target_id
 ) { 
 
-    if(attributes_table==nullptr ) {
+    if(table==nullptr ) {
         return nullptr;
     }
 
