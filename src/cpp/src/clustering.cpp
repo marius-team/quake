@@ -62,7 +62,10 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
 
     for (int i = 0; i < n_clusters; i++) {
         auto mask = (assignments == i);
+
+        // List of vectors present in the cluster i
         cluster_vectors[i] = vectors.index({mask});
+        // List of vectorIds present in the cluster i
         cluster_ids[i] = ids.index({mask});
 
         if(attributes_table == nullptr) {

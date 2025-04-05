@@ -27,6 +27,45 @@ protected:
     std::shared_ptr<PartitionManager> partition_manager_;
     MetricType metric_ = faiss::METRIC_L2;
 
+    static torch::Tensor generate_random_data(int64_t num_vectors, int64_t dim) {
+        return torch::randn({num_vectors, dim}, torch::kFloat32);
+    }
+
+    static torch::Tensor generate_sequential_ids(int64_t count, int64_t start = 0) {
+        return torch::arange(start, start + count, torch::kInt64);
+    }
+
+    static std::shared_ptr<arrow::Table> generate_data_frame(int64_t num_vectors, torch::Tensor ids) {
+        arrow::MemoryPool* pool = arrow::default_memory_pool();
+
+        // Builders for the "price" and "id" columns
+        arrow::DoubleBuilder price_builder(pool);
+        arrow::Int64Builder id_builder(pool);
+
+        // Append values to the builders
+        for (int64_t i = 0; i < num_vectors; i++) {
+            price_builder.Append(i); // Price column
+            id_builder.Append(ids[i].item<int64_t>());          // ID column from the input tensor
+        }
+
+        // Finalize the arrays
+        std::shared_ptr<arrow::Array> price_array;
+        std::shared_ptr<arrow::Array> id_array;
+        price_builder.Finish(&price_array);
+        id_builder.Finish(&id_array);
+
+        // Define the schema with two fields: "price" and "id"
+        std::vector<std::shared_ptr<arrow::Field>> schema_vector = {
+            arrow::field("id", arrow::int64()),
+            arrow::field("price", arrow::float64()),
+        };
+        auto schema = std::make_shared<arrow::Schema>(schema_vector);
+
+        // Create and return the table with both columns
+        return arrow::Table::Make(schema, {id_array, price_array});
+    }
+
+
     void SetUp() override {
 
         // Create dummy vectors and IDs
@@ -167,6 +206,66 @@ TEST_F(QueryCoordinatorTest, WorkerInitializationTest) {
     );
 
     ASSERT_TRUE(coordinator->workers_initialized_);
+}
+
+TEST_F(QueryCoordinatorTest, PreFilteringTest) {
+    auto index = std::make_shared<QuakeIndex>();
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = 1;
+    build_params->metric = "l2";
+    int64_t num_vectors = 10;
+    auto data_vectors = generate_random_data(num_vectors, dimension_);
+    auto data_ids = generate_sequential_ids(num_vectors, 0);
+    auto attributes_table = generate_data_frame(num_vectors, data_ids);
+    index->build(data_vectors, data_ids, build_params, attributes_table);
+    auto coordinator = std::make_shared<QueryCoordinator>(
+        index->parent_,
+        index->partition_manager_,
+        nullptr,
+        faiss::METRIC_L2
+    );
+    auto search_params = std::make_shared<SearchParams>();
+    search_params->k = 2;
+    search_params->price_threshold = 1;
+    search_params->filteringType = FilteringType::PRE_FILTERING;
+    auto result_worker = coordinator->search(torch::randn({1, dimension_}, torch::kFloat32), search_params);
+    vector<int64_t> expected_result = {0, 1};
+    ASSERT_TRUE(result_worker != nullptr);
+    ASSERT_EQ(result_worker->ids.sizes(), (std::vector<int64_t>{1, 2}));
+    ASSERT_EQ(result_worker->distances.sizes(), (std::vector<int64_t>{1, 2}));
+    std::vector<int64_t> result_worker_vector(result_worker->ids.data<int64_t>(), result_worker->ids.data<int64_t>() + result_worker->ids.numel());
+    sort(result_worker_vector.begin(), result_worker_vector.end());
+    ASSERT_EQ(expected_result, result_worker_vector);
+}
+
+TEST_F(QueryCoordinatorTest, PostFilteringTest) {
+    auto index = std::make_shared<QuakeIndex>();
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = 1;
+    build_params->metric = "l2";
+    int64_t num_vectors = 10;
+    auto data_vectors = generate_random_data(num_vectors, dimension_);
+    auto data_ids = generate_sequential_ids(num_vectors, 0);
+    auto attributes_table = generate_data_frame(num_vectors, data_ids);
+    index->build(data_vectors, data_ids, build_params, attributes_table);
+    auto coordinator = std::make_shared<QueryCoordinator>(
+        index->parent_,
+        index->partition_manager_,
+        nullptr,
+        faiss::METRIC_L2
+    );
+    auto search_params = std::make_shared<SearchParams>();
+    search_params->k = 2;
+    search_params->price_threshold = 1;
+    search_params->filteringType = FilteringType::POST_FILTERING;
+    auto result_worker = coordinator->search(torch::randn({1, dimension_}, torch::kFloat32), search_params);
+    vector<int64_t> expected_result = {0, 1};
+    ASSERT_TRUE(result_worker != nullptr);
+    ASSERT_EQ(result_worker->ids.sizes(), (std::vector<int64_t>{1, 2}));
+    ASSERT_EQ(result_worker->distances.sizes(), (std::vector<int64_t>{1, 2}));
+    std::vector<int64_t> result_worker_vector(result_worker->ids.data<int64_t>(), result_worker->ids.data<int64_t>() + result_worker->ids.numel());
+    sort(result_worker_vector.begin(), result_worker_vector.end());
+    ASSERT_EQ(expected_result, result_worker_vector);
 }
 
 TEST_F(QueryCoordinatorTest, FlatWorkerScan) {

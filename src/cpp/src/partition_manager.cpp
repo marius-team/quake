@@ -171,7 +171,6 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
     bool check_uniques,
     std::shared_ptr<arrow::Table> attributes_table
 ) {
-
     auto timing_info = std::make_shared<ModifyTimingInfo>();
 
     if (debug_) {

@@ -149,7 +149,7 @@ TEST_F(QuakeIndexTest, SearchPartitionedTest) {
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = nlist_;
     build_params->metric = "l2";
-    index.build(data_vectors_, data_ids_, build_params);
+    index.build(data_vectors_, data_ids_, build_params, attributes_table);
 
     // Create a search_params object (if you need special fields, set them up)
     auto search_params = std::make_shared<SearchParams>();
@@ -176,7 +176,7 @@ TEST_F(QuakeIndexTest, SearchFlatTest) {
     // Build
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->metric = "l2";
-    index.build(data_vectors_, data_ids_, build_params);
+    index.build(data_vectors_, data_ids_, build_params, attributes_table);
 
     // Create a search_params object (if you need special fields, set them up)
     auto search_params = std::make_shared<SearchParams>();

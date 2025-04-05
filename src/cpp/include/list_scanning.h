@@ -148,6 +148,10 @@ public:
         partitions_scanned_.fetch_add(1, std::memory_order_relaxed);
     }
 
+    void remove(int rejected_index) {
+        topk_[rejected_index] = topk_[--curr_offset_];
+    }
+
     DistanceType flush() {
         std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
         if (curr_offset_ > k_) {
@@ -280,11 +284,22 @@ inline void scan_list_with_ids_l2(const float *query_vec,
                                         const int64_t *list_ids,
                                         int list_size,
                                         int d,
-                                        TopkBuffer &buffer) {
+                                        TopkBuffer &buffer,
+                                        bool* bitmap = nullptr) {
     const float *vec = list_vecs;
-    for (int l = 0; l < list_size; l++) {
-        buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
-        vec += d;
+
+    if (bitmap == nullptr) {
+        for (int l = 0; l < list_size; l++) {
+            buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
+            vec += d;
+        }
+    } else {
+        for (int l = 0; l < list_size; l++) {
+            if (bitmap[l]) {
+                buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
+            }
+            vec += d;
+        }
     }
 }
 
@@ -295,7 +310,8 @@ inline void scan_list(const float *query_vec,
                             int list_size,
                             int d,
                             TopkBuffer &buffer,
-                            faiss::MetricType metric = faiss::METRIC_L2) {
+                            faiss::MetricType metric = faiss::METRIC_L2,
+                            bool* bitmap = nullptr) {
     // Dispatch based on metric type and whether list_ids is provided.
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         if (list_ids == nullptr)
@@ -306,7 +322,7 @@ inline void scan_list(const float *query_vec,
         if (list_ids == nullptr)
             scan_list_no_ids_l2(query_vec, list_vecs, list_size, d, buffer);
         else
-            scan_list_with_ids_l2(query_vec, list_vecs, list_ids, list_size, d, buffer);
+            scan_list_with_ids_l2(query_vec, list_vecs, list_ids, list_size, d, buffer, bitmap);
     }
 }
 

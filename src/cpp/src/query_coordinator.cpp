@@ -10,6 +10,10 @@
 #include <quake_index.h>
 #include <geometry.h>
 #include <parallel.h>
+#include <arrow/compute/api_vector.h>
+#include <arrow/api.h>
+#include <arrow/compute/api.h>
+#include <torch/torch.h>
 
 // Constructor
 QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
@@ -468,8 +472,26 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     return search_result;
 }
 
-shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partition_ids,
-                                                       shared_ptr<SearchParams> search_params) {
+bool* create_bitmap(std::unordered_map<int64_t, int64_t> id_to_price, int64_t* list_ids, 
+                                        int64_t num_ids, shared_ptr<SearchParams> search_params) {
+    
+    bool* bitmap = new bool[num_ids];
+
+    for (int64_t i = 0; i < num_ids; i++) {
+        int64_t id = list_ids[i];
+        if (id_to_price.count(id) && id_to_price[id] <= search_params->price_threshold) {
+            bitmap[i] = 1;
+        } else {
+            bitmap[i] = 0;
+        }
+    }
+
+    return bitmap;
+}
+
+shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partition_ids_to_scan,
+                                                         shared_ptr<SearchParams> search_params) {
+
     if (!partition_manager_) {
         throw std::runtime_error("[QueryCoordinator::serial_scan] partition_manager_ is null.");
     }
@@ -541,10 +563,32 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 continue; // Skip invalid partitions
             }
 
-            start_time = high_resolution_clock::now();
-            float *list_vectors = (float *) partition_manager_->partition_store_->get_codes(pi);
-            int64_t *list_ids = (int64_t *) partition_manager_->partition_store_->get_ids(pi);
-            int64_t list_size = partition_manager_->partition_store_->list_size(pi);
+            start_time = std::chrono::high_resolution_clock::now();
+            float *list_vectors = (float *) partition_manager_->partitions_->get_codes(pi);
+            int64_t *list_ids = (int64_t *) partition_manager_->partitions_->get_ids(pi);
+            std::shared_ptr<arrow::Table> partition_attributes_table = 
+                            partition_manager_->partitions_->partitions_[pi]->attributes_table_;
+            int64_t list_size = partition_manager_->partitions_->list_size(pi);
+
+            std::shared_ptr<arrow::Int64Array> id_array = nullptr;
+            std::shared_ptr<arrow::DoubleArray> price_array = nullptr;
+
+            std::unordered_map<int64_t, int64_t> id_to_price;
+
+            if (partition_attributes_table != nullptr) {
+                id_array = std::static_pointer_cast<arrow::Int64Array>(partition_attributes_table->GetColumnByName("id")->chunk(0));
+                price_array = std::static_pointer_cast<arrow::DoubleArray>(partition_attributes_table->GetColumnByName("price")->chunk(0));
+                int64_t length = id_array->length();
+                for (int64_t i = 0; i < id_array->length(); i++) {
+                    id_to_price[id_array->Value(i)] = price_array->Value(i);
+                }
+            }
+            
+            bool* bitmap = nullptr;            
+
+            if (search_params->filteringType == FilteringType::PRE_FILTERING) {
+                bitmap = create_bitmap(id_to_price, list_ids, list_size, search_params);
+            }
 
             scan_list(query_vec,
                       list_vectors,
@@ -552,7 +596,18 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                       partition_manager_->partition_store_->list_size(pi),
                       dimension,
                       *topk_buf,
-                      metric_);
+                      metric_,
+                      bitmap);
+            if (search_params->filteringType ==FilteringType::POST_FILTERING) {
+                auto scanned_vectors = topk_buf->topk_;
+                int buffer_size = topk_buf->curr_offset_;
+                for (int i = 0;i < buffer_size; i++) {
+                    auto vector_id = scanned_vectors[i].second;
+                    if (id_to_price.count(vector_id) and id_to_price[vector_id] > search_params->price_threshold) {
+                        topk_buf->remove(i);
+                    }
+                }
+            }
 
             float curr_radius = topk_buf->get_kth_distance();
             float percent_change = abs(curr_radius - query_radius) / curr_radius;
@@ -647,6 +702,45 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
     }
 
     auto search_result = scan_partitions(x, partition_ids_to_scan, search_params);
+
+    // if (search_params->filteringType == FilteringType::POST_FILTERING and search_params->price_threshold != INT_MAX and parent_!=nullptr) {
+    //     auto id_data = search_result->ids.data<int64_t>();
+    //     auto distance_data = search_result->distances.data<float>();
+    //     int64_t num_results = search_result->ids.size(0);
+
+    //     std::vector<int64_t> filtered_ids;
+    //     std::vector<float> filtered_distances;
+
+    //     std::shared_ptr<arrow::ChunkedArray> id_column = attributes_table->GetColumnByName("id");
+    //     std::shared_ptr<arrow::ChunkedArray> price_column = attributes_table->GetColumnByName("price");
+
+    //     for (int64_t i = 0; i < num_results; i++) {
+    //         int64_t id = id_data[i];
+
+    //         // Search for this ID in the attribute table
+    //         std::shared_ptr<arrow::Datum> found_row;
+    //         auto id_scalar = arrow::MakeScalar(id);
+    //         auto price_scalar = arrow::MakeScalar(search_params->price_threshold);
+
+    //         auto equal_condition  = arrow::compute::CallFunction("equal", {id_column->chunk(0), id_scalar});
+    //         auto less_equal_condition = arrow::compute::CallFunction("less_equal", {price_column->chunk(0), price_scalar});
+
+    //         auto combined_condition = arrow::compute::CallFunction("and", {equal_condition.ValueOrDie(), less_equal_condition.ValueOrDie()});
+
+    //         auto mask_table = std::static_pointer_cast<arrow::BooleanArray>(combined_condition->make_array());
+
+    //         auto filter_result = arrow::compute::Filter(attributes_table, combined_condition.ValueOrDie());
+
+    //         if (filter_result.ok()) {
+    //             filtered_ids.push_back(id);
+    //             filtered_distances.push_back(distance_data[i]);
+    //         }
+    //     }
+
+    //     search_result->ids = torch::tensor(filtered_ids, torch::kInt64);
+    //     search_result->distances = torch::tensor(filtered_distances, torch::kFloat);
+    // }
+    
     search_result->timing_info->parent_info = parent_timing_info;
 
     auto end = high_resolution_clock::now();
