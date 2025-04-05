@@ -19,7 +19,7 @@ IndexPartition::IndexPartition(int64_t num_vectors,
     codes_ = nullptr;
     ids_ = nullptr;
     numa_node_ = -1;
-    thread_id_ = -1;
+    core_id_ = -1;
     ensure_capacity(num_vectors);
     append(num_vectors, ids, codes);
 }
@@ -67,6 +67,12 @@ void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t
         attributes_table_ = concatenated_table.ValueOrDie();
     }
     num_vectors_ += n_entry;
+
+    //
+    // // insert new ids into id_to_index_
+    // for (int64_t i = 0; i < n_entry; i++) {
+    //     id_to_index_[new_ids[i]] = num_vectors_ - n_entry + i;
+    // }
 }
 
 void IndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
@@ -92,6 +98,14 @@ void IndexPartition::remove(int64_t index) {
 
     int64_t last_idx = num_vectors_ - 1;
     const size_t code_bytes = static_cast<size_t>(code_size_);
+
+    // // Update id_to_index_
+    // idx_t last_id = ids_[last_idx];
+    // idx_t removed_id = ids_[index];
+    //
+    // id_to_index_[last_id] = index;
+    // id_to_index_.erase(removed_id);
+
     std::memcpy(codes_ + index * code_bytes, codes_ + last_idx * code_bytes, code_bytes);
     ids_[index] = ids_[last_idx];
 
@@ -161,7 +175,7 @@ void IndexPartition::resize(int64_t new_capacity) {
 void IndexPartition::clear() {
     free_memory();
     numa_node_ = -1;
-    thread_id_ = -1;
+    core_id_ = -1;
     buffer_size_ = 0;
     num_vectors_ = 0;
     code_size_ = 0;
@@ -170,12 +184,25 @@ void IndexPartition::clear() {
 }
 
 int64_t IndexPartition::find_id(idx_t id) const {
+
+    // use map
+    // auto it = id_to_index_.find(id);
+    // if (it == id_to_index_.end()) {
+    //     return -1;
+    // }
+    // return it->second;
+
+    // use linear search
     for (int64_t i = 0; i < num_vectors_; i++) {
         if (ids_[i] == id) {
             return i;
         }
     }
-    return -1; // not found
+    return -1;
+}
+
+void IndexPartition::set_core_id(int core_id) {
+    core_id_ = core_id;
 }
 
 #ifdef QUAKE_USE_NUMA
@@ -216,7 +243,7 @@ void IndexPartition::set_numa_node(int new_numa_node) {
 
 void IndexPartition::move_from(IndexPartition&& other) {
     numa_node_ = other.numa_node_;
-    thread_id_ = other.thread_id_;
+    core_id_ = other.core_id_;
     buffer_size_ = other.buffer_size_;
     num_vectors_ = other.num_vectors_;
     code_size_ = other.code_size_;

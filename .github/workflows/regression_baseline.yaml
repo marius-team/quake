@@ -1,0 +1,41 @@
+name: Manual Baseline Generation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-container:
+    uses: ./.github/workflows/container_setup.yaml
+
+  generate-baseline:
+    needs: setup-container
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.setup-container.outputs.container_image }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Quake
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+          pip install --no-use-pep517 .
+
+      - name: Run Baseline Driver Script
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+          cd test/python/regression
+          python run_all_workloads.py --overwrite --name baseline
+
+      - name: Upload Baseline Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-artifacts
+          path: |
+            test/python/regression/workloads
+            test/python/regression/results
+            test/python/regression/data

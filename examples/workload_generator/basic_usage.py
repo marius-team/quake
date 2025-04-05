@@ -13,8 +13,10 @@ Users can modify the parameters below to generate workloads suited to their need
 import math
 from pathlib import Path
 
-from quake.workload_generator import DynamicWorkloadGenerator, WorkloadEvaluator
 from quake.datasets.ann_datasets import load_dataset
+from quake.index_wrappers.quake import QuakeWrapper
+from quake.workload_generator import DynamicWorkloadGenerator, WorkloadEvaluator
+
 
 def main():
     # Directories for workload and evaluation output
@@ -26,9 +28,9 @@ def main():
     base_vectors, queries, _ = load_dataset("sift1m")
 
     # Workload generation parameters
-    insert_ratio = .9
+    insert_ratio = 0.9
     delete_ratio = 0.0
-    query_ratio = .1
+    query_ratio = 0.1
     update_batch_size = 10000
     query_batch_size = 10
     number_of_operations = 1000
@@ -41,7 +43,7 @@ def main():
 
     # Search parameters
     search_k = 10
-    recall_target = .9
+    recall_target = 0.9
 
     # Create a DynamicWorkloadGenerator instance
     generator = DynamicWorkloadGenerator(
@@ -59,31 +61,34 @@ def main():
         cluster_sample_distribution=cluster_sample_distribution,
         queries=queries,
         query_cluster_sample_distribution=query_cluster_sample_distribution,
-        seed=seed
+        seed=seed,
     )
 
     # Generate the workload (operations are saved to disk along with a runbook)
     print("Generating workload...")
     generator.generate_workload()
 
-    # Define an example index configuration.
-    index_cfg = {
-        "name": "Quake",
-        "build_params": {
-            "nc": int(math.sqrt(initial_size)) * 1,
-        }
-    }
-
     # Create a WorkloadEvaluator instance and evaluate the workload
-    evaluator = WorkloadEvaluator(
-        workload_dir=workload_dir,
-        index_cfg=index_cfg,
-        output_dir=output_dir
-    )
+    evaluator = WorkloadEvaluator(workload_dir=workload_dir, output_dir=output_dir)
 
     print("Evaluating workload...")
-    search_params = {"recall_target": recall_target, "k": search_k}
-    results = evaluator.evaluate_workload(search_params, do_maintenance=True)
+
+    nc = 1000
+    build_params = {"nc": nc, "metric": "l2"}
+    search_params = {"k": search_k, "recall_target": recall_target}
+
+    index = QuakeWrapper()
+
+    results = evaluator.evaluate_workload(
+        name="quake_test",
+        index=index,
+        build_params=build_params,
+        search_params=search_params,
+        do_maintenance=True,
+    )
+
+    print("Evaluation results:")
+    print(results)
 
 
 if __name__ == "__main__":

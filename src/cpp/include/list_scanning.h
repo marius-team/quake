@@ -111,6 +111,7 @@ public:
                 topk_[i] = { std::numeric_limits<DistanceType>::max(), -1 };
             }
         }
+        partitions_scanned_.store(0, std::memory_order_relaxed);
     }
 
     void add(DistanceType distance, IdType index) {
@@ -236,7 +237,7 @@ inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer
 inline vector<shared_ptr<TopkBuffer>> create_buffers(int n, int k, bool is_descending) {
     vector<shared_ptr<TopkBuffer>> buffers(n);
     for (int i = 0; i < n; i++) {
-        buffers[i] = make_shared<TopkBuffer>(k, is_descending, 4 * k);
+        buffers[i] = make_shared<TopkBuffer>(k, is_descending, 10 * k);
     }
     return buffers;
 }

@@ -61,6 +61,10 @@ using std::make_shared;
 using std::size_t;
 using std::string;
 using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::nanoseconds;
+using std::chrono::microseconds;
+using std::chrono::milliseconds;
 using faiss::idx_t;
 using faiss::MetricType;
 
@@ -79,28 +83,27 @@ constexpr int DEFAULT_K = 1;                             ///< Default number of 
 constexpr int DEFAULT_NPROBE = 1;                        ///< Default number of partitions to probe during search.
 constexpr float DEFAULT_RECALL_TARGET = -1.0f;           ///< Default recall target (a negative value means no adaptive search).
 constexpr bool DEFAULT_BATCHED_SCAN = false;             ///< Default flag for batched scanning.
-constexpr bool DEFAULT_PRECOMPUTED = false;              ///< Default flag to use precomputed incomplete beta fn for APS.
-constexpr float DEFAULT_INITIAL_SEARCH_FRACTION = 0.2f;  ///< Default initial fraction of partitions to search.
-constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.01f;     ///< Default threshold to trigger recomputation of search parameters.
+constexpr bool DEFAULT_PRECOMPUTED = true;               ///< Default flag to use precomputed incomplete beta fn for APS.
+constexpr float DEFAULT_INITIAL_SEARCH_FRACTION = 0.02f; ///< Default initial fraction of partitions to search.
+constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.001f;    ///< Default threshold to trigger recomputation of search parameters.
 constexpr int DEFAULT_APS_FLUSH_PERIOD_US = 100;         ///< Default period (in microseconds) for flushing the APS buffer.
 constexpr int DEFAULT_PRICE_THRESHOLD = INT_MAX;
 
 // Default constants for maintenance policy parameters
 constexpr const char* DEFAULT_MAINTENANCE_POLICY = "query_cost"; ///< Default maintenance policy type.
 constexpr int DEFAULT_WINDOW_SIZE = 1000;              ///< Default window size for measuring hit rates.
-constexpr int DEFAULT_REFINEMENT_RADIUS = 100;         ///< Default radius for local partition refinement.
+constexpr int DEFAULT_REFINEMENT_RADIUS = 25;         ///< Default radius for local partition refinement.
 constexpr int DEFAULT_REFINEMENT_ITERATIONS = 3;       ///< Default number of iterations for refinement.
 constexpr int DEFAULT_MIN_PARTITION_SIZE = 32;         ///< Default minimum allowed partition size.
 constexpr float DEFAULT_ALPHA = 0.9f;                  ///< Default alpha parameter for maintenance.
 constexpr bool DEFAULT_ENABLE_SPLIT_REJECTION = true;  ///< Default flag to enable rejection of splits.
 constexpr bool DEFAULT_ENABLE_DELETE_REJECTION = true; ///< Default flag to enable rejection of deletions.
-constexpr float DEFAULT_DELETE_THRESHOLD_NS = 20.0f;   ///< Default threshold in nanoseconds for deletion decisions.
-constexpr float DEFAULT_SPLIT_THRESHOLD_NS = 20.0f;    ///< Default threshold in nanoseconds for split decisions.
-constexpr int DEFAULT_K_LARGE = 50;                    ///< Default "large" k value (used in de-drift maintenance).
-constexpr int DEFAULT_K_SMALL = 50;                    ///< Default "small" k value (used in de-drift maintenance).
-constexpr bool DEFAULT_MODIFY_CENTROIDS = true;        ///< Default flag to modify centroids during maintenance.
-constexpr int DEFAULT_TARGET_PARTITION_SIZE = 1000;    ///< Default target partition size.
-constexpr float DEFAULT_MAX_PARTITION_RATIO = 2.0f;    ///< Default maximum allowed partition ratio.
+constexpr float DEFAULT_DELETE_THRESHOLD_NS = 10.0f;   ///< Default threshold in nanoseconds for deletion decisions.
+constexpr float DEFAULT_SPLIT_THRESHOLD_NS = 10.0f;    ///< Default threshold in nanoseconds for split decisions.
+
+const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_N = {1, 2, 4, 16, 64, 256, 1024, 4096, 16384, 65536};   ///< Default range of n values for latency estimator.
+const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_K = {1, 4, 16, 64, 256};                                ///< Default range of k values for latency estimator.
+constexpr int DEFAULT_LATENCY_ESTIMATOR_NTRIALS = 5;                                                          ///< Default number of trials for latency estimator.
 
 // macros
 #define DEBUG_PRINT(x) std::cout << #x << " = " << x << std::endl;
@@ -117,15 +120,6 @@ struct MaintenancePolicyParams {
 
     float delete_threshold_ns = DEFAULT_DELETE_THRESHOLD_NS;
     float split_threshold_ns = DEFAULT_SPLIT_THRESHOLD_NS;
-
-    // de-drift parameters
-    int k_large = DEFAULT_K_LARGE;
-    int k_small = DEFAULT_K_SMALL;
-    bool modify_centroids = DEFAULT_MODIFY_CENTROIDS;
-
-    // lire parameters
-    int target_partition_size = DEFAULT_TARGET_PARTITION_SIZE;
-    float max_partition_ratio = DEFAULT_MAX_PARTITION_RATIO;
 
     MaintenancePolicyParams() = default;
 };
@@ -190,7 +184,7 @@ struct SearchParams {
     int nprobe = DEFAULT_NPROBE;
     int k = DEFAULT_K;
     float recall_target = DEFAULT_RECALL_TARGET;
-    int num_threads = -1; // number of threads to use for search within a single worker
+    int num_threads = 1; // number of threads to use for search within a single worker
     float k_factor = 1.0f;
     bool use_precomputed = DEFAULT_PRECOMPUTED;
     bool batched_scan = DEFAULT_BATCHED_SCAN;

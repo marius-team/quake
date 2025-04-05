@@ -28,9 +28,9 @@ namespace faiss {
         int curr_list_id_ = 0;         ///< Next available partition ID.
         int total_numa_nodes_ = 0;     ///< Total NUMA nodes available.
         int next_numa_node_ = 0;       ///< Next NUMA node to use (for round-robin allocation).
-        unordered_map<size_t, shared_ptr<IndexPartition>> partitions_; ///< Map of partition ID to IndexPartition.
         int d_;                        ///< Dimensionality of the vectors (derived from code_size).
         int code_size_;                ///< Size in bytes of each vector code.
+        unordered_map<size_t, shared_ptr<IndexPartition>> partitions_; ///< Map of partition ID to IndexPartition.
 
         /**
          * @brief Constructor for DynamicInvertedLists.
@@ -237,6 +237,14 @@ namespace faiss {
          * @return True if the vector was found, false otherwise.
          */
         bool get_vector_for_id(idx_t id, float* vector_values);
+
+        /**
+         * @brief No-copy retrieve vectors by their IDs.
+         *
+         * @param ids Vector of IDs to retrieve.
+         * @return Vector of pointers to the encoded vectors.
+         */
+        vector<float *> get_vectors_by_id(vector<int64_t> ids);
 
         /**
          * @brief Generate and return a new partition ID.

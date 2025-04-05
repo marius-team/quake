@@ -3,30 +3,30 @@ name: Build and Publish Docs
 on:
   push:
     branches: [ main ]
-#  pull_request:
-#    branches: [ main ]
 
 jobs:
+  setup-container:
+    uses: ./.github/workflows/container_setup.yaml
+
   build_docs:
+    needs: setup-container
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/marius-team/quake/ubuntu-latest:latest
+      image: ${{ needs.setup-container.outputs.container_image }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-          fetch-depth: 0
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
       - name: Install Quake
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-          pip install .
+          pip install --no-use-pep517 .
 
       - name: Build Sphinx Documentation
         working-directory: docs
-        run: | 
+        run: |
           conda run -n quake-env sphinx-build -b html . _build/html
 
       - name: Deploy Documentation to GitHub Pages

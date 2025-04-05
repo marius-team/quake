@@ -1,14 +1,13 @@
 import json
 import tempfile
 from pathlib import Path
-import torch
-import numpy as np
-import pytest
 
-# Import your workload generator and evaluator
-import quake
+import pytest
+import torch
+
 from quake.index_wrappers.quake import QuakeWrapper
-from quake.workload_generator import DynamicWorkloadGenerator, WorkloadEvaluator, UniformSampler
+from quake.workload_generator import DynamicWorkloadGenerator, UniformSampler, WorkloadEvaluator
+
 
 # Create a small synthetic dataset for testing
 @pytest.fixture
@@ -23,6 +22,7 @@ def synthetic_dataset():
 
     return base_vectors, queries, workload_dir
 
+
 def test_workload_generation(synthetic_dataset):
     base_vectors, queries, workload_dir = synthetic_dataset
     workload_dir.mkdir(exist_ok=True)
@@ -31,7 +31,7 @@ def test_workload_generation(synthetic_dataset):
     # These ratios must sum to 1.
     insert_ratio = 0.3
     delete_ratio = 0.2
-    query_ratio  = 0.5
+    query_ratio = 0.5
     update_batch_size = 50
     query_batch_size = 10
     number_of_operations = 20
@@ -57,7 +57,7 @@ def test_workload_generation(synthetic_dataset):
         cluster_sample_distribution=cluster_sample_distribution,
         queries=queries,
         query_cluster_sample_distribution=query_cluster_sample_distribution,
-        seed=seed
+        seed=seed,
     )
 
     # For testing, use a simple sampler (could also test StratifiedClusterSampler)
@@ -84,6 +84,7 @@ def test_workload_generation(synthetic_dataset):
     op_count = len(runbook["operations"])
     assert op_count <= number_of_operations, "Too many operations generated."
 
+
 def test_workload_evaluation(synthetic_dataset):
     base_vectors, queries, workload_dir = synthetic_dataset
     nc = 100
@@ -91,7 +92,6 @@ def test_workload_evaluation(synthetic_dataset):
 
     index = QuakeWrapper()
 
-    experiment_params = {"n_workers": 2}
     evaluator = WorkloadEvaluator(
         workload_dir=workload_dir,
         output_dir=workload_dir,
@@ -103,7 +103,7 @@ def test_workload_evaluation(synthetic_dataset):
         index=index,
         build_params=build_params,
         search_params={"k": 5, "nprobe": 1},
-        do_maintenance=True
+        do_maintenance=True,
     )
 
     # Basic checks on the returned results

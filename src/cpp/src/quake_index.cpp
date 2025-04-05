@@ -6,6 +6,7 @@
 
 #include <quake_index.h>
 #include <clustering.h>
+#include <fstream>
 
 QuakeIndex::QuakeIndex(int current_level) {
     // Initialize the QuakeIndex
@@ -56,6 +57,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         parent_ = make_shared<QuakeIndex>(current_level_ + 1);
         auto parent_build_params = make_shared<IndexBuildParams>();
         parent_build_params->metric = build_params_->metric;
+        parent_build_params->num_workers = build_params_->num_workers;
         parent_->build(clustering->centroids, clustering->partition_ids, parent_build_params);
 
         // initialize the partition manager
@@ -146,7 +148,11 @@ shared_ptr<ModifyTimingInfo> QuakeIndex::modify(Tensor ids, Tensor x) {
 
 void QuakeIndex::initialize_maintenance_policy(shared_ptr<MaintenancePolicyParams> maintenance_policy_params) {
     maintenance_policy_params_ = maintenance_policy_params;
-    maintenance_policy_ = make_shared<QueryCostMaintenance>(partition_manager_, maintenance_policy_params);
+    maintenance_policy_ = make_shared<MaintenancePolicy>(partition_manager_, maintenance_policy_params);
+
+    if (query_coordinator_ != nullptr) {
+        query_coordinator_->maintenance_policy_ = maintenance_policy_;
+    }
 }
 
 shared_ptr<MaintenanceTimingInfo> QuakeIndex::maintenance() {
@@ -154,7 +160,7 @@ shared_ptr<MaintenanceTimingInfo> QuakeIndex::maintenance() {
         throw std::runtime_error("[QuakeIndex::maintenance()] No maintenance policy set.");
     }
 
-    return maintenance_policy_->maintenance();
+    return maintenance_policy_->perform_maintenance();
 }
 
 bool QuakeIndex::validate() {
@@ -245,7 +251,7 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers) {
         std::string parent_dir = (fs::path(dir_path) / "parent").string();
         if (fs::exists(parent_dir) && fs::is_directory(parent_dir)) {
             parent_ = std::make_shared<QuakeIndex>();
-            parent_->load(parent_dir);
+            parent_->load(parent_dir, n_workers);
             partition_manager_->parent_ = parent_;
         } else {
             parent_ = nullptr;

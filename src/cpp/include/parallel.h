@@ -9,7 +9,34 @@
 
 #include <future>
 #include <vector>
-#include <algorithm>
+
+#ifdef __linux__
+#include <pthread.h>
+#include <sched.h>
+#include <unistd.h>
+#include <iostream>
+
+
+inline bool set_affinity_linux(int core_id) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+    int ret = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    return ret == 0;
+}
+
+#endif
+
+inline bool set_thread_affinity(int core_id) {
+#ifdef __APPLE__
+    return false; // Not supported on macOS
+#elif defined(__linux__)
+    return set_affinity_linux(core_id);
+#else
+    std::cerr << "Platform not supported for setting thread affinity" << std::endl;
+    return false;
+#endif
+}
 
 template <typename IndexType, typename Function>
 void parallel_for(IndexType start, IndexType end, Function func, int num_threads = -1) {

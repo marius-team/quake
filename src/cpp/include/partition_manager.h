@@ -25,7 +25,7 @@ class QuakeIndex;
 class PartitionManager {
 public:
     shared_ptr<QuakeIndex> parent_ = nullptr; ///< Pointer to a higher-level parent index.
-    std::shared_ptr<faiss::DynamicInvertedLists> partitions_ = nullptr; ///< Pointer to the inverted lists.
+    std::shared_ptr<faiss::DynamicInvertedLists> partition_store_ = nullptr; ///< Pointer to the inverted lists.
     int64_t curr_partition_id_ = 0; ///< Current partition ID.
 
     bool debug_ = false; ///< If true, print debug information.
@@ -80,8 +80,14 @@ public:
     Tensor get(const Tensor &ids);
 
     /**
+     * @brief No copy version of get
+     * @param ids Vector of IDs.
+     */
+     vector<float *> get_vectors(vector<int64_t> ids);
+
+    /**
      * @brief Split a given partition into multiple smaller ones.
-     * @param partition_id The ID/index of the partition to split.
+     * @param partition_ids The partition IDs to split.
      */
     shared_ptr<Clustering> split_partitions(const Tensor &partition_ids);
 
@@ -90,7 +96,7 @@ public:
     * @param partition_ids Tensor of shape [num_partitions] containing partition IDs. If empty, refines all partitions.
     * @param refinement_iterations Number of refinement iterations. If 0, then only reassigns vectors.
     */
-    void refine_partitions(const Tensor &partition_ids = Tensor(), int refinement_iterations = 0);
+    void refine_partitions(Tensor partition_ids = Tensor(), int refinement_iterations = 0);
 
     /**
      * @brief Delete multiple partitions and reassign vectors
@@ -113,16 +119,22 @@ public:
     shared_ptr<Clustering> select_partitions(const Tensor &partition_ids, bool copy = false);
 
     /**
-     * @brief Randomly breaks up the single partition into multiple partitions and distributes the partitions. Only applicable for flat indexes.
-     * @param n_partitions The number of partitions to split the single partition into.
-     */
-    void distribute_flat(int n_partitions);
-
-    /**
      * @brief Distribute the partitions across multiple workers.
      * @param num_workers The number of workers to distribute the partitions across.
      */
     void distribute_partitions(int num_workers);
+
+    /**
+     * @brief Set the core ID for a given partition.
+     * @param partition_id The ID of the partition.
+     */
+    void set_partition_core_id(int64_t partition_id, int core_id);
+
+    /**
+     * @brief Return the core ID for a given partition.
+     * @param partition_id The ID of the partition.
+     */
+    int get_partition_core_id(int64_t partition_id);
 
     /**
      * @brief Return total number of vectors across all partitions.
@@ -144,6 +156,18 @@ public:
      * @param partition_ids Tensor of shape [num_partitions] containing partition IDs.
      */
     Tensor get_partition_sizes(Tensor partition_ids = Tensor());
+
+    /**
+     * @brief Get the partition size.
+     * @param partition_ids Vector of partition IDs.
+     */
+     vector<int64_t> get_partition_sizes(vector<int64_t> partition_ids);
+
+    /**
+     * @brief Get the partition size.
+     * @param partition_id The ID of the partition.
+     */
+    int64_t get_partition_size(int64_t partition_id);
 
     /**
      * @brief Get the partition IDs.

@@ -5,6 +5,8 @@
 // - Use descriptive variable names
 
 #include "clustering.h"
+#include "index_partition.h"
+#include <list_scanning.h>
 #include <faiss/IndexFlat.h>
 #include "faiss/Clustering.h"
 #include <arrow/compute/api_vector.h>
@@ -30,7 +32,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     int d = vectors.size(1);
 
     // Create a flat index appropriate to the metric.
-    faiss::IndexFlat* index_ptr = nullptr;
+    faiss::IndexFlat *index_ptr = nullptr;
     if (metric_type == faiss::METRIC_INNER_PRODUCT)
         index_ptr = new faiss::IndexFlatIP(d);
     else
@@ -120,4 +122,89 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
 
     delete index_ptr;
     return clustering;
+}
+
+tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
+    Tensor centroids,
+    vector<shared_ptr<IndexPartition>> partitions,
+    MetricType metric,
+    int refinement_iterations) {
+
+    // Determine number of clusters and dimension.
+    int n_clusters = centroids.size(0);
+    int d = centroids.size(1);
+
+    // Run for the desired number of iterations (if refinement_iterations==0, do one pass).
+    int iterations = (refinement_iterations > 0) ? refinement_iterations : 1;
+
+    Tensor centroid_sums = torch::zeros_like(centroids);
+    Tensor centroid_counts = torch::zeros({n_clusters}, torch::kInt64);
+    auto centroid_sums_accessor = centroid_sums.accessor<float, 2>();
+    auto centroid_counts_accessor = centroid_counts.accessor<int64_t, 1>();
+
+    vector<shared_ptr<IndexPartition>> prev_partitions = partitions;
+    vector<shared_ptr<IndexPartition>> new_partitions;
+
+    for (int iter = 0; iter < iterations; iter++) {
+
+        if (iter > 0) {
+            centroids = centroid_sums / centroid_counts.unsqueeze(1).to(torch::kFloat32);
+        }
+
+        // Reset accumulators.
+        centroid_sums.zero_();
+        centroid_counts.zero_();
+        new_partitions.clear();
+        new_partitions.resize(n_clusters);
+
+        for (int i = 0; i < n_clusters; i++) {
+            new_partitions[i] = make_shared<IndexPartition>();
+            new_partitions[i]->set_code_size(partitions[0]->code_size_);
+            new_partitions[i]->resize(10);
+        }
+
+        float *centroids_ptr = centroids.data_ptr<float>();
+
+        // Process each existing partition.
+        for (auto &part: partitions) {
+            int64_t nvec = part->num_vectors_;
+            if (nvec <= 0) continue;
+
+            float *part_vecs = (float *) part->codes_;
+            int64_t *part_vec_ids = part->ids_;
+
+            // Create batched TopK buffers (k=1 for nearest centroid).
+            vector<shared_ptr<TopkBuffer> > buffers = create_buffers(nvec, 1, false);
+
+            // Use batched_scan_list to get nearest centroid for each vector.
+            batched_scan_list(part_vecs,
+                              centroids_ptr,
+                              nullptr,
+                              nvec,
+                              n_clusters,
+                              d,
+                              buffers,
+                              metric);
+
+            // For each vector in this partition, determine its assignment.
+            for (int i = 0; i < nvec; i++) {
+                vector<int64_t> assign = buffers[i]->get_topk_indices(); // top1 assignment
+                int assigned_cluster = assign[0];
+
+                // Update accumulators.
+                float *vec_ptr = part_vecs + i * d;
+                int64_t *vec_id = part_vec_ids + i;
+
+                for (int j = 0; j < d; j++) {
+                    centroid_sums_accessor[assigned_cluster][j] += vec_ptr[j];
+                }
+                centroid_counts_accessor[assigned_cluster]++;
+
+                new_partitions[assigned_cluster]->append(1, vec_id, (uint8_t *) vec_ptr);
+            }
+        } // end for each partition
+        std::move(new_partitions.begin(), new_partitions.end(), partitions.begin());
+    } // end iterations
+
+    return std::make_tuple(centroids, partitions);
 }

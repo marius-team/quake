@@ -6,9 +6,10 @@ from typing import List, Union
 import numpy as np
 import torch
 
-from quake.utils import download_url, extract_file, fvecs_to_tensor, ivecs_to_tensor, to_path, to_torch
+from quake.utils import download_url, extract_file, fvecs_to_tensor, ivecs_to_tensor, to_path
 
 DEFAULT_DOWNLOAD_DIR = Path("data/")
+
 
 class Dataset(abc.ABC):
     url: str = None
@@ -72,7 +73,7 @@ class Sift1m(Dataset):
 
 
 def load_dataset(
-        name: str, download_dir: str = DEFAULT_DOWNLOAD_DIR, overwrite_download: bool = False
+    name: str, download_dir: str = DEFAULT_DOWNLOAD_DIR, overwrite_download: bool = False
 ) -> List[Union[np.ndarray, torch.Tensor]]:
     if name.lower() == "sift1m":
         dataset = Sift1m(download_dir=download_dir)

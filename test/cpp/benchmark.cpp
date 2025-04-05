@@ -29,9 +29,10 @@ using torch::Tensor;
 static const int64_t DIM = 128;
 static const int64_t NUM_VECTORS = 100000;   // number of database vectors
 static const int64_t N_LIST = 100;           // number of clusters for IVF
-static const int64_t NUM_QUERIES = 1000;     // number of queries for search benchmark
+static const int64_t NUM_QUERIES = 10;     // number of queries for search benchmark
 static const int64_t K = 10;                  // top-K neighbors
-static const int64_t N_PROBE = 8;             // number of probes for IVF
+static const int64_t N_PROBE = 32;             // number of probes for IVF
+static const int64_t N_WORKERS = 12;           // number of workers for parallel query coordinator
 
 // Helper functions to generate random data and sequential IDs
 static Tensor generate_data(int64_t num, int64_t dim) {
@@ -110,9 +111,8 @@ class QuakeWorkerFlatBenchmark : public ::testing::Test {
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = 1;      // flat index
         build_params->metric = "l2";
-        // Use as many workers as hardware concurrency
-        build_params->num_workers = std::thread::hardware_concurrency();
-        index_->build(data_, ids_, build_params, attributes_table_);
+        build_params->num_workers = N_WORKERS;
+        index_->build(data_, ids_, build_params,attributes_table_);
     }
 };
 
@@ -153,9 +153,8 @@ protected:
         build_params->nlist = N_LIST;     // IVF index
         build_params->metric = "l2";
         build_params->niter = 3;
-        // Use as many workers as hardware concurrency
-        build_params->num_workers = std::thread::hardware_concurrency();
-        index_->build(data_, ids_, build_params, attributes_table_);
+        build_params->num_workers = N_WORKERS;
+        index_->build(data_, ids_, build_params,attributes_table_);
     }
 };
 
@@ -163,7 +162,7 @@ protected:
 // ===== Faiss BENCHMARK FIXTURES =====
 //
 
-// For Faiss Flat we use IndexFlatL2.
+// For Faiss Flat we use IndexFlatL2
 class FaissFlatBenchmark : public ::testing::Test {
 protected:
     std::unique_ptr<faiss::IndexFlatL2> index_;
@@ -207,7 +206,9 @@ TEST_F(QuakeSerialFlatBenchmark, Search) {
     search_params->batched_scan = false;
 
     auto start = high_resolution_clock::now();
-    auto result = index_->search(queries, search_params);
+    for (int i = 0; i < queries.size(0); i++) {
+        auto result = index_->search(queries[i].unsqueeze(0), search_params);
+    }
     auto end = high_resolution_clock::now();
     auto elapsed = duration_cast<milliseconds>(end - start).count();
 
@@ -238,8 +239,14 @@ TEST_F(QuakeWorkerFlatBenchmark, Search) {
     search_params->nprobe = 1;  // not used for flat index
     search_params->batched_scan = false;
 
+    for (int i = 0; i < queries.size(0); i++) {
+        auto result = index_->search(queries[i].unsqueeze(0), search_params);
+    }
+
     auto start = high_resolution_clock::now();
-    auto result = index_->search(queries, search_params);
+    for (int i = 0; i < queries.size(0); i++) {
+        auto result = index_->search(queries[i].unsqueeze(0), search_params);
+    }
     auto end = high_resolution_clock::now();
     auto elapsed = duration_cast<milliseconds>(end - start).count();
 
@@ -253,6 +260,8 @@ TEST_F(QuakeWorkerFlatBenchmark, SearchBatch) {
     search_params->k = K;
     search_params->nprobe = 1;  // not used for flat index
     search_params->batched_scan = true;
+
+    index_->search(queries, search_params);
 
     auto start = high_resolution_clock::now();
     auto result = index_->search(queries, search_params);
@@ -269,8 +278,15 @@ TEST_F(QuakeSerialIVFBenchmark, Search) {
     search_params->k = K;
     search_params->nprobe = N_PROBE;
     search_params->batched_scan = false;
+
+    for (int i = 0; i < queries.size(0); i++) {
+        auto result = index_->search(queries[i].unsqueeze(0), search_params);
+    }
+
     auto start = high_resolution_clock::now();
-    auto result = index_->search(queries, search_params);
+    for (int i = 0; i < queries.size(0); i++) {
+        auto result = index_->search(queries[i].unsqueeze(0), search_params);
+    }
     auto end = high_resolution_clock::now();
     auto elapsed = duration_cast<milliseconds>(end - start).count();
 
@@ -284,6 +300,8 @@ TEST_F(QuakeSerialIVFBenchmark, SearchBatch) {
     search_params->k = K;
     search_params->nprobe = N_PROBE;
     search_params->batched_scan = true;
+
+    index_->search(queries, search_params);
     auto start = high_resolution_clock::now();
     auto result = index_->search(queries, search_params);
     auto end = high_resolution_clock::now();
@@ -298,10 +316,19 @@ TEST_F(QuakeWorkerIVFBenchmark, Search) {
     auto search_params = std::make_shared<SearchParams>();
     search_params->k = K;
     search_params->nprobe = N_PROBE;
+    // search_params->recall_target = .75;
+    // search_params->aps_flush_period_us = 1;
     // For worker-based search, batched_scan can be false (or true) depending on your implementation.
     search_params->batched_scan = false;
+
+    for (int i = 0; i < queries.size(0); i++) {
+        auto result = index_->search(queries[i].unsqueeze(0), search_params);
+    }
+
     auto start = high_resolution_clock::now();
-    auto result = index_->search(queries, search_params);
+    for (int i = 0; i < queries.size(0); i++) {
+        auto result = index_->search(queries[i].unsqueeze(0), search_params);
+    }
     auto end = high_resolution_clock::now();
     auto elapsed = duration_cast<milliseconds>(end - start).count();
 
@@ -315,6 +342,9 @@ TEST_F(QuakeWorkerIVFBenchmark, SearchBatch) {
     search_params->k = K;
     search_params->nprobe = N_PROBE;
     search_params->batched_scan = true;
+
+    index_->search(queries, search_params);
+
     auto start = high_resolution_clock::now();
     auto result = index_->search(queries, search_params);
     auto end = high_resolution_clock::now();
@@ -377,12 +407,32 @@ TEST_F(QuakeSerialIVFBenchmark, Remove) {
 //
 // ===== Faiss BENCHMARK TESTS =====
 //
-
 TEST_F(FaissFlatBenchmark, Search) {
     int64_t k = K;
     std::vector<float> distances(NUM_QUERIES * k);
     std::vector<faiss::idx_t> labels(NUM_QUERIES * k);
     Tensor queries = generate_data(NUM_QUERIES, DIM);
+
+    for (int i = 0; i < queries.size(0); i++) {
+        index_->search(1, queries[i].data_ptr<float>(), k, distances.data() + i * k, labels.data() + i * k);
+    }
+    auto start = high_resolution_clock::now();
+    for (int i = 0; i < queries.size(0); i++) {
+        index_->search(1, queries[i].data_ptr<float>(), k, distances.data() + i * k, labels.data() + i * k);
+    }
+    auto end = high_resolution_clock::now();
+    auto elapsed = duration_cast<milliseconds>(end - start).count();
+    std::cout << "[Faiss Flat] Search time: " << elapsed << " ms" << std::endl;
+    ASSERT_GT(elapsed, 0);
+}
+
+TEST_F(FaissFlatBenchmark, SearchBatch) {
+    int64_t k = K;
+    std::vector<float> distances(NUM_QUERIES * k);
+    std::vector<faiss::idx_t> labels(NUM_QUERIES * k);
+    Tensor queries = generate_data(NUM_QUERIES, DIM);
+
+    index_->search(NUM_QUERIES, queries.data_ptr<float>(), k, distances.data(), labels.data());
     auto start = high_resolution_clock::now();
     index_->search(NUM_QUERIES, queries.data_ptr<float>(), k, distances.data(), labels.data());
     auto end = high_resolution_clock::now();
@@ -417,6 +467,27 @@ TEST_F(FaissFlatBenchmark, Remove) {
 }
 
 TEST_F(FaissIVFBenchmark, Search) {
+    int64_t k = K;
+    std::vector<float> distances(NUM_QUERIES * k);
+    std::vector<faiss::idx_t> labels(NUM_QUERIES * k);
+    index_->nprobe = N_PROBE;
+    Tensor queries = generate_data(NUM_QUERIES, DIM);
+
+    for (int i = 0; i < queries.size(0); i++) {
+        index_->search(1, queries[i].data_ptr<float>(), k, distances.data() + i * k, labels.data() + i * k);
+    }
+
+    auto start = high_resolution_clock::now();
+    for (int i = 0; i < queries.size(0); i++) {
+        index_->search(1, queries[i].data_ptr<float>(), k, distances.data() + i * k, labels.data() + i * k);
+    }
+    auto end = high_resolution_clock::now();
+    auto elapsed = duration_cast<milliseconds>(end - start).count();
+    std::cout << "[Faiss IVF] Search time: " << elapsed << " ms" << std::endl;
+    ASSERT_GT(elapsed, 0);
+}
+
+TEST_F(FaissIVFBenchmark, SearchBatch) {
     int64_t k = K;
     std::vector<float> distances(NUM_QUERIES * k);
     std::vector<faiss::idx_t> labels(NUM_QUERIES * k);
