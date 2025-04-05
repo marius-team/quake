@@ -180,7 +180,7 @@ namespace faiss {
         const idx_t *ids,
         const uint8_t *codes
         ) {
-        return add_entries(list_no, n_entry, ids, codes, {});
+        return add_entries(list_no, n_entry, ids, codes, nullptr);
     }
 
     void DynamicInvertedLists::update_entries(

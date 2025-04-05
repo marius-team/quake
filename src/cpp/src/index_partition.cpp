@@ -61,7 +61,7 @@ void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t
     // append attributes_table to attributes_table_ 
     if (attributes_table_ == nullptr) {
         attributes_table_ = attributes_table;
-    } else {
+    } else if (attributes_table != nullptr) {
         // Concatenate the new attributes table with the existing one
         auto concatenated_table = arrow::ConcatenateTables({attributes_table_, attributes_table});
         attributes_table_ = concatenated_table.ValueOrDie();
