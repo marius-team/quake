@@ -286,10 +286,6 @@ inline void scan_list_with_ids_l2(const float *query_vec,
                                         TopkBuffer &buffer,
                                         bool* bitmap = nullptr) {
     const float *vec = list_vecs;
-    // for (int l = 0; l < list_size; l++) {
-    //     buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
-    //     vec += d;
-    // }
 
     if (bitmap == nullptr) {
         for (int l = 0; l < list_size; l++) {

@@ -578,13 +578,14 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             int64_t list_size = partition_manager_->partitions_->list_size(pi);
 
             std::shared_ptr<arrow::Int64Array> id_array = nullptr;
-            std::shared_ptr<arrow::Int64Array> price_array = nullptr;
+            std::shared_ptr<arrow::DoubleArray> price_array = nullptr;
 
             std::unordered_map<int64_t, int64_t> id_to_price;
 
             if (partition_attributes_table != nullptr) {
                 id_array = std::static_pointer_cast<arrow::Int64Array>(partition_attributes_table->GetColumnByName("id")->chunk(0));
-                price_array = std::static_pointer_cast<arrow::Int64Array>(partition_attributes_table->GetColumnByName("price")->chunk(0));
+                price_array = std::static_pointer_cast<arrow::DoubleArray>(partition_attributes_table->GetColumnByName("price")->chunk(0));
+                int64_t length = id_array->length();
                 for (int64_t i = 0; i < id_array->length(); i++) {
                     id_to_price[id_array->Value(i)] = price_array->Value(i);
                 }
