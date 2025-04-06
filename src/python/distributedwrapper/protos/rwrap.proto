@@ -1,0 +1,42 @@
+service Wrap {
+  rpc SendInstance (InstanceRequest) returns (InstanceResponse) {}
+  rpc SendCommand (CommandRequest) returns (CommandResponse) {}
+  rpc SendImport (ImportRequest) returns (ImportResponse) {}
+  rpc SendCleanup (CleanupRequest) returns (CleanupResponse) {}
+}
+
+message CleanupRequest {
+}
+
+message CleanupResponse {
+}
+
+message InstanceRequest {
+  required string name = 1;
+  required bytes payload = 2;
+}
+
+message InstanceResponse {
+  required uint32 uuid = 1;
+}
+
+message CommandRequest {
+  required int32 uuid = 1;
+  required string method = 2;
+  required bytes payload = 3;
+}
+
+message CommandResponse {
+  required bytes result = 1;
+  required bool direct = 2;
+}
+
+message ImportRequest {
+  required string package = 1;
+  optional string as_name = 2;
+  optional string item = 3;
+}
+
+message ImportResponse {
+
+}

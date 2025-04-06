@@ -14,7 +14,9 @@ dependencies = [
     "numpy",
     "pandas",
     "faiss-cpu",
-    "matplotlib"
+    "matplotlib",
+    "grpcio",
+    "protobuf",
 ]
 
 [tool.black]
