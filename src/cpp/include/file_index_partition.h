@@ -2,6 +2,7 @@
 #define FILE_INDEX_PARTITION_H
 
 #include <index_partition.h>
+#include <string>
 
 
 class FileIndexPartition : public IndexPartition {
@@ -47,7 +48,6 @@ public:
     ~FileIndexPartition();
 
     // overriden methods
-    void set_code_size(int64_t code_size) override;
     void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) override;
     void update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) override;
     void remove(int64_t index) override;
@@ -77,10 +77,10 @@ public:
 #endif
 
 private:
-    string file_path
-    bool is_in_memory // indicate whether the partitionis in memory
-    bool is_dirty // indicate whether the partition is dirty (changes haven't been synced to disk)
+    std::string file_path;
+    bool is_in_memory = false; // indicate whether the partition is in memory
+    bool is_dirty = false; // indicate whether the partition is dirty (changes haven't been synced to disk)
     
-}
+};
 
 #endif // FILE_INDEX_PARTITION_H
