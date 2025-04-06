@@ -27,6 +27,7 @@ public:
 
     uint8_t* codes_ = nullptr;  ///< Pointer to the encoded vectors (raw memory block)
     idx_t* ids_ = nullptr;      ///< Pointer to the vector IDs
+    std::shared_ptr<arrow::Table> attributes_table_ = {};
 
     std::unordered_map<idx_t, int64_t> id_to_index_; ///< Map of vector ID to index
 
@@ -88,7 +89,7 @@ public:
      * @param new_ids Pointer to the new vector IDs.
      * @param new_codes Pointer to the new encoded vectors.
      */
-    void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes);
+    void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes, std::shared_ptr<arrow::Table> attributes_table=nullptr);
 
     /**
      * @brief Update existing entries in place.
@@ -110,6 +111,15 @@ public:
      * @param index Index of the vector to remove.
      */
     void remove(int64_t index);
+
+    /**
+     * @brief Remove the associated attribute of an entry from the partition. Used in conjuntion with the remove(index) function 
+     *
+     * Removes the attribute by performing masking & filtering
+     *
+     * @param index Index of the vector to remove.
+     */
+    void removeAttribute(int64_t index);
 
     /**
      * @brief Resize the partition.

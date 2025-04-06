@@ -43,6 +43,36 @@ static Tensor generate_ids(int64_t num, int64_t start = 0) {
     return torch::arange(start, start + num, torch::kInt64);
 }
 
+static std::shared_ptr<arrow::Table> generate_data_frame(int64_t num_vectors, torch::Tensor ids) {
+    arrow::MemoryPool* pool = arrow::default_memory_pool();
+
+    // Builders for the "price" and "id" columns
+    arrow::DoubleBuilder price_builder(pool);
+    arrow::Int64Builder id_builder(pool);
+
+    // Append values to the builders
+    for (int64_t i = 0; i < num_vectors; i++) {
+        price_builder.Append(static_cast<double>(i) * 1.5); // Price column
+        id_builder.Append(ids[i].item<int64_t>());          // ID column from the input tensor
+    }
+
+    // Finalize the arrays
+    std::shared_ptr<arrow::Array> price_array;
+    std::shared_ptr<arrow::Array> id_array;
+    price_builder.Finish(&price_array);
+    id_builder.Finish(&id_array);
+
+    // Define the schema with two fields: "price" and "id"
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector = {
+        arrow::field("id", arrow::int64()),
+        arrow::field("price", arrow::float64()),
+    };
+    auto schema = std::make_shared<arrow::Schema>(schema_vector);
+
+    // Create and return the table with both columns
+    return arrow::Table::Make(schema, {id_array, price_array});
+}
+
 //
 // ===== Quake BENCHMARK FIXTURES =====
 //
@@ -53,14 +83,16 @@ protected:
     std::shared_ptr<QuakeIndex> index_;
     Tensor data_;
     Tensor ids_;
+    std::shared_ptr<arrow::Table> attributes_table_;
     void SetUp() override {
         data_ = generate_data(NUM_VECTORS, DIM);
         ids_ = generate_ids(NUM_VECTORS);
+        attributes_table_ = generate_data_frame(NUM_VECTORS, ids_);
         index_ = std::make_shared<QuakeIndex>();
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = 1;      // flat index
         build_params->metric = "l2";
-        index_->build(data_, ids_, build_params);
+        index_->build(data_, ids_, build_params, attributes_table_);
     }
 };
 
@@ -70,16 +102,17 @@ class QuakeWorkerFlatBenchmark : public ::testing::Test {
     std::shared_ptr<QuakeIndex> index_;
     Tensor data_;
     Tensor ids_;
+    std::shared_ptr<arrow::Table> attributes_table_;
     void SetUp() override {
         data_ = generate_data(NUM_VECTORS, DIM);
         ids_ = generate_ids(NUM_VECTORS);
+        attributes_table_ = generate_data_frame(NUM_VECTORS, ids_);
         index_ = std::make_shared<QuakeIndex>();
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = 1;      // flat index
         build_params->metric = "l2";
-        // Use as many workers as hardware concurrency
         build_params->num_workers = N_WORKERS;
-        index_->build(data_, ids_, build_params);
+        index_->build(data_, ids_, build_params,attributes_table_);
     }
 };
 
@@ -90,15 +123,17 @@ protected:
     std::shared_ptr<QuakeIndex> index_;
     Tensor data_;
     Tensor ids_;
+    std::shared_ptr<arrow::Table> attributes_table_;
     void SetUp() override {
         data_ = generate_data(NUM_VECTORS, DIM);
         ids_ = generate_ids(NUM_VECTORS);
+        attributes_table_ = generate_data_frame(NUM_VECTORS, ids_);
         index_ = std::make_shared<QuakeIndex>();
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = N_LIST;     // IVF index
         build_params->metric = "l2";
         build_params->niter = 3;
-        index_->build(data_, ids_, build_params);
+        index_->build(data_, ids_, build_params, attributes_table_);
     }
 };
 
@@ -108,16 +143,18 @@ protected:
     std::shared_ptr<QuakeIndex> index_;
     Tensor data_;
     Tensor ids_;
+    std::shared_ptr<arrow::Table> attributes_table_;
     void SetUp() override {
         data_ = generate_data(NUM_VECTORS, DIM);
         ids_ = generate_ids(NUM_VECTORS);
+        attributes_table_ = generate_data_frame(NUM_VECTORS, ids_);
         index_ = std::make_shared<QuakeIndex>();
         auto build_params = std::make_shared<IndexBuildParams>();
         build_params->nlist = N_LIST;     // IVF index
         build_params->metric = "l2";
         build_params->niter = 3;
         build_params->num_workers = N_WORKERS;
-        index_->build(data_, ids_, build_params);
+        index_->build(data_, ids_, build_params,attributes_table_);
     }
 };
 

@@ -5,6 +5,9 @@
 // - Use descriptive variable names
 
 #include <index_partition.h>
+#include <arrow/api.h>
+#include <arrow/compute/api_vector.h>
+#include <arrow/compute/api.h>
 
 IndexPartition::IndexPartition(int64_t num_vectors,
                                uint8_t* codes,
@@ -49,12 +52,20 @@ void IndexPartition::set_code_size(int64_t code_size) {
     code_size_ = code_size;
 }
 
-void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
+void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes, std::shared_ptr<arrow::Table> attributes_table) {
     if (n_entry <= 0) return;
     ensure_capacity(num_vectors_ + n_entry);
     const size_t code_bytes = static_cast<size_t>(code_size_);
     std::memcpy(codes_ + num_vectors_ * code_bytes, new_codes, n_entry * code_bytes);
     std::memcpy(ids_ + num_vectors_, new_ids, n_entry * sizeof(idx_t));
+    // append attributes_table to attributes_table_ 
+    if (attributes_table_ == nullptr) {
+        attributes_table_ = attributes_table;
+    } else if (attributes_table != nullptr) {
+        // Concatenate the new attributes table with the existing one
+        auto concatenated_table = arrow::ConcatenateTables({attributes_table_, attributes_table});
+        attributes_table_ = concatenated_table.ValueOrDie();
+    }
     num_vectors_ += n_entry;
 
     //
@@ -99,6 +110,52 @@ void IndexPartition::remove(int64_t index) {
     ids_[index] = ids_[last_idx];
 
     num_vectors_--;
+
+    removeAttribute(index);
+}
+
+// https://github.com/apache/arrow/issues/44243
+// Arrow data is immutable. So you can't delete a row from existing Arrow data.
+// You need to create a new Arrow data that doesn't have the target row.
+void IndexPartition::removeAttribute(int64_t target_id) {
+
+    if(attributes_table_ == nullptr) {
+        // if there is no table, nothing to remove, so exit gracefully
+        return;
+    }
+
+    int64_t original_size = attributes_table_->num_rows();
+    if(original_size==0){
+        std::cerr << "No attributes found in the table.\n";
+        return;
+    }
+
+    
+    auto id_column = attributes_table_->GetColumnByName("id");
+    if (!id_column) {
+        std::cerr << "Column 'id' not found in table." << std::endl;
+        return;
+    }
+    
+    // Create a filter expression (id != target_id)
+    auto column_data = id_column->chunk(0);
+    auto scalar_value = arrow::MakeScalar(target_id);
+    auto filter_expr = arrow::compute::CallFunction("not_equal", {column_data, scalar_value});
+
+
+    if (!filter_expr.ok()) {
+        std::cerr << "Error creating filter expression: " << filter_expr.status().ToString() << std::endl;
+        return;
+    }
+    
+    // Apply the filter
+    auto result = arrow::compute::Filter(attributes_table_, filter_expr.ValueOrDie());
+    if (!result.ok()) {
+        std::cerr << "Error filtering table: " << result.status().ToString() << std::endl;
+        return;
+    }
+        
+    attributes_table_ = result.ValueOrDie().table();
 }
 
 void IndexPartition::resize(int64_t new_capacity) {

@@ -93,11 +93,13 @@ endif()
 # Find Required Packages
 # ---------------------------------------------------------------
 find_package(Torch REQUIRED)
+find_package(Arrow REQUIRED)  # Corrected to uppercase 'Arrow'
 find_package(Python3 COMPONENTS Development Interpreter REQUIRED)
 
 message(STATUS "Torch include dir: ${TORCH_INCLUDE_DIRS}")
 message(STATUS "Torch libraries: ${TORCH_LIBRARIES}")
 message(STATUS "Python include dir: ${Python3_INCLUDE_DIRS}")
+message(STATUS "Arrow include dir: ${ARROW_INCLUDE_DIR}")
 
 set(PYTHON_INCLUDE_DIR ${Python3_INCLUDE_DIRS})
 
@@ -115,6 +117,7 @@ target_include_directories(${PROJECT_NAME}
         ${TORCH_INCLUDE_DIRS}
         ${project_INCLUDE_DIR}
         ${project_THIRD_PARTY_DIR}/concurrentqueue/
+        ${ARROW_INCLUDE_DIR}
         faiss
 )
 
@@ -150,6 +153,7 @@ else()
 endif()
 
 target_link_libraries(${PROJECT_NAME} PUBLIC ${LINK_LIBS})
+target_link_libraries(${PROJECT_NAME} PUBLIC Arrow::arrow_shared)
 
 IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
     message("Using thread sanitizer")

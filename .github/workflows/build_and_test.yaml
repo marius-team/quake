@@ -24,6 +24,7 @@ jobs:
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
+          conda install libarrow-all=19.0.1 -c conda-forge
           mkdir -p build
           cd build
           cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -46,6 +47,7 @@ jobs:
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
+          conda install libarrow-all=19.0.1 -c conda-forge
           pip install --no-use-pep517 .
           pip install pytest
           python -m pytest test/python
