@@ -1,0 +1,9 @@
+services:
+    quake1:
+        build: .
+        volumes:
+            - .:/quake
+    quake2:
+        build: .
+        volumes:
+            - .:/quake
