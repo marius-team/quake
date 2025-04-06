@@ -1,6 +1,6 @@
 #include "file_index_partition.h"
 
-// Default constructor
+// Default construFile
 FileIndexPartition::FileIndexPartition() = default;
 
 // Parameterized constructor
@@ -24,6 +24,11 @@ FileIndexPartition& FileIndexPartition::operator=(FileIndexPartition&& other) no
 
 // Destructor
 FileIndexPartition::~FileIndexPartition() {
+    // Implementation here
+}
+
+// Overridden methods
+void FileIndexPartition::set_code_size(int64_t code_size) {
     // Implementation here
 }
 
@@ -57,41 +62,11 @@ void FileIndexPartition::reallocate(int64_t new_capacity) {
 }
 
 void FileIndexPartition::load() {
-    std::ifstream in(file_path_, std::ios::binary);
-    if (!in) {
-        throw std::runtime_error("Unable to open file for reading: " + file_path_);
-    }
-
-    // Read directly into member variables
-    // Both char and uint8_t are 1-byte types. reading raw binary data — the type doesn't matter as long as sizes match.?
-    in.read(reinterpret_cast<char*>(&num_vectors_), sizeof(num_vectors_)); 
-    in.read(reinterpret_cast<char*>(&code_size_), sizeof(code_size_));
-
-    // Use the updated member values
-    set_code_size(code_size_);
-    ensure_capacity(num_vectors_); // Checks that the internal buffer can hold at least the required number of vectors, and resizes if necessary.
-
-    in.read(reinterpret_cast<char*>(codes_), num_vectors_ * code_size_);
-    in.read(reinterpret_cast<char*>(ids_), num_vectors_ * sizeof(idx_t));
-
-    in.close();
+    // Implementation here
 }
 
 void FileIndexPartition::save() {
-    std::ofstream out(file_path_, std::ios::binary);
-    if (!out) {
-        throw std::runtime_error("Unable to open file for writing");
-    }
-
-    // Save basic metadata
-    out.write(reinterpret_cast<const char*>(&num_vectors_), sizeof(num_vectors_));
-    out.write(reinterpret_cast<const char*>(&code_size_), sizeof(code_size_));
-
-    // Save codes and IDs
-    out.write(reinterpret_cast<const char*>(codes_), num_vectors_ * code_size_);
-    out.write(reinterpret_cast<const char*>(ids_), num_vectors_ * sizeof(idx_t));
-
-    out.close();
+    // Implementation here
 }
 
 #ifdef QUAKE_USE_NUMA
