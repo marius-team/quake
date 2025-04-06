@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/opt/homebrew/Caskroom/miniconda/base/envs/quake-env/bin/cmake;-P;/Users/mandukhaialimaa/UWMadison/744/research/quake/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/download-googletest-populate.cmake;COMMAND;/opt/homebrew/Caskroom/miniconda/base/envs/quake-env/bin/cmake;-P;/Users/mandukhaialimaa/UWMadison/744/research/quake/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/verify-googletest-populate.cmake;COMMAND;/opt/homebrew/Caskroom/miniconda/base/envs/quake-env/bin/cmake;-P;/Users/mandukhaialimaa/UWMadison/744/research/quake/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/extract-googletest-populate.cmake
+source_dir=/Users/mandukhaialimaa/UWMadison/744/research/quake/build/_deps/googletest-src
+work_dir=/Users/mandukhaialimaa/UWMadison/744/research/quake/build/_deps
+url(s)=https://github.com/google/googletest/archive/release-1.12.1.tar.gz
+hash=
+no_extract=
+

@@ -1,0 +1,3 @@
+/Users/mandukhaialimaa/UWMadison/744/research/quake/build/_deps/googletest-subbuild/CMakeFiles/googletest-populate.dir
+/Users/mandukhaialimaa/UWMadison/744/research/quake/build/_deps/googletest-subbuild/CMakeFiles/edit_cache.dir
+/Users/mandukhaialimaa/UWMadison/744/research/quake/build/_deps/googletest-subbuild/CMakeFiles/rebuild_cache.dir

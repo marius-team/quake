@@ -1,0 +1,5 @@
+if(EXISTS "/Users/mandukhaialimaa/UWMadison/744/research/quake/build/src/cpp/third_party/faiss/tests/faiss_test[1]_tests.cmake")
+  include("/Users/mandukhaialimaa/UWMadison/744/research/quake/build/src/cpp/third_party/faiss/tests/faiss_test[1]_tests.cmake")
+else()
+  add_test(faiss_test_NOT_BUILT faiss_test_NOT_BUILT)
+endif()
