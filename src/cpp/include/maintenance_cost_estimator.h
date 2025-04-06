@@ -8,6 +8,7 @@
 #define MAINTENANCE_COST_ESTIMATOR_H
 
 #include <memory>
+#include <string>
 #include <vector>
 
 using std::vector;
