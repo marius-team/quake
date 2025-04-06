@@ -20,9 +20,9 @@ else \
     echo "Unknown architecture: $arch"; \
 fi
 
-# RUN git clone -b aniketrege/bugfix https://github.com/aniketrege/quake.git \
-RUN cd quake \
-    && mkdir build \
+WORKDIR /quake
+
+RUN mkdir build \
     && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release \
         -DQUAKE_ENABLE_GPU=OFF \
@@ -33,4 +33,4 @@ RUN cd quake \
     && make bindings -j$(nproc) \
     && make quake_tests -j$(nproc)
 
-WORKDIR /quake
+RUN pip install --no-use-pep517 --break-system-packages .

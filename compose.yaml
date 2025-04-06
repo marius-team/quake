@@ -1,9 +1,14 @@
 services:
     quake1:
         build: .
+        command: tail -f /dev/null
         volumes:
-            - .:/quake
+            - ./src/python/distributedwrapper:/usr/local/lib/python3.12/dist-packages/quake/distributedwrapper
+            - ./examples/quickstart_dist.py:/quake/examples/quickstart_dist.py
     quake2:
         build: .
+#        command: python3 -c "from quake.distributedwrapper import Remote; Remote(50051).start()"
+        command: tail -f /dev/null
         volumes:
-            - .:/quake
+            - ./src/python/distributedwrapper:/usr/local/lib/python3.12/dist-packages/quake/distributedwrapper
+            - ./examples/quickstart_dist.py:/quake/examples/quickstart_dist.py
