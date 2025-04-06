@@ -1,17 +1,13 @@
-//
-// Created by Jason on 12/16/24.
-// Prompt for GitHub Copilot:
-// - Conform to the google style guide
-// - Use descriptive variable names
-//
-
-#include "latency_estimation.h"
-#include "list_scanning.h"
+#include "maintenance_cost_estimator.h"
+#include <list_scanning.h>
+#include <stdexcept>
+#include <iostream>
+#include <fstream>
 
 // A simple helper to split a string by delimiter.
 // You can replace this with any library function if you wish.
 static std::vector<std::string> split_string(const std::string &str,
-                                            char delim) {
+                                             char delim) {
     std::vector<std::string> tokens;
     std::stringstream ss(str);
     std::string item;
@@ -366,4 +362,141 @@ bool ListScanLatencyEstimator::load_latency_profile(const std::string &filename)
     // Assign to our model
     scan_latency_model_ = std::move(file_latency_model);
     return true;
+}
+
+
+MaintenanceCostEstimator::MaintenanceCostEstimator(int d, float alpha, int k)
+    : d_(d), alpha_(alpha), k_(k) {
+    if (k_ <= 0) {
+        throw std::invalid_argument("k must be positive");
+    }
+    if (alpha_ <= 0.0f) {
+        throw std::invalid_argument("alpha must be positive");
+    }
+
+    latency_estimator_ = make_shared<ListScanLatencyEstimator>(
+        d_,
+        DEFAULT_LATENCY_ESTIMATOR_RANGE_N,
+        DEFAULT_LATENCY_ESTIMATOR_RANGE_K,
+        DEFAULT_LATENCY_ESTIMATOR_NTRIALS);
+}
+
+float MaintenanceCostEstimator::compute_split_delta(int partition_size, float hit_rate, int total_partitions) const {
+    // Compute overhead incurred by adding one more partition.
+    float delta_overhead = latency_estimator_->estimate_scan_latency(total_partitions + 1, k_) -
+                           latency_estimator_->estimate_scan_latency(total_partitions, k_);
+    // Cost before splitting.
+    float old_cost = latency_estimator_->estimate_scan_latency(partition_size, k_) * hit_rate;
+    // Cost after splitting: assume the partition is split in half and cost doubles due to two partitions,
+    // scaled by the alpha factor.
+    float new_cost = latency_estimator_->estimate_scan_latency(partition_size / 2, k_) * hit_rate * (2.0f * alpha_);
+    return delta_overhead + new_cost - old_cost;
+}
+
+
+float MaintenanceCostEstimator::compute_delete_delta(
+    int partition_size, // size of the candidate (deleted) partition
+    float hit_rate, // scan fraction ("hit rate") for the candidate partition
+    int total_partitions,
+    float avg_partition_hit_rate, // average scan fraction for each partition
+    float avg_partition_size // average size of partitions
+) const {
+    if (total_partitions <= 1) {
+        // Can't delete if there's only 1 partition
+        return 0.0f;
+    }
+
+    // ----------------------------------------------------
+    // 1) Structural overhead difference:
+    //    = L(T-1, k) - L(T, k).
+    // ----------------------------------------------------
+    float latency_T = latency_estimator_->estimate_scan_latency(total_partitions, k_);
+    float latency_T_minus_1 = latency_estimator_->estimate_scan_latency(total_partitions - 1, k_);
+    float delta_overhead = latency_T_minus_1 - latency_T;
+
+    // ----------------------------------------------------
+    // 2) Scanning cost difference:
+    //
+    // Old scanning cost (approx):
+    //    cost_old = (T-1)*(\bar{p}) * L(\bar{n}, k)
+    //             + p_d * L(n_d, k)
+    //
+    // New scanning cost (approx):
+    //    each of (T-1) partitions has new size \bar{n}' = \bar{n} + n_d/(T-1)
+    //    and new scan fraction \bar{p}' = \bar{p} + p_d/(T-1)
+    //    cost_new = (T-1)*(\bar{p}') * L(\bar{n}', k)
+    // ----------------------------------------------------
+    float cost_old = (total_partitions - 1) * avg_partition_hit_rate
+                     * latency_estimator_->estimate_scan_latency(avg_partition_size, k_)
+                     + hit_rate
+                     * latency_estimator_->estimate_scan_latency(partition_size, k_);
+
+    // Compute the "new" size and scan fraction after merging
+    float merged_size = avg_partition_size + static_cast<float>(partition_size) / (total_partitions - 1);
+    float merged_hit_rate = avg_partition_hit_rate + hit_rate / static_cast<float>(total_partitions - 1);
+
+    float cost_new;
+    if (partition_size < total_partitions) {
+        // assume at most partition_size partitions get the extra vectors
+        cost_new = partition_size * merged_hit_rate * latency_estimator_->estimate_scan_latency(avg_partition_size + 1, k_)
+                   + (total_partitions - partition_size - 1) * merged_hit_rate * latency_estimator_->estimate_scan_latency(avg_partition_size, k_);
+    } else {
+        cost_new = (total_partitions - 1) * merged_hit_rate * latency_estimator_->estimate_scan_latency(ceil(merged_size), k_);
+    }
+
+    float delta_scanning = cost_new - cost_old;
+
+    // ----------------------------------------------------
+    // 3) Final delete delta = structural overhead + scanning delta
+    // ----------------------------------------------------
+    float delta = delta_overhead + delta_scanning;
+    return delta;
+}
+
+float MaintenanceCostEstimator::compute_delete_delta_w_reassign(int partition_size, float hit_rate, int total_partitions, const vector<int64_t> &reassign_counts, const vector<int64_t> &reassign_sizes, const vector<float> &reassign_hit_rates) const {
+
+    if (total_partitions <= 1) {
+        // Can't delete if there's only 1 partition
+        return 0.0f;
+    }
+
+    int n_reassign = reassign_counts.size();
+    assert(reassign_sizes.size() == n_reassign);
+    assert(reassign_hit_rates.size() == n_reassign);
+
+    // ----------------------------------------------------
+    // 1) Structural overhead difference:
+    //    = L(T-1, k) - L(T, k).
+    // ----------------------------------------------------
+    float latency_T = latency_estimator_->estimate_scan_latency(total_partitions, k_);
+    float latency_T_minus_1 = latency_estimator_->estimate_scan_latency(total_partitions - 1, k_);
+    float delta_overhead = latency_T_minus_1 - latency_T;
+
+    // ----------------------------------------------------
+    // 2) Compute cost delta using reassignments
+    //      Delta = Removal of old + increase of existing
+    // ----------------------------------------------------
+    float removal_delta = hit_rate * latency_estimator_->estimate_scan_latency(partition_size, k_);
+    float reassign_delta = 0.0;
+    for (int i = 0; i < n_reassign; i++) {
+        float old = reassign_hit_rates[i] * latency_estimator_->estimate_scan_latency(reassign_sizes[i], k_);
+        float new_size = reassign_sizes[i] + partition_size;
+        float new_hit_rate = reassign_hit_rates[i] + hit_rate;
+        reassign_delta += new_hit_rate * latency_estimator_->estimate_scan_latency(new_size, k_) - old;
+    }
+
+    // ----------------------------------------------------
+    // 3) Final delete delta = structural overhead + scanning delta
+    // ----------------------------------------------------
+    float delta = delta_overhead + removal_delta + reassign_delta;
+    return delta;
+}
+
+
+shared_ptr<ListScanLatencyEstimator> MaintenanceCostEstimator::get_latency_estimator() const {
+    return latency_estimator_;
+}
+
+int MaintenanceCostEstimator::get_k() const {
+    return k_;
 }

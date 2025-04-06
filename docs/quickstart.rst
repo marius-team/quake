@@ -37,7 +37,7 @@ Install the Quake package (which includes the Python bindings):
 
 .. code-block:: bash
 
-    pip install .
+    pip install --no-use-pep517 .
 
 Step 4: Run Example Program
 -------------------------------

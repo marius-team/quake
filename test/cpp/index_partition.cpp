@@ -85,7 +85,7 @@ TEST_F(IndexPartitionTest, DefaultConstructorTest) {
     EXPECT_EQ(default_partition.codes_, nullptr);
     EXPECT_EQ(default_partition.ids_, nullptr);
     EXPECT_EQ(default_partition.numa_node_, -1);
-    EXPECT_EQ(default_partition.thread_id_, -1);
+    EXPECT_EQ(default_partition.core_id_, -1);
 }
 
 // Test parameterized constructor
@@ -314,7 +314,7 @@ TEST_F(IndexPartitionTest, ClearTest) {
     EXPECT_EQ(partition->codes_, nullptr);
     EXPECT_EQ(partition->ids_, nullptr);
     EXPECT_EQ(partition->numa_node_, -1);
-    EXPECT_EQ(partition->thread_id_, -1);
+    EXPECT_EQ(partition->core_id_, -1);
 }
 
 // Test find_id method

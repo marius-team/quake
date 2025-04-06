@@ -26,11 +26,11 @@ class Vamana(IndexWrapper):
         ids: Optional[torch.Tensor] = None,
         metric: str = "l2",
         num_threads: int = 1,
-        alpha: float = .95,
+        alpha: float = 0.95,
         graph_max_degree: int = 128,
         window_size: int = 128,
         max_candidate_pool_size: int = 128,
-        prune_to: int = 128
+        prune_to: int = 128,
     ):
         parameters = svs.VamanaBuildParameters(
             alpha=alpha,
@@ -43,7 +43,7 @@ class Vamana(IndexWrapper):
             distance = svs.DistanceType.L2
         elif metric == "ip":
             distance = svs.DistanceType.MIP
-        
+
         if ids is not None:
             ids = to_numpy(ids).astype(np.uint64)
         else:
@@ -93,7 +93,7 @@ class Vamana(IndexWrapper):
         self.index = svs.DynamicVamana(
             config_path=str(config_dir), graph_loader=graph_loader, data_loader=data_loader, distance=distance
         )
-        
+
         self.index.search_window_size = 100
         self.index.num_threads = 16
 

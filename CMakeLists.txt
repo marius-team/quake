@@ -8,6 +8,10 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+set(Torch_USE_CUDA OFF CACHE BOOL "Force disable CUDA in Torch")
+set(Torch_NO_CUDA ON CACHE BOOL "Force disable CUDA in Torch")
+set(USE_CUDA OFF CACHE BOOL "Force disable CUDA globally")
+
 # QUAKE_ENABLE_GPU: Enable GPU support for Faiss
 # Default: OFF
 if(QUAKE_ENABLE_GPU)
@@ -27,6 +31,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Compiler flags
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+if(NOT DEFINED QUAKE_SET_ABI_MODE)
+    set(QUAKE_SET_ABI_MODE ON)
+endif()
 
 # If in a conda environment, favor conda packages
 if(EXISTS $ENV{CONDA_PREFIX})
@@ -75,7 +82,12 @@ endif()
 
 # Compiler options and definitions
 add_compile_options(-march=native)
-add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+
+# Switch ABI mode
+if(QUAKE_SET_ABI_MODE)
+    add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+endif()
+
 
 # ---------------------------------------------------------------
 # Find Required Packages

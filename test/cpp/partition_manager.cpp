@@ -200,8 +200,8 @@ TEST_F(PartitionManagerTest, AddPartitionsTest) {
   EXPECT_EQ(partition_manager_->nlist(), 3 + 2);
   Tensor p_ids = partition_manager_->get_partition_ids();
   auto p_ids_acc = p_ids.accessor<int64_t,1>();
-  EXPECT_EQ(partition_manager_->partitions_->list_size(3), 1);
-  EXPECT_EQ(partition_manager_->partitions_->list_size(4), 1);
+  EXPECT_EQ(partition_manager_->partition_store_->list_size(3), 1);
+  EXPECT_EQ(partition_manager_->partition_store_->list_size(4), 1);
 }
 
 // Test: Verify that select_partitions returns the expected data.
@@ -245,7 +245,7 @@ TEST_F(PartitionManagerTest, GetPartitionSizesTest) {
   auto p_ids_acc = p_ids.accessor<int64_t,1>();
   auto sizes_acc = sizes.accessor<int64_t,1>();
   for (int i = 0; i < p_ids.size(0); i++) {
-    EXPECT_EQ(sizes_acc[i], partition_manager_->partitions_->list_size(p_ids_acc[i]));
+    EXPECT_EQ(sizes_acc[i], partition_manager_->partition_store_->list_size(p_ids_acc[i]));
   }
 }
 
