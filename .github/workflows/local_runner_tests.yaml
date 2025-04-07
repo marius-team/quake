@@ -18,10 +18,7 @@ jobs:
       options: --user root
     steps:
       - name: Debug env
-        run: |
-          ls -lh /
-          ls -lh /__e/
-          ls -lh /*
+        run: ls -lh /
 
       - name: Checkout Repository
         uses: actions/checkout@v4
