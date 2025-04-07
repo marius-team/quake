@@ -17,6 +17,12 @@ jobs:
       image: ${{ needs.setup-container.outputs.container_image }}
       options: --user root
     steps:
+      - name: Debug env
+        run: |
+          ls -lh /
+          ls -lh /__e/
+          ls -lh /*
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
