@@ -1,0 +1,26 @@
+version: '3.3'
+services:
+  docker:
+    image: docker:20.10-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    ports:
+      - "2375:2375"
+    volumes:
+      - ./worker_dev_1/runner:/runner
+  github-runner:
+    image: summerwind/actions-runner:latest
+    container_name: github-runner
+    environment:
+      - RUNNER_ALLOW_RUNASROOT=true
+      - RUNNER_NAME=local-gpu-numa-runner
+      - RUNNER_REPO=marius-team/quake
+      - RUNNER_TOKEN=<RUNNER_TOKEN>
+      - RUNNER_LABELS=local-gpu-numa-runner
+      - DOCKER_HOST=tcp://docker:2375
+    depends_on:
+      - docker
+    volumes:
+      - ./worker_dev_1/runner:/runner
+    restart: always
