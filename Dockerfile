@@ -2,6 +2,13 @@ FROM ubuntu:24.04
 
 WORKDIR /
 
+# Disable caching and broken proxy
+RUN echo "Acquire::http::Pipeline-Depth 0;" > /etc/apt/apt.conf.d/99custom && \
+    echo "Acquire::http::No-Cache true;" >> /etc/apt/apt.conf.d/99custom && \
+    echo "Acquire::BrokenProxy    true;" >> /etc/apt/apt.conf.d/99custom
+
+RUN apt clean && rm -rf /var/lib/apt/lists/*
+
 # Install required packages
 RUN apt update && apt install -y git python3-pip cmake libblas-dev liblapack-dev libnuma-dev libgtest-dev
 
