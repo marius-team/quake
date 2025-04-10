@@ -172,6 +172,30 @@ namespace faiss {
         return n_entry;
     }
 
+    size_t DynamicInvertedLists::add_entries_file(
+        size_t list_no,
+        size_t n_entry,
+        const idx_t *ids,
+        const uint8_t *codes) {
+        if (n_entry == 0) {
+            return 0;
+        }
+
+        auto it = partitions_.find(list_no);
+        if (it == partitions_.end()) {
+            throw std::runtime_error("List does not exist in add_entries");
+        }
+
+        shared_ptr<FileIndexPartition> part = std::dynamic_pointer_cast<FileIndexPartition>(it->second);
+        // Ensure code_size is set
+        if (part->code_size_ != static_cast<int64_t>(code_size)) {
+            part->set_code_size(static_cast<int64_t>(code_size));
+        }
+
+        part->append((int64_t) n_entry, ids, codes);
+        return n_entry;
+    }
+
     void DynamicInvertedLists::update_entries(
         size_t list_no,
         size_t offset,
@@ -279,6 +303,16 @@ namespace faiss {
         partitions_[list_no] = ip;
         nlist++;
     }
+
+    void DynamicInvertedLists::add_list_file(size_t list_no) {
+        if (partitions_.find(list_no) != partitions_.end()) {
+            throw std::runtime_error("List already exists in add_list");
+        }
+        shared_ptr<FileIndexPartition> ip = std::make_shared<FileIndexPartition>();
+        ip->set_code_size((int64_t) code_size);
+        partitions_[list_no] = ip;
+        nlist++;
+    } 
 
     bool DynamicInvertedLists::id_in_list(size_t list_no, idx_t id) const {
         auto it = partitions_.find(list_no);

@@ -22,6 +22,7 @@ static inline const uint8_t *as_uint8_ptr(const Tensor &float_tensor) {
 }
 
 PartitionManager::PartitionManager() {
+    std::cout << "inited partition manager" << std::endl;
     parent_ = nullptr;
     partitions_ = nullptr;
 }
@@ -42,6 +43,15 @@ void PartitionManager::init_partitions(
     int64_t nlist = clustering->nlist();
     int64_t ntotal = clustering->ntotal();
     int64_t dim = clustering->dim();
+    int64_t curr_level = -1;
+
+    std::cout << "nlist, ntotal, dim : " << nlist << " " << ntotal << " " << dim << std::endl;
+
+    if(parent_ != nullptr) {
+        curr_level = parent_->current_level_ - 1;
+    }
+
+    // std::cout << "Initing partitions for level: " << current_level << std::endl;
 
     if (nlist <= 0 && ntotal <= 0) {
         throw runtime_error("[PartitionManager] init_partitions: nlist and ntotal is <= 0.");
@@ -67,13 +77,21 @@ void PartitionManager::init_partitions(
     // Add an empty list for each partition ID
     auto partition_ids_accessor = clustering->partition_ids.accessor<int64_t, 1>();
     for (int64_t i = 0; i < nlist; i++) {
-        partitions_->add_list(partition_ids_accessor[i]);
+        // Might have to change the function in here to init the correct disk version
+        if(curr_level == 0) {
+            std::cout << "[PartitionManager] added empty file partition for " << partition_ids_accessor[i] << std::endl;
+            partitions_->add_list_file(partition_ids_accessor[i]);
+        }
+        else {
+            partitions_->add_list(partition_ids_accessor[i]);
+        }
         if (debug_) {
             std::cout << "[PartitionManager] init_partitions: Added empty list for partition " << i << std::endl;
         }
     }
 
     // Now insert the vectors into each partition
+    // std::cout << "Right before vector insertion, nlist is " << nlist << std::endl;
     for (int64_t i = 0; i < nlist; i++) {
         Tensor v = clustering->vectors[i];
         Tensor id = clustering->vector_ids[i];
@@ -82,6 +100,7 @@ void PartitionManager::init_partitions(
         }
 
         size_t count = v.size(0);
+        // std::cout << "Partition with ID " << i << " for level " << current_level << " has " << count << " vectors" << std::endl;
         if (count == 0) {
             if (debug_) {
                 std::cout << "[PartitionManager] init_partitions: Partition " << i << " is empty." << std::endl;
@@ -99,12 +118,21 @@ void PartitionManager::init_partitions(
                     resident_ids_.insert(id_val);
                 }
             }
-            partitions_->add_entries(
+            if(curr_level == 0) {
+                partitions_->add_entries_file(
                 partition_ids_accessor[i],
                 count,
                 id.data_ptr<int64_t>(),
                 as_uint8_ptr(v)
             );
+            } else {
+                partitions_->add_entries(
+                partition_ids_accessor[i],
+                count,
+                id.data_ptr<int64_t>(),
+                as_uint8_ptr(v)
+                );
+            }
             if (debug_) {
                 std::cout << "[PartitionManager] init_partitions: Added " << count
                           << " entries to partition " << partition_ids_accessor[i] << std::endl;
