@@ -47,14 +47,13 @@ public:
     /// Destructor. Frees all allocated memory.
     ~FileIndexPartition();
 
-    // overriden methods
-    void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) override;
-    void update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) override;
-    void remove(int64_t index) override;
-    void resize(int64_t new_capacity) override;
-    void clear() override;
-    int64_t find_id(idx_t id) const override;
-    void reallocate(int64_t new_capacity) override;
+    void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes);
+    void update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes);
+    void remove(int64_t index);
+    void resize(int64_t new_capacity);
+    void clear();
+    int64_t find_id(idx_t id) const;
+    void reallocate(int64_t new_capacity);
     
     
     

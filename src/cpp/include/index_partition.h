@@ -66,7 +66,7 @@ public:
     IndexPartition& operator=(IndexPartition&& other) noexcept;
 
     /// Destructor. Frees all allocated memory.
-    ~IndexPartition();
+    virtual ~IndexPartition();
 
     /**
      * @brief Set the code size.

@@ -26,6 +26,7 @@ QuakeIndex::~QuakeIndex() {
 }
 
 shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params) {
+    std::cout << "[QuakeIndex::build] called with tensor size = " << x.size(0) << "," << x.size(1) << " nlist = " << build_params->nlist << std::endl;
     build_params_ = build_params;
     metric_ = str_to_metric_type(build_params_->metric);
 
@@ -55,6 +56,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         parent_ = make_shared<QuakeIndex>(current_level_ + 1);
         auto parent_build_params = make_shared<IndexBuildParams>();
         parent_build_params->metric = build_params_->metric;
+        // std::cout << "About to pass nlist = " << parent_build_params->nlist << " to parent build call" << std::endl;
         parent_->build(clustering->centroids, clustering->partition_ids, parent_build_params);
 
         // initialize the partition manager

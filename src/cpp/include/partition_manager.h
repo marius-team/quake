@@ -27,7 +27,7 @@ public:
     std::shared_ptr<faiss::DynamicInvertedLists> partitions_ = nullptr; ///< Pointer to the inverted lists.
     int64_t curr_partition_id_ = 0; ///< Current partition ID.
 
-    bool debug_ = false; ///< If true, print debug information.
+    bool debug_ = true; ///< If true, print debug information.
     bool check_uniques_ = false; ///< If true, check that vector IDs are unique and don't already exist in the index.
 
     std::set<int64_t> resident_ids_; ///< Set of partition IDs.

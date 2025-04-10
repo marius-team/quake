@@ -1,7 +1,5 @@
 #include "file_index_partition.h"
-
-// Default constructor
-FileIndexPartition::FileIndexPartition() = default;
+#include <fstream>
 
 // Parameterized constructor
 FileIndexPartition::FileIndexPartition(int64_t num_vectors,
@@ -24,11 +22,12 @@ FileIndexPartition& FileIndexPartition::operator=(FileIndexPartition&& other) no
 
 // Destructor
 FileIndexPartition::~FileIndexPartition() {
-    // Implementation here
+    // munmap stuff needs to happen here?
 }
 
 void FileIndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
     // Implementation here
+    std::cout << "TBD: Appending to FileIndexPartition file goes here" << std::endl;
 }
 
 void FileIndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
@@ -66,7 +65,7 @@ void FileIndexPartition::load() {
     in.read(reinterpret_cast<char*>(&code_size_), sizeof(code_size_));
 
     set_code_size(code_size_);
-    ensure_capacity(num_vectors_);
+    // ensure_capacity(num_vectors_);
 
     in.read(reinterpret_cast<char*>(codes_), num_vectors_ * code_size_);
     in.read(reinterpret_cast<char*>(ids_), num_vectors_ * sizeof(idx_t));
