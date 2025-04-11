@@ -1,4 +1,4 @@
-name: Build and Test
+name: Build and Test Local
 
 on:
   push:
@@ -9,6 +9,8 @@ on:
 jobs:
   setup-container:
     uses: ./.github/workflows/container_setup.yaml
+    with:
+      container_type: ubuntu-cuda
 
   build_and_test:
     needs: setup-container

@@ -9,6 +9,8 @@ on:
 jobs:
   setup-container:
     uses: ./.github/workflows/container_setup.yaml
+    with:
+      container_type: ubuntu-latest
 
   build_and_test:
     needs: setup-container
