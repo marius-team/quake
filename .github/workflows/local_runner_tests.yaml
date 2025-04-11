@@ -10,7 +10,7 @@ jobs:
   setup-container:
     uses: ./.github/workflows/container_setup.yaml
 
-  build_and_test:
+  build_and_test_numa:
     needs: setup-container
     runs-on: local-gpu-numa-runner
     container:
@@ -27,10 +27,10 @@ jobs:
           mkdir -p build
           cd build
           cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-                -DQUAKE_USE_NUMA=OFF \
+                -DQUAKE_USE_NUMA=ON \
                 -DQUAKE_ENABLE_GPU=OFF \
                 -DBUILD_TESTS=ON \
-                -DQUAKE_USE_AVX512=OFF \
+                -DQUAKE_USE_AVX512=ON \
                 ../
           make bindings -j
           make quake_tests -j
@@ -40,12 +40,32 @@ jobs:
         run: |
           ./build/test/cpp/quake_tests
 
-      - name: Run Python Tests
-        shell: bash
+  build_and_test_gpu:
+    needs: setup-container
+    runs-on: local-gpu-numa-runner
+    container:
+      image: ${{ needs.setup-container.outputs.container_image }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build C++
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-          pip install --no-use-pep517 .
-          pip install pytest
-          python -m pytest test/python
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+                -DQUAKE_USE_NUMA=ON \
+                -DQUAKE_ENABLE_GPU=ON \
+                -DBUILD_TESTS=ON \
+                -DQUAKE_USE_AVX512=ON \
+                ../
+          make bindings -j
+          make quake_tests -j
+
+      - name: Run C++ Tests
+        shell: bash
+        run: |
+          ./build/test/cpp/quake_tests
