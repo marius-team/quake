@@ -28,28 +28,24 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     int n = vectors.size(0);
     int d = vectors.size(1);
 
-    // Create a flat index appropriate to the metric.
-    faiss::IndexFlat* cpu_index_ptr = nullptr;
-    faiss::gpu::GpuIndexFlat* gpu_index_ptr = nullptr;
     faiss::Index* index_ptr = nullptr;
 
-    faiss::gpu::StandardGpuResources gpu_res;
-
     if (use_gpu) {
+        // Check if GPU resources are available.
+        #ifdef FAISS_ENABLE_GPU
+        faiss::gpu::StandardGpuResources gpu_res;
         if (metric_type == faiss::METRIC_INNER_PRODUCT)
-            gpu_index_ptr = new faiss::gpu::GpuIndexFlatIP(&gpu_res, d);
+            index_ptr = new faiss::gpu::GpuIndexFlatIP(&gpu_res, d);
         else
-            gpu_index_ptr = new faiss::gpu::GpuIndexFlatL2(&gpu_res, d);
-
-        index_ptr = gpu_index_ptr;
-
+            index_ptr = new faiss::gpu::GpuIndexFlatL2(&gpu_res, d);
+        #else
+        throw std::runtime_error("GPU resources are not available. Please compile with FAISS_ENABLE_GPU.");
+        #endif
     } else {
         if (metric_type == faiss::METRIC_INNER_PRODUCT)
-            cpu_index_ptr = new faiss::IndexFlatIP(d);
+            index_ptr = new faiss::IndexFlatIP(d);
         else
-            cpu_index_ptr = new faiss::IndexFlatL2(d);
-
-        index_ptr = cpu_index_ptr;
+            index_ptr = new faiss::IndexFlatL2(d);
     }
 
     faiss::ClusteringParameters cp;
@@ -84,10 +80,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     clustering->vectors = cluster_vectors;
     clustering->vector_ids = cluster_ids;
 
-    if (use_gpu)
-        delete gpu_index_ptr;
-    else
-        delete cpu_index_ptr;
+    delete index_ptr;
 
     return clustering;
 }
