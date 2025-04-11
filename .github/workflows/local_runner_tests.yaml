@@ -33,7 +33,7 @@ jobs:
                 -DQUAKE_ENABLE_GPU=ON \
                 -DBUILD_TESTS=ON \
                 -DQUAKE_USE_AVX512=OFF \
-                -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda
+                -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
                 ../
           make bindings -j
           make quake_tests -j
