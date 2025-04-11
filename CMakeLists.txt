@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16.2)
+cmake_minimum_required(VERSION 3.24.2)
 project(quake_c VERSION 0.1 LANGUAGES CXX)
 
 # ---------------------------------------------------------------

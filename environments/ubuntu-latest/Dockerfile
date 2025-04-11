@@ -24,7 +24,8 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 
-RUN wget -qO /tmp/cmake.sh https://github.com/Kitware/CMake/releases/download/v3.23.1/cmake-3.23.1-linux-x86_64.sh && \
+# Install CMake 3.24.2
+RUN wget -qO /tmp/cmake.sh https://github.com/Kitware/CMake/releases/download/v3.24.2/cmake-3.24.2-linux-x86_64.sh && \
     chmod +x /tmp/cmake.sh && \
     /tmp/cmake.sh --skip-license --prefix=/usr/local && \
     rm /tmp/cmake.sh
