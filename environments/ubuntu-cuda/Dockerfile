@@ -1,5 +1,5 @@
 # Use a CUDA-enabled Ubuntu base image
-FROM nvidia/cuda:11.8.0-base-ubuntu20.04
+FROM nvidia/cuda:11.8.0-devel-ubuntu20.04
 
 # -----------------------------
 # Set up environment variables
