@@ -46,7 +46,8 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
             ids,
             build_params_->nlist,
             metric_,
-            build_params_->niter
+            build_params_->niter,
+            build_params_->use_gpu
         );
         auto e1 = std::chrono::high_resolution_clock::now();
         timing_info->train_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e1 - s1).count();

@@ -28,6 +28,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
                               int n_clusters,
                               MetricType metric_type,
                               int niter = 5,
+                              bool use_gpu = false,
                               Tensor initial_centroids = Tensor());
 
 

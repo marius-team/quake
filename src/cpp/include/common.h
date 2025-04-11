@@ -132,6 +132,7 @@ struct IndexBuildParams {
 
     bool use_adaptive_nprobe = false;
     bool use_numa = false;
+    bool use_gpu = false;
     bool verify_numa = false;
     bool same_core = true;
     bool verbose = false;

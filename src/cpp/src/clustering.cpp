@@ -15,6 +15,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
                               int n_clusters,
                               MetricType metric_type,
                               int niter,
+                              bool use_gpu /*=false*/,
                               Tensor /* initial_centroids */) {
     // Ensure enough vectors are available and sizes match.
     assert(vectors.size(0) >= n_clusters * 2);
@@ -27,12 +28,25 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     int n = vectors.size(0);
     int d = vectors.size(1);
 
-    // Create a flat index appropriate to the metric.
-    faiss::IndexFlat *index_ptr = nullptr;
-    if (metric_type == faiss::METRIC_INNER_PRODUCT)
-        index_ptr = new faiss::IndexFlatIP(d);
-    else
-        index_ptr = new faiss::IndexFlatL2(d);
+    faiss::Index* index_ptr = nullptr;
+
+    if (use_gpu) {
+        // Check if GPU resources are available.
+        #ifdef FAISS_ENABLE_GPU
+        faiss::gpu::StandardGpuResources gpu_res;
+        if (metric_type == faiss::METRIC_INNER_PRODUCT)
+            index_ptr = new faiss::gpu::GpuIndexFlatIP(&gpu_res, d);
+        else
+            index_ptr = new faiss::gpu::GpuIndexFlatL2(&gpu_res, d);
+        #else
+        throw std::runtime_error("GPU resources are not available. Please compile with FAISS_ENABLE_GPU.");
+        #endif
+    } else {
+        if (metric_type == faiss::METRIC_INNER_PRODUCT)
+            index_ptr = new faiss::IndexFlatIP(d);
+        else
+            index_ptr = new faiss::IndexFlatL2(d);
+    }
 
     faiss::ClusteringParameters cp;
     cp.niter = niter;
@@ -67,6 +81,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     clustering->vector_ids = cluster_ids;
 
     delete index_ptr;
+
     return clustering;
 }
 
