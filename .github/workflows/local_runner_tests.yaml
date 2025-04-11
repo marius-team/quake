@@ -30,9 +30,10 @@ jobs:
           cd build
           cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
                 -DQUAKE_USE_NUMA=OFF \
-                -DQUAKE_ENABLE_GPU=OFF \
+                -DQUAKE_ENABLE_GPU=ON \
                 -DBUILD_TESTS=ON \
                 -DQUAKE_USE_AVX512=OFF \
+                -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda
                 ../
           make bindings -j
           make quake_tests -j
