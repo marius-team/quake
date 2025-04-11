@@ -7,6 +7,7 @@ on:
         description: "Type of container to use (e.g., ubuntu-latest or ubuntu-cuda)"
         required: false
         default: "ubuntu-latest"
+        type: string
     outputs:
       container_image:
         description: "Container image determined by this workflow"
