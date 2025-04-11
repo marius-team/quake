@@ -492,3 +492,33 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
 
     SUCCEED();
 }
+
+// Define the GPU related test only if FAISS GPU support is enabled
+#ifdef FAISS_ENABLE_GPU
+// Test build with GPU enabled
+TEST(QuakeIndexGPUTest, BuildWithGPUTest) {
+    int64_t dimension = 32;
+    int64_t num_vectors = 200;
+    int64_t nlist = 5;
+
+    torch::Tensor data_vectors = generate_random_data(num_vectors, dimension);
+    torch::Tensor data_ids = generate_sequential_ids(num_vectors, 0);
+
+    // Set up build parameters. Note: for a multi-partition index (nlist > 1),
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = nlist;
+    build_params->use_gpu = true;
+
+    QuakeIndex index;
+    auto timing_info = index.build(data_vectors, data_ids, build_params);
+
+    EXPECT_NE(index.partition_manager_, nullptr);
+    EXPECT_NE(index.query_coordinator_, nullptr);
+    EXPECT_NE(index.build_params_, nullptr);
+    EXPECT_NE(index.parent_, nullptr);
+
+    // Check that the timing_info fields look valid
+    EXPECT_EQ(timing_info->n_vectors, data_vectors.size(0));
+    EXPECT_EQ(timing_info->d, data_vectors.size(1));
+}
+#endif

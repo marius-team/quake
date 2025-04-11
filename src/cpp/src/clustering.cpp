@@ -15,6 +15,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
                               int n_clusters,
                               MetricType metric_type,
                               int niter,
+                              bool use_gpu /*=false*/,
                               Tensor /* initial_centroids */) {
     // Ensure enough vectors are available and sizes match.
     assert(vectors.size(0) >= n_clusters * 2);
@@ -28,11 +29,28 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     int d = vectors.size(1);
 
     // Create a flat index appropriate to the metric.
-    faiss::IndexFlat *index_ptr = nullptr;
-    if (metric_type == faiss::METRIC_INNER_PRODUCT)
-        index_ptr = new faiss::IndexFlatIP(d);
-    else
-        index_ptr = new faiss::IndexFlatL2(d);
+    faiss::IndexFlat* cpu_index_ptr = nullptr;
+    faiss::gpu::GpuIndexFlat* gpu_index_ptr = nullptr;
+    faiss::Index* index_ptr = nullptr;
+
+    faiss::gpu::StandardGpuResources gpu_res;
+
+    if (use_gpu) {
+        if (metric_type == faiss::METRIC_INNER_PRODUCT)
+            gpu_index_ptr = new faiss::gpu::GpuIndexFlatIP(&gpu_res, d);
+        else
+            gpu_index_ptr = new faiss::gpu::GpuIndexFlatL2(&gpu_res, d);
+
+        index_ptr = gpu_index_ptr;
+
+    } else {
+        if (metric_type == faiss::METRIC_INNER_PRODUCT)
+            cpu_index_ptr = new faiss::IndexFlatIP(d);
+        else
+            cpu_index_ptr = new faiss::IndexFlatL2(d);
+
+        index_ptr = cpu_index_ptr;
+    }
 
     faiss::ClusteringParameters cp;
     cp.niter = niter;
@@ -66,7 +84,11 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     clustering->vectors = cluster_vectors;
     clustering->vector_ids = cluster_ids;
 
-    delete index_ptr;
+    if (use_gpu)
+        delete gpu_index_ptr;
+    else
+        delete cpu_index_ptr;
+
     return clustering;
 }
 
