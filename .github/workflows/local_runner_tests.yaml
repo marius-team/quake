@@ -28,6 +28,8 @@ jobs:
           conda activate quake-env
           mkdir -p build
           cd build
+          ls -lh /usr/local/
+          ls -lh /usr/local/cuda
           cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
                 -DQUAKE_USE_NUMA=OFF \
                 -DQUAKE_ENABLE_GPU=ON \
@@ -35,6 +37,8 @@ jobs:
                 -DQUAKE_USE_AVX512=OFF \
                 -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
                 -DCUDA_NVCC_EXECUTABLE=/usr/local/cuda/bin/nvcc \
+                -DCUDA_INCLUDE_DIRS=/usr/local/cuda/include \
+                -DCUDA_CUDART_LIBRARY=/usr/local/cuda/lib64/libcudart.so \
                 ../
           make bindings -j
           make quake_tests -j
