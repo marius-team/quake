@@ -41,8 +41,8 @@ jobs:
                 -DCUDA_INCLUDE_DIRS=/usr/local/cuda/include \
                 -DCUDA_CUDART_LIBRARY=/usr/local/cuda/lib64/libcudart.so \
                 ../
-          make bindings -j16
-          make quake_tests -j16
+          make bindings -j
+          make quake_tests -j
 
       - name: Run C++ Tests
         shell: bash
