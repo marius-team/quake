@@ -31,17 +31,17 @@ jobs:
           ls -lh /usr/local/
           ls -lh /usr/local/cuda/
           cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-                -DQUAKE_USE_NUMA=OFF \
+                -DQUAKE_USE_NUMA=ON \
                 -DQUAKE_ENABLE_GPU=ON \
                 -DBUILD_TESTS=ON \
-                -DQUAKE_USE_AVX512=OFF \
+                -DQUAKE_USE_AVX512=ON \
                 -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
                 -DCUDA_NVCC_EXECUTABLE=/usr/local/cuda/bin/nvcc \
                 -DCUDA_INCLUDE_DIRS=/usr/local/cuda/include \
                 -DCUDA_CUDART_LIBRARY=/usr/local/cuda/lib64/libcudart.so \
                 ../
-          make bindings -j
-          make quake_tests -j
+          make bindings -j8
+          make quake_tests -j8
 
       - name: Run C++ Tests
         shell: bash
