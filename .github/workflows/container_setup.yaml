@@ -4,9 +4,9 @@ on:
   workflow_call:
     inputs:
       container_type:
-        description: "Type of container to use (e.g., ubuntu-latest or ubuntu-cuda)"
+        description: "Type of container to use (e.g., ubuntu-cpu or ubuntu-cuda)"
         required: false
-        default: "ubuntu-latest"
+        default: "ubuntu-cpu"
         type: string
     outputs:
       container_image:
@@ -87,7 +87,7 @@ jobs:
         if: steps.diff.outputs.build_required == 'true' && steps.check_container.outputs.container_exists == 'false'
         shell: bash
         run: |
-          tag="ghcr.io/marius-team/quake/test_container:${{ steps.dependency_hash.outputs.hash }}"
+          tag="ghcr.io/marius-team/quake/test_container_${{ inputs.container_type }}:${{ steps.dependency_hash.outputs.hash }}"
           echo "Building test container: $tag"
           docker build -f environments/${{ inputs.container_type }}/Dockerfile -t "$tag" .
           docker push "$tag"

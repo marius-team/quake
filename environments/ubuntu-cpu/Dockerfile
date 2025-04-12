@@ -39,7 +39,7 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 
 
 # Copy in your conda environment YAML
-COPY environments/ubuntu-latest/conda.yaml /tmp/conda.yaml
+COPY environments/ubuntu-cpu/conda.yaml /tmp/conda.yaml
 
 # Create quake-env
 RUN conda env create -f /tmp/conda.yaml && conda clean -afy
