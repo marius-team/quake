@@ -1,4 +1,5 @@
-FROM ubuntu:20.04
+# Use a CUDA-enabled Ubuntu base image
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 
 # -----------------------------
 # Set up environment variables
@@ -21,13 +22,16 @@ RUN apt-get update && \
       libomp5 \
       libomp-dev \
       graphviz \
+      libnuma-dev \
     && rm -rf /var/lib/apt/lists/*
 
 
-RUN wget -qO /tmp/cmake.sh https://github.com/Kitware/CMake/releases/download/v3.23.1/cmake-3.23.1-linux-x86_64.sh && \
+# Install CMake 3.24.2
+RUN wget -qO /tmp/cmake.sh https://github.com/Kitware/CMake/releases/download/v3.24.2/cmake-3.24.2-linux-x86_64.sh && \
     chmod +x /tmp/cmake.sh && \
     /tmp/cmake.sh --skip-license --prefix=/usr/local && \
     rm /tmp/cmake.sh
+
 
 # -----------------------------
 # Install Miniconda
@@ -36,18 +40,22 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
     bash /tmp/miniconda.sh -b -p $CONDA_DIR && \
     rm /tmp/miniconda.sh
 
-
+# -----------------------------
 # Copy in your conda environment YAML
-COPY environments/ubuntu-latest/conda.yaml /tmp/conda.yaml
+# -----------------------------
+COPY environments/ubuntu-cuda/conda.yaml /tmp/conda.yaml
 
 # Create quake-env
 RUN conda env create -f /tmp/conda.yaml && conda clean -afy
 
 # -----------------------------
-# Install PyTorch (CPU-only)
+# Install GPU-enabled PyTorch
 # -----------------------------
-RUN conda run -n quake-env pip install torch --index-url https://download.pytorch.org/whl/cpu
+RUN conda run -n quake-env pip install torch --index-url https://download.pytorch.org/whl/cu118
 
+# -----------------------------
+# Debug: show conda information
+# -----------------------------
 RUN echo "===== DEBUG: which conda =====" && which conda
 RUN echo "===== DEBUG: conda info =====" && conda info
 RUN echo "===== DEBUG: conda env list =====" && conda env list

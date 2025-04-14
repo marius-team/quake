@@ -1,4 +1,4 @@
-name: Build and Test
+name: Build and Test Local
 
 on:
   push:
@@ -9,6 +9,8 @@ on:
 jobs:
   setup-container:
     uses: ./.github/workflows/container_setup.yaml
+    with:
+      container_type: ubuntu-cuda
 
   build_and_test:
     needs: setup-container
@@ -26,11 +28,11 @@ jobs:
           conda activate quake-env
           mkdir -p build
           cd build
-          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          cmake -DCMAKE_BUILD_TYPE=Release \
                 -DQUAKE_USE_NUMA=OFF \
                 -DQUAKE_ENABLE_GPU=OFF \
                 -DBUILD_TESTS=ON \
-                -DQUAKE_USE_AVX512=OFF \
+                -DQUAKE_USE_AVX512=ON \
                 ../
           make bindings -j
           make quake_tests -j
@@ -38,7 +40,7 @@ jobs:
       - name: Run C++ Tests
         shell: bash
         run: |
-          ./build/test/cpp/quake_tests
+          OMP_NUM_THREADS=1 ./build/test/cpp/quake_tests
 
       - name: Run Python Tests
         shell: bash

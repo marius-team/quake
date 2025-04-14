@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16.2)
+cmake_minimum_required(VERSION 3.24.2)
 project(quake_c VERSION 0.1 LANGUAGES CXX)
 
 # ---------------------------------------------------------------
@@ -94,6 +94,7 @@ endif()
 # ---------------------------------------------------------------
 find_package(Torch REQUIRED)
 find_package(Python3 COMPONENTS Development Interpreter REQUIRED)
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
 
 message(STATUS "Torch include dir: ${TORCH_INCLUDE_DIRS}")
 message(STATUS "Torch libraries: ${TORCH_LIBRARIES}")

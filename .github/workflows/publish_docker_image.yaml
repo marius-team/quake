@@ -24,10 +24,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push main container
+      - name: Build and push CPU image
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: environments/ubuntu-latest/Dockerfile
-          tags: ghcr.io/marius-team/quake/ubuntu-latest:latest
+          file: environments/ubuntu-cpu/Dockerfile
+          tags: ghcr.io/marius-team/quake/ubuntu-cpu:latest
+          push: true
+
+      - name: Build and push GPU image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: environments/ubuntu-cuda/Dockerfile
+          tags: ghcr.io/marius-team/quake/ubuntu-gpu:latest
           push: true
