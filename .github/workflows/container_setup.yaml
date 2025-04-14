@@ -73,7 +73,7 @@ jobs:
         run: |
           image="ghcr.io/marius-team/quake/test_container_${{ inputs.container_type }}:${{ steps.dependency_hash.outputs.hash }}"
           echo "Checking if container exists: $image"
-          if docker pull "$image" > /dev/null 2>&1; then
+          if docker manifest inspect "$image" > /dev/null 2>&1; then
             echo "container_exists=true" >> "$GITHUB_OUTPUT"
             echo "container_image=$image" >> "$GITHUB_OUTPUT"
             echo "Container already exists: $image"
