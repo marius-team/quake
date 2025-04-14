@@ -10,7 +10,7 @@ jobs:
   setup-container:
     uses: ./.github/workflows/container_setup.yaml
     with:
-      container_type: ubuntu-cpu
+      container_type: ubuntu-gpu
 
   build_and_test:
     needs: setup-container
