@@ -17,7 +17,6 @@ jobs:
     runs-on: local-gpu-numa-runner
     container:
       image: ${{ needs.setup-container.outputs.container_image }}
-      options: --privileged
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -33,7 +32,7 @@ jobs:
                 -DQUAKE_USE_NUMA=OFF \
                 -DQUAKE_ENABLE_GPU=OFF \
                 -DBUILD_TESTS=ON \
-                -DQUAKE_USE_AVX512=OFF \
+                -DQUAKE_USE_AVX512=ON \
                 ../
           make bindings -j
           make quake_tests -j
