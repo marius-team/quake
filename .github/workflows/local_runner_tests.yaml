@@ -40,7 +40,7 @@ jobs:
       - name: Run C++ Tests
         shell: bash
         run: |
-          ./build/test/cpp/quake_tests
+          OMP_NUM_THREADS=1 ./build/test/cpp/quake_tests
 
       - name: Run Python Tests
         shell: bash
