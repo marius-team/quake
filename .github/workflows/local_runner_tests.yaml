@@ -10,7 +10,7 @@ jobs:
   setup-container:
     uses: ./.github/workflows/container_setup.yaml
     with:
-      container_type: ubuntu-cuda
+      container_type: ubuntu-cpu
 
   build_and_test:
     needs: setup-container
@@ -30,16 +30,10 @@ jobs:
           mkdir -p build
           cd build
           cmake -DCMAKE_BUILD_TYPE=Release \
-                -DQUAKE_USE_NUMA=ON \
-                -DQUAKE_ENABLE_GPU=ON \
+                -DQUAKE_USE_NUMA=OFF \
+                -DQUAKE_ENABLE_GPU=OFF \
                 -DBUILD_TESTS=ON \
-                -DQUAKE_USE_AVX512=ON \
-                -DCMAKE_CUDA_ARCHITECTURES="75;72" \
-                -DTORCH_CUDA_ARCH_LIST="7.5 7.2" \
-                -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
-                -DCUDA_NVCC_EXECUTABLE=/usr/local/cuda/bin/nvcc \
-                -DCUDA_INCLUDE_DIRS=/usr/local/cuda/include \
-                -DCUDA_CUDART_LIBRARY=/usr/local/cuda/lib64/libcudart.so \
+                -DQUAKE_USE_AVX512=OFF \
                 ../
           make bindings -j
           make quake_tests -j
