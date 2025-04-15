@@ -33,6 +33,7 @@ jobs:
                 -DQUAKE_ENABLE_GPU=ON \
           		-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
                 -DCMAKE_CUDA_ARCHITECTURES="70" \
+                -DTORCH_CUDA_ARCH_LIST="7.0" \
                 -DBUILD_TESTS=ON \
                 -DQUAKE_USE_AVX512=ON \
                 ../
