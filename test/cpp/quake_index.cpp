@@ -283,6 +283,39 @@ TEST(QuakeIndexStressTest, LargeBuildTest) {
               << " vectors took " << build_duration_ms << " ms.\n";
 }
 
+#ifdef FAISS_ENABLE_GPU
+TEST(QuakeIndexStressTestGPU, LargeBuildTest) {
+    // Attempt to build an index with a large number of vectors.
+    // Adjust these numbers based on your available memory/compute.
+    int64_t dimension = 128;     // Medium-high dimension
+    int64_t num_vectors = 1e6;   // 1 million vectors
+    auto data_vectors = generate_random_data(num_vectors, dimension);
+    auto data_ids = generate_sequential_ids(num_vectors, 0);
+
+    QuakeIndex index;
+
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = 512;
+    build_params->metric = "l2";
+    build_params->use_gpu = true;
+    // Keep the iteration count modest to avoid overly long tests
+    build_params->niter = 5;
+
+    auto t0 = std::chrono::high_resolution_clock::now();
+    auto timing_info = index.build(data_vectors, data_ids, build_params);
+    auto t1 = std::chrono::high_resolution_clock::now();
+
+    // Check that the build completed and that we didn't crash
+    ASSERT_NE(timing_info, nullptr);
+    // Basic correctness
+    EXPECT_EQ(index.ntotal(), num_vectors);
+
+    auto build_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+    std::cout << "[LargeBuildTest] Building " << num_vectors
+              << " vectors took " << build_duration_ms << " ms.\n";
+}
+#endif
+
 // -------------------------------------------------------------------------
 // REPEATED BUILD-SEARCH STRESS TEST
 // -------------------------------------------------------------------------
@@ -492,3 +525,33 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
 
     SUCCEED();
 }
+
+// Define the GPU related test only if FAISS GPU support is enabled
+#ifdef FAISS_ENABLE_GPU
+// Test build with GPU enabled
+TEST(QuakeIndexGPUTest, BuildWithGPUTest) {
+    int64_t dimension = 32;
+    int64_t num_vectors = 200;
+    int64_t nlist = 5;
+
+    torch::Tensor data_vectors = generate_random_data(num_vectors, dimension);
+    torch::Tensor data_ids = generate_sequential_ids(num_vectors, 0);
+
+    // Set up build parameters. Note: for a multi-partition index (nlist > 1),
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = nlist;
+    build_params->use_gpu = true;
+
+    QuakeIndex index;
+    auto timing_info = index.build(data_vectors, data_ids, build_params);
+
+    EXPECT_NE(index.partition_manager_, nullptr);
+    EXPECT_NE(index.query_coordinator_, nullptr);
+    EXPECT_NE(index.build_params_, nullptr);
+    EXPECT_NE(index.parent_, nullptr);
+
+    // Check that the timing_info fields look valid
+    EXPECT_EQ(timing_info->n_vectors, data_vectors.size(0));
+    EXPECT_EQ(timing_info->d, data_vectors.size(1));
+}
+#endif

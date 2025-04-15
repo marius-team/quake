@@ -7,16 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  setup-container:
-    uses: ./.github/workflows/container_setup.yaml
-    with:
-      container_type: ubuntu-cuda
-
   build_and_test:
-    needs: setup-container
     runs-on: local-gpu-numa-runner
-    container:
-      image: ${{ needs.setup-container.outputs.container_image }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -30,7 +22,10 @@ jobs:
           cd build
           cmake -DCMAKE_BUILD_TYPE=Release \
                 -DQUAKE_USE_NUMA=OFF \
-                -DQUAKE_ENABLE_GPU=OFF \
+                -DQUAKE_ENABLE_GPU=ON \
+          		-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+                -DCMAKE_CUDA_ARCHITECTURES="70" \
+                -DTORCH_CUDA_ARCH_LIST="7.0" \
                 -DBUILD_TESTS=ON \
                 -DQUAKE_USE_AVX512=ON \
                 ../

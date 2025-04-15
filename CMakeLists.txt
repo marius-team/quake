@@ -20,6 +20,10 @@ else()
     set(FAISS_ENABLE_GPU OFF)
 endif()
 
+if(QUAKE_ENABLE_GPU)
+    add_compile_definitions(FAISS_ENABLE_GPU)
+endif()
+
 if(QUAKE_USE_NUMA)
     add_compile_definitions(QUAKE_USE_NUMA)
 endif()
