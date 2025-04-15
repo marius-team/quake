@@ -26,8 +26,21 @@ FileIndexPartition::~FileIndexPartition() {
 }
 
 void FileIndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
-    // Implementation here
-    std::cout << "TBD: Appending to FileIndexPartition file goes here" << std::endl;
+    std::cout << "Appending to FileIndexPartition file (" << file_path_ << ") goes here" << std::endl;
+    if (n_entry <= 0) return;
+    std::ofstream ofs(file_path_, std::ios::binary | std::ios::app);
+    if (!ofs) {
+        throw std::runtime_error("Failed to open file for appending: " + file_path_);
+    }
+
+    const size_t code_bytes = static_cast<size_t>(code_size_);
+    for (int64_t i = 0; i < n_entry; ++i) {
+        ofs.write(reinterpret_cast<const char*>(new_codes + i * code_bytes), code_bytes);
+        ofs.write(reinterpret_cast<const char*>(&new_ids[i]), sizeof(idx_t));
+    }
+    num_vectors_ += n_entry;
+
+    ofs.close();
 }
 
 void FileIndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
@@ -55,26 +68,26 @@ void FileIndexPartition::reallocate(int64_t new_capacity) {
     // Implementation here
 }
 
+// for testing
 void FileIndexPartition::load() {
-    std::ifstream in(file_path, std::ios::binary);
+    std::cout << "[FileIndexPartition] load" << std::endl;
+    std::ifstream in(file_path_, std::ios::binary);
     if (!in) {
-        throw std::runtime_error("Unable to open file for reading: " + file_path);
+        throw std::runtime_error("Unable to open file for reading: " + file_path_);
     }
 
-    in.read(reinterpret_cast<char*>(&num_vectors_), sizeof(num_vectors_));
-    in.read(reinterpret_cast<char*>(&code_size_), sizeof(code_size_));
+    ensure_capacity(num_vectors_); // allocate memory for codes_ and ids_
 
-    set_code_size(code_size_);
-    // ensure_capacity(num_vectors_);
-
-    in.read(reinterpret_cast<char*>(codes_), num_vectors_ * code_size_);
-    in.read(reinterpret_cast<char*>(ids_), num_vectors_ * sizeof(idx_t));
+    for (int64_t i = 0; i < num_vectors_; ++i) {
+        in.read(reinterpret_cast<char*>(codes_ + i * code_size_), code_size_);
+        in.read(reinterpret_cast<char*>(ids_ + i), sizeof(idx_t));
+    }
 
     in.close();
 }
 
 void FileIndexPartition::save() {
-    std::ofstream out(file_path, std::ios::binary);
+    std::ofstream out(file_path_, std::ios::binary);
     if (!out) {
         throw std::runtime_error("Unable to open file for writing");
     }
@@ -88,6 +101,10 @@ void FileIndexPartition::save() {
     out.write(reinterpret_cast<const char*>(ids_), num_vectors_ * sizeof(idx_t));
 
     out.close();
+}
+
+void FileIndexPartition::set_file_path(std::string file_path) {
+    file_path_ = file_path;
 }
 
 #ifdef QUAKE_USE_NUMA

@@ -118,21 +118,12 @@ void PartitionManager::init_partitions(
                     resident_ids_.insert(id_val);
                 }
             }
-            if(curr_level == 0) {
-                partitions_->add_entries_file(
-                partition_ids_accessor[i],
-                count,
-                id.data_ptr<int64_t>(),
-                as_uint8_ptr(v)
+            partitions_->add_entries(
+            partition_ids_accessor[i],
+            count,
+            id.data_ptr<int64_t>(),
+            as_uint8_ptr(v)
             );
-            } else {
-                partitions_->add_entries(
-                partition_ids_accessor[i],
-                count,
-                id.data_ptr<int64_t>(),
-                as_uint8_ptr(v)
-                );
-            }
             if (debug_) {
                 std::cout << "[PartitionManager] init_partitions: Added " << count
                           << " entries to partition " << partition_ids_accessor[i] << std::endl;

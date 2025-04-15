@@ -7,6 +7,11 @@
 
 class FileIndexPartition : public IndexPartition {
 public:
+    std::string file_path_;
+    int fd_ = -1; // file descriptor
+    bool is_in_memory = false; // indicate whether the partition is in memory
+    bool is_dirty = false; // indicate whether the partition is dirty (changes haven't been synced to disk)
+
     /// Default constructor.
     FileIndexPartition() = default;
 
@@ -60,7 +65,7 @@ public:
     // disk specific method
     void load(); // load the partition to memory from disk
     void save(); // store the vectors on disk
-    
+    void set_file_path(std::string file_path);
 
 
     
@@ -75,10 +80,6 @@ public:
     void set_numa_node(int new_numa_node);
 #endif
 
-private:
-    std::string file_path;
-    bool is_in_memory = false; // indicate whether the partition is in memory
-    bool is_dirty = false; // indicate whether the partition is dirty (changes haven't been synced to disk)
     
 };
 

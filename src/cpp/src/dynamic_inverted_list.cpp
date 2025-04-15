@@ -168,31 +168,12 @@ namespace faiss {
             part->set_code_size(static_cast<int64_t>(code_size));
         }
 
-        part->append((int64_t) n_entry, ids, codes);
-        return n_entry;
-    }
-
-    size_t DynamicInvertedLists::add_entries_file(
-        size_t list_no,
-        size_t n_entry,
-        const idx_t *ids,
-        const uint8_t *codes) {
-        if (n_entry == 0) {
-            return 0;
+        if (auto file_part = std::dynamic_pointer_cast<FileIndexPartition>(part)) {
+            file_part->append((int64_t) n_entry, ids, codes);
+        } else {
+            part->append((int64_t) n_entry, ids, codes);
         }
 
-        auto it = partitions_.find(list_no);
-        if (it == partitions_.end()) {
-            throw std::runtime_error("List does not exist in add_entries");
-        }
-
-        shared_ptr<FileIndexPartition> part = std::dynamic_pointer_cast<FileIndexPartition>(it->second);
-        // Ensure code_size is set
-        if (part->code_size_ != static_cast<int64_t>(code_size)) {
-            part->set_code_size(static_cast<int64_t>(code_size));
-        }
-
-        part->append((int64_t) n_entry, ids, codes);
         return n_entry;
     }
 
@@ -311,6 +292,25 @@ namespace faiss {
         shared_ptr<FileIndexPartition> ip = std::make_shared<FileIndexPartition>();
         ip->set_code_size((int64_t) code_size);
         partitions_[list_no] = ip;
+
+        // create /data/quake_vectors directory if not exists
+        namespace fs = std::filesystem;
+        std::string dir_path = "data/quake_vectors";
+        if (!fs::exists(dir_path)) {
+            fs::create_directories(dir_path);
+        }
+
+        // create an empty file
+        std::ostringstream oss;
+        oss << "data/quake_vectors/p_" << list_no << ".qvecs";
+        std::string filename = oss.str();
+        ip->set_file_path(filename);
+        std::ofstream ofs(filename, std::ios::binary);
+        if (!ofs) {
+            throw std::runtime_error("Failed to create file: " + filename);
+        }
+        ofs.close();
+
         nlist++;
     } 
 

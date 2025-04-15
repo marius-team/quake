@@ -45,7 +45,7 @@ public:
     std::mutex result_mutex_;
     std::atomic<bool> stop_workers_;
 
-    bool debug_ = false;
+    bool debug_ = true;
 
     QueryCoordinator(shared_ptr<QuakeIndex> parent,
         shared_ptr<PartitionManager> partition_manager,

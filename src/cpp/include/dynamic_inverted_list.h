@@ -30,7 +30,6 @@ namespace faiss {
         int total_numa_nodes_ = 0;     ///< Total NUMA nodes available.
         int next_numa_node_ = 0;       ///< Next NUMA node to use (for round-robin allocation).
         unordered_map<size_t, shared_ptr<IndexPartition>> partitions_; ///< Map of partition ID to IndexPartition.
-        unordered_map<size_t, shared_ptr<FileIndexPartition>> file_partitions_; ///< Map of partition ID to IndexPartition.
         int d_;                        ///< Dimensionality of the vectors (derived from code_size).
         int code_size_;                ///< Size in bytes of each vector code.
 
@@ -145,8 +144,6 @@ namespace faiss {
             size_t n_entry,
             const idx_t *ids,
             const uint8_t *codes) override;
-
-        size_t add_entries_file(size_t list_no, size_t n_entry, const idx_t *ids, const uint8_t *codes);
 
         /**
          * @brief Update existing entries in a partition.

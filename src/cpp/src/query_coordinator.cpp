@@ -549,6 +549,17 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 continue; // Skip invalid partitions
             }
 
+            // Get the partition’s data.
+            if (partition_manager_->parent_ && partition_manager_->parent_->current_level_ == 1) {
+                auto it = partition_manager_->partitions_->partitions_.find(pi);
+                if (it == partition_manager_->partitions_->partitions_.end()) {
+                    throw std::runtime_error("List does not exist in list_size");
+                }
+                auto dip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pi]);
+                std::cout << "[QueryCoordinator] serial_scan: Loading level " << partition_manager_->parent_->current_level_ - 1 << " partition ID: " << pi << std::endl;
+                dip->load();
+            }
+
             start_time = std::chrono::high_resolution_clock::now();
             float *list_vectors = (float *) partition_manager_->partitions_->get_codes(pi);
             int64_t *list_ids = (int64_t *) partition_manager_->partitions_->get_ids(pi);
@@ -736,8 +747,17 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
         Tensor indices_tensor = torch::tensor(query_indices, torch::kInt64);
         Tensor x_subset = x.index_select(0, indices_tensor);
         int64_t batch_size = x_subset.size(0);
-
+        
         // Get the partition’s data.
+        if (partition_manager_->parent_ && partition_manager_->parent_->current_level_ == 1) {
+            auto it = partition_manager_->partitions_->partitions_.find(pid);
+            if (it == partition_manager_->partitions_->partitions_.end()) {
+                throw std::runtime_error("List does not exist in list_size");
+            }
+            auto dip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pid]);
+            std::cout << "[QueryCoordinator] batched_serial_scan: Loading level " << partition_manager_->parent_->current_level_ - 1 << " partition ID: " << pid << std::endl;
+            dip->load();
+        }
         const float *list_codes = (float *) partition_manager_->partitions_->get_codes(pid);
         const int64_t *list_ids = partition_manager_->partitions_->get_ids(pid);
         int64_t list_size = partition_manager_->partitions_->list_size(pid);

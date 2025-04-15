@@ -181,7 +181,7 @@ private:
      *
      * @param required The minimum required number of vectors.
      */
-    void ensure_capacity(int64_t required);
+    // void ensure_capacity(int64_t required);
 
     /**
      * @brief Allocate memory for a given type.
@@ -195,5 +195,16 @@ private:
      */
     template <typename T>
     T* allocate_memory(size_t num_elements, int numa_node);
+
+protected:
+    /**
+     * @brief Ensure capacity.
+     *
+     * Checks that the internal buffer can hold at least the required number of vectors,
+     * and resizes if necessary.
+     *
+     * @param required The minimum required number of vectors.
+     */
+    void ensure_capacity(int64_t required);
 };
 #endif //INDEX_PARTITION_H
