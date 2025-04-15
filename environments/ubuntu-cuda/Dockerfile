@@ -51,7 +51,7 @@ RUN conda env create -f /tmp/conda.yaml && conda clean -afy
 # -----------------------------
 # Install GPU-enabled PyTorch
 # -----------------------------
-RUN conda run -n quake-env pip install torch --index-url https://download.pytorch.org/whl/cu118
+RUN conda run -n quake-env pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu118
 
 # -----------------------------
 # Debug: show conda information
