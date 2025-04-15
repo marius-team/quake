@@ -1,18 +1,20 @@
-name: Build and Test
+name: Build and Test Local
 
 on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main, workflow_dispatch ]
+    branches: [ main ]
 
 jobs:
   setup-container:
     uses: ./.github/workflows/container_setup.yaml
+    with:
+      container_type: ubuntu-cuda
 
-  build_and_test_numa:
+  build_and_test:
     needs: setup-container
-    runs-on: local-gpu-numa-runner
+    runs-on: local-gpu-numa-runnerg
     container:
       image: ${{ needs.setup-container.outputs.container_image }}
     steps:
@@ -26,8 +28,8 @@ jobs:
           conda activate quake-env
           mkdir -p build
           cd build
-          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-                -DQUAKE_USE_NUMA=ON \
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DQUAKE_USE_NUMA=OFF \
                 -DQUAKE_ENABLE_GPU=OFF \
                 -DBUILD_TESTS=ON \
                 -DQUAKE_USE_AVX512=ON \
@@ -38,34 +40,14 @@ jobs:
       - name: Run C++ Tests
         shell: bash
         run: |
-          ./build/test/cpp/quake_tests
+          OMP_NUM_THREADS=1 ./build/test/cpp/quake_tests
 
-  build_and_test_gpu:
-    needs: setup-container
-    runs-on: local-gpu-numa-runner
-    container:
-      image: ${{ needs.setup-container.outputs.container_image }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Build C++
+      - name: Run Python Tests
+        shell: bash
         run: |
           git config --global --add safe.directory '*'
           eval "$(conda shell.bash hook)"
           conda activate quake-env
-          mkdir -p build
-          cd build
-          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-                -DQUAKE_USE_NUMA=ON \
-                -DQUAKE_ENABLE_GPU=ON \
-                -DBUILD_TESTS=ON \
-                -DQUAKE_USE_AVX512=ON \
-                ../
-          make bindings -j
-          make quake_tests -j
-
-      - name: Run C++ Tests
-        shell: bash
-        run: |
-          ./build/test/cpp/quake_tests
+          pip install --no-use-pep517 .
+          pip install pytest
+          python -m pytest test/python

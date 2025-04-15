@@ -9,6 +9,8 @@ on:
 jobs:
   setup-container:
     uses: ./.github/workflows/container_setup.yaml
+    with:
+      container_type: ubuntu-cpu
 
   build_and_test:
     needs: setup-container
@@ -26,7 +28,7 @@ jobs:
           conda activate quake-env
           mkdir -p build
           cd build
-          cmake -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          cmake -DCMAKE_BUILD_TYPE=Release \
                 -DQUAKE_USE_NUMA=OFF \
                 -DQUAKE_ENABLE_GPU=OFF \
                 -DBUILD_TESTS=ON \
