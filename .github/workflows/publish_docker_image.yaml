@@ -69,5 +69,5 @@ jobs:
         with:
           context: .
           file: environments/ubuntu-cuda/Dockerfile
-          tags: ghcr.io/marius-team/quake/ubuntu-gpu:latest
+          tags: ghcr.io/marius-team/quake/ubuntu-cuda:latest
           push: true
