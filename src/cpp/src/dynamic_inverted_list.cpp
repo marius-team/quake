@@ -168,7 +168,12 @@ namespace faiss {
             part->set_code_size(static_cast<int64_t>(code_size));
         }
 
-        part->append((int64_t) n_entry, ids, codes);
+        if (auto file_part = std::dynamic_pointer_cast<FileIndexPartition>(part)) {
+            file_part->append((int64_t) n_entry, ids, codes);
+        } else {
+            part->append((int64_t) n_entry, ids, codes);
+        }
+
         return n_entry;
     }
 
@@ -279,6 +284,35 @@ namespace faiss {
         partitions_[list_no] = ip;
         nlist++;
     }
+
+    void DynamicInvertedLists::add_list_file(size_t list_no) {
+        if (partitions_.find(list_no) != partitions_.end()) {
+            throw std::runtime_error("List already exists in add_list");
+        }
+        shared_ptr<FileIndexPartition> ip = std::make_shared<FileIndexPartition>();
+        ip->set_code_size((int64_t) code_size);
+        partitions_[list_no] = ip;
+
+        // create /data/quake_vectors directory if not exists
+        namespace fs = std::filesystem;
+        std::string dir_path = "data/quake_vectors";
+        if (!fs::exists(dir_path)) {
+            fs::create_directories(dir_path);
+        }
+
+        // create an empty file
+        std::ostringstream oss;
+        oss << "data/quake_vectors/p_" << list_no << ".qvecs";
+        std::string filename = oss.str();
+        ip->set_file_path(filename);
+        std::ofstream ofs(filename, std::ios::binary);
+        if (!ofs) {
+            throw std::runtime_error("Failed to create file: " + filename);
+        }
+        ofs.close();
+
+        nlist++;
+    } 
 
     bool DynamicInvertedLists::id_in_list(size_t list_no, idx_t id) const {
         auto it = partitions_.find(list_no);

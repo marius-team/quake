@@ -27,7 +27,7 @@ public:
     shared_ptr<MaintenancePolicyParams> maintenance_policy_params_; ///< Parameters for the maintenance policy.
     int current_level_ = 0; ///< Current level of the index.
 
-    bool debug_ = false; ///< If true, print debug information.
+    bool debug_ = true; ///< If true, print debug information.
 
     /**
      * @brief Constructor for QuakeIndex.

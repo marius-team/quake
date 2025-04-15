@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 #include "quake_index.h"
+#include "testing.h"
 #include <torch/torch.h>
 
 // Helper functions for random data
@@ -77,6 +78,33 @@ TEST_F(QuakeIndexTest, BuildTest) {
     // Check that the timing_info fields look valid
     EXPECT_EQ(timing_info->n_vectors, data_vectors_.size(0));
     EXPECT_EQ(timing_info->d, data_vectors_.size(1));
+}
+
+TEST_F(QuakeIndexTest, VizBuildTest) {
+    QuakeIndex index;
+
+    // create build_params
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = nlist_;       // Use multi-partition
+    build_params->metric = "l2";
+    build_params->niter = 5;           // small kmeans iteration
+
+    auto timing_info = index.build(data_vectors_, data_ids_, build_params);
+    
+    // std::cout << "Level: " << index.current_level_ << std::endl;
+    print_index_hierarchy(index);
+    // auto temp_index = index;
+    // while(temp_index) {
+    //     std::cout << "Level: " << temp_index.current_level_ << std::endl;
+    //     temp_index = temp_index.parent_;
+    // }
+    index.partition_manager_->partitions_->print_stats();
+
+    EXPECT_NE(index.partition_manager_, nullptr);
+    EXPECT_NE(index.query_coordinator_, nullptr);
+    EXPECT_NE(index.build_params_, nullptr);
+
+
 }
 
 // Building the index with nlist <= 1 => a "flat" scenario
