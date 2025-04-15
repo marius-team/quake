@@ -9,6 +9,7 @@ on:
 jobs:
   build-and-push-image-cpu:
     runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -53,10 +54,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker System Prune
+      - name: Check disk usage
+        run: df -h
+
+      - name: Clear disk space
         run: |
-          docker system prune -f
-          docker builder prune -f
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+
+      - name: Check disk usage
+        run: df -h
 
       - name: Build and push GPU image
         uses: docker/build-push-action@v4

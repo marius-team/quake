@@ -9,9 +9,9 @@ jobs:
     uses: ./.github/workflows/container_setup.yaml
 
   build_docs:
-    if: "!contains(github.event.head_commit.message, '[skip docs]')"
     needs: setup-container
     runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     container:
       image: ${{ needs.setup-container.outputs.container_image }}
     steps:

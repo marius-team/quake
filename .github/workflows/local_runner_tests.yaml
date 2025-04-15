@@ -13,9 +13,9 @@ jobs:
       container_type: ubuntu-cuda
 
   build_and_test:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     needs: setup-container
     runs-on: local-gpu-numa-runner
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     container:
       image: ${{ needs.setup-container.outputs.container_image }}
     steps:
