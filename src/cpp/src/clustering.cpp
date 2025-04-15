@@ -52,7 +52,6 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     cp.niter = niter;
 
     faiss::Clustering clus(d, n_clusters, cp);
-    clus.t
     clus.train(n, vectors.data_ptr<float>(), *index_ptr);
 
     // Retrieve centroids as a torch Tensor.
@@ -66,13 +65,24 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     index_ptr->search(n, vectors.data_ptr<float>(), 1, distance_vec.data(), assign_vec.data());
     Tensor assignments = torch::from_blob(assign_vec.data(), {n}, torch::kInt64).clone();
 
-    // Partition vectors and ids by cluster.
-    vector<Tensor> cluster_vectors(n_clusters);
-    vector<Tensor> cluster_ids(n_clusters);
-    for (int i = 0; i < n_clusters; i++) {
-        cluster_vectors[i] = vectors.index({assignments == i});
-        cluster_ids[i] = ids.index({assignments == i});
-    }
+    // Sort assignments and select corresponding vectors and ids.
+    Tensor sorted_assignments, sorted_indices;
+    std::tie(sorted_assignments, sorted_indices) = torch::sort(assignments);
+    Tensor sorted_vectors = vectors.index_select(0, sorted_indices);
+    Tensor sorted_ids = ids.index_select(0, sorted_indices);
+
+    // Compute counts per cluster using bincount.
+    Tensor counts_tensor = torch::bincount(sorted_assignments, /*weights=*/{}, n_clusters);
+    // Ensure counts are on CPU to extract split sizes.
+    counts_tensor = counts_tensor.to(torch::kCPU);
+    // Convert counts tensor to std::vector<int64_t>
+    std::vector<int64_t> counts_vector(counts_tensor.data_ptr<int64_t>(),
+                                        counts_tensor.data_ptr<int64_t>() + counts_tensor.numel());
+
+    // Split the sorted vectors and sorted ids into clusters in one call.
+    vector<Tensor> cluster_vectors = torch::split(sorted_vectors, counts_vector, 0);
+    vector<Tensor> cluster_ids = torch::split(sorted_ids, counts_vector, 0);
+
     Tensor partition_ids = torch::arange(n_clusters, torch::kInt64);
 
     shared_ptr<Clustering> clustering = std::make_shared<Clustering>();
