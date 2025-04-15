@@ -2,11 +2,9 @@ name: Build and Test Local
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build_and_test:
@@ -14,43 +12,37 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          path: ${{ github.sha }}
 
-      - name: Build Docker Image Locally
+      - name: Build C++
         run: |
-          echo "Building Docker image environment/ubuntu-cuda/Dockerfile"
-          docker build -t local-cuda-container -f environments/ubuntu-cuda/Dockerfile .
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DQUAKE_USE_NUMA=ON \
+                -DQUAKE_ENABLE_GPU=ON \
+          		-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+                -DCMAKE_CUDA_ARCHITECTURES="70" \
+                -DTORCH_CUDA_ARCH_LIST="7.0" \
+                -DBUILD_TESTS=ON \
+                -DQUAKE_USE_AVX512=ON \
+                ../
+          make bindings -j
+          make quake_tests -j
 
-      - name: Run Build and Tests in the Container
+      - name: Run C++ Tests
+        shell: bash
         run: |
-          docker run --rm --gpus all \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            local-cuda-container \
-            /bin/bash -c "\
-              git config --global --add safe.directory '*'; \
-              echo 'Activating conda environment...'; \
-              eval \"\$(conda shell.bash hook)\"; \
-              conda activate quake-env; \
-              echo 'Starting C++ build...'; \
-              mkdir -p build && cd build && \
-              cmake -DCMAKE_BUILD_TYPE=Release \
-                    -DQUAKE_USE_NUMA=ON \
-                    -DQUAKE_ENABLE_GPU=ON \
-                    -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
-                    -DCMAKE_CUDA_ARCHITECTURES=\"70\" \
-                    -DTORCH_CUDA_ARCH_LIST=\"7.0\" \
-                    -DBUILD_TESTS=ON \
-                    -DQUAKE_USE_AVX512=ON ../ && \
-              make bindings -j && make quake_tests -j && \
-              echo 'Running C++ tests...'; \
-              OMP_NUM_THREADS=1 ./build/test/cpp/quake_tests; \
-              echo 'Preparing to run Python tests...'; \
-              cd /workspace; \
-              git config --global --add safe.directory '*'; \
-              eval \"\$(conda shell.bash hook)\"; \
-              conda activate quake-env; \
-              pip install --no-use-pep517 . && \
-              pip install pytest && \
-              python -m pytest test/python"
+          OMP_NUM_THREADS=1 ./build/test/cpp/quake_tests
+
+      - name: Run Python Tests
+        shell: bash
+        run: |
+          git config --global --add safe.directory '*'
+          eval "$(conda shell.bash hook)"
+          conda activate quake-env
+          pip install --no-use-pep517 .
+          pip install pytest
+          python -m pytest test/python
