@@ -29,8 +29,11 @@ jobs:
           mkdir -p build
           cd build
           cmake -DCMAKE_BUILD_TYPE=Release \
-                -DQUAKE_USE_NUMA=OFF \
-                -DQUAKE_ENABLE_GPU=OFF \
+                -DQUAKE_USE_NUMA=ON \
+                -DQUAKE_ENABLE_GPU=ON \
+          		-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+                -DCMAKE_CUDA_ARCHITECTURES="75" \
+                -DTORCH_CUDA_ARCH_LIST="7.5" \
                 -DBUILD_TESTS=ON \
                 -DQUAKE_USE_AVX512=ON \
                 ../
