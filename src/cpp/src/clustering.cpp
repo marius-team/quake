@@ -52,6 +52,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     cp.niter = niter;
 
     faiss::Clustering clus(d, n_clusters, cp);
+    clus.t
     clus.train(n, vectors.data_ptr<float>(), *index_ptr);
 
     // Retrieve centroids as a torch Tensor.

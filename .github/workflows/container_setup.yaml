@@ -15,7 +15,7 @@ on:
 
 jobs:
   determine-and-build:
-    runs-on: ubuntu-latest
+    runs-on: local-gpu-numa-runner
     outputs:
       container_image: ${{ steps.set_image.outputs.container_image }}
     steps:

@@ -3,6 +3,8 @@ name: Build and Publish Docker Image
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build-and-push-image-cpu:
@@ -33,7 +35,7 @@ jobs:
           push: true
 
   build-and-push-image-gpu:
-    runs-on: ubuntu-latest
+    runs-on: local-gpu-numa-runner
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
