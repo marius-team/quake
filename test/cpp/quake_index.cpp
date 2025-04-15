@@ -284,7 +284,7 @@ TEST(QuakeIndexStressTest, LargeBuildTest) {
 }
 
 #ifdef FAISS_ENABLE_GPU
-TEST(QuakeIndexStressTest, LargeBuildTest) {
+TEST(QuakeIndexStressTestGPU, LargeBuildTest) {
     // Attempt to build an index with a large number of vectors.
     // Adjust these numbers based on your available memory/compute.
     int64_t dimension = 128;     // Medium-high dimension
