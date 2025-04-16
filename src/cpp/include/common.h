@@ -38,14 +38,6 @@
 #include <numaif.h>
 #endif
 
-#ifdef FAISS_ENABLE_GPU
-#include <faiss/gpu/GpuIndexFlat.h>
-#include <faiss/gpu/GpuIndexIVFFlat.h>
-#include <faiss/gpu/GpuIndexIVFPQ.h>
-#include <faiss/gpu/StandardGpuResources.h>
-#include <faiss/gpu/GpuCloner.h>
-#endif
-
 using torch::Tensor;
 using std::vector;
 using std::unordered_map;

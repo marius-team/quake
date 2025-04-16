@@ -12,18 +12,6 @@ set(Torch_USE_CUDA OFF CACHE BOOL "Force disable CUDA in Torch")
 set(Torch_NO_CUDA ON CACHE BOOL "Force disable CUDA in Torch")
 set(USE_CUDA OFF CACHE BOOL "Force disable CUDA globally")
 
-# QUAKE_ENABLE_GPU: Enable GPU support for Faiss
-# Default: OFF
-if(QUAKE_ENABLE_GPU)
-    set(FAISS_ENABLE_GPU ON)
-else()
-    set(FAISS_ENABLE_GPU OFF)
-endif()
-
-if(QUAKE_ENABLE_GPU)
-    add_compile_definitions(FAISS_ENABLE_GPU)
-endif()
-
 if(QUAKE_USE_NUMA)
     add_compile_definitions(QUAKE_USE_NUMA)
 endif()
@@ -64,6 +52,24 @@ set(project_BINDINGS_DIR ${CPP_SOURCE}/bindings)
 set(project_THIRD_PARTY_DIR ${CPP_SOURCE}/third_party)
 set(project_TEST_DIR test/cpp)
 
+if(QUAKE_ENABLE_GPU)
+    find_package(CuVS REQUIRED)
+    include(${project_THIRD_PARTY_DIR}cmake/fetch_rapids.cmake)
+    include(rapids-cmake)
+    include(rapids-cpm)
+    include(rapids-cuda)
+    include(rapids-export)
+    include(rapids-find)
+
+    rapids_cuda_init_architectures(quake_c)
+
+    rapids_cpm_init()
+    set(BUILD_CUVS_C_LIBRARY OFF)
+    include(${project_THIRD_PARTY_DIR}/cmake/get_cuvs.cmake)
+
+    add_compile_definitions(QUAKE_ENABLE_GPU)
+endif()
+
 # ---------------------------------------------------------------
 # Print out Compiler and Path Information
 # ---------------------------------------------------------------
@@ -96,24 +102,9 @@ endif()
 # ---------------------------------------------------------------
 # Find Required Packages
 # ---------------------------------------------------------------
-find_package(CuVS REQUIRED)
 find_package(Torch REQUIRED)
 find_package(Python3 COMPONENTS Development Interpreter REQUIRED)
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
-
-include(src/cpp/third_party/cmake/fetch_rapids.cmake)
-include(rapids-cmake)
-include(rapids-cpm)
-include(rapids-cuda)
-include(rapids-export)
-include(rapids-find)
-
-rapids_cuda_init_architectures(quake_c)
-
-rapids_cpm_init()
-set(BUILD_CUVS_C_LIBRARY OFF)
-include(src/cpp/third_party/cmake/get_cuvs.cmake)
-
 
 message(STATUS "Torch include dir: ${TORCH_INCLUDE_DIRS}")
 message(STATUS "Torch libraries: ${TORCH_LIBRARIES}")
@@ -146,7 +137,6 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 # Base libraries common to all platforms
 set(LINK_LIBS
         ${TORCH_LIBRARIES}
-	cuvs::cuvs
         -ffast-math
         -lpthread
         -fPIC
@@ -164,6 +154,10 @@ elseif(UNIX)
 
     if(QUAKE_USE_NUMA)
         list(APPEND LINK_LIBS -lnuma)
+    endif()
+
+    if (QUAKE_ENABLE_GPU)
+        list(APPEND LINK_LIBS cuvs::cuvs)
     endif()
 else()
     # unsupported platform

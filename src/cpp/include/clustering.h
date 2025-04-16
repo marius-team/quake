@@ -9,12 +9,55 @@
 
 #include <common.h>
 
+#ifdef QUAKE_ENABLE_GPU
+#include <raft/core/resources.hpp>   // RAFT resources (handle)
+#include <raft/core/device_mdspan.hpp> // RAFT device view (make_device_matrix_view, etc.)
+#include <cuvs/cluster/kmeans.hpp>   // cuVS k-means API
+#endif
+
 class IndexPartition;
+
+/**
+ * @brief Clusters vectors into partitions using faiss::Clustering
+ *
+ *
+ * @param vectors The vectors to cluster.
+ * @param ids The IDs of the vectors.
+ * @param n_clusters The number of clusters to create.
+ * @param metric_type The metric type to use for clustering.
+ * @param niter The number of iterations to run k-means.
+ * @param initial_centroids The initial centroids to use for k-means.
+ */
+shared_ptr<Clustering> kmeans_cpu(Tensor vectors,
+                              Tensor ids,
+                              int n_clusters,
+                              MetricType metric_type,
+                              int niter = 5,
+                              Tensor initial_centroids = Tensor());
+
+/**
+ * @brief Clusters vectors into partitions using CuVS k-means.
+ *
+ *
+ * @param vectors The vectors to cluster.
+ * @param ids The IDs of the vectors.
+ * @param n_clusters The number of clusters to create.
+ * @param metric_type The metric type to use for clustering.
+ * @param niter The number of iterations to run k-means.
+ * @param initial_centroids The initial centroids to use for k-means.
+ */
+#ifdef QUAKE_ENABLE_GPU
+shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
+                              Tensor ids,
+                              int n_clusters,
+                              MetricType metric_type,
+                              int niter = 5,
+                              Tensor initial_centroids = Tensor());
+#endif
 
 /**
  * @brief Clusters vectors into partitions using k-means.
  *
- * Uses the faiss::Clustering class to cluster vectors into n_clusters partitions.
  *
  * @param vectors The vectors to cluster.
  * @param ids The IDs of the vectors.
