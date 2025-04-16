@@ -127,7 +127,8 @@ class DistributedIndex:
             server_results = self.indices[i].search(server_queries, self.search_params[i])
             if i >= 1: 
                 # Perform search again (I have to do this, otherwise the results appear to cache the first result)
-                server_results = self.indices[i].search(server_queries, self.search_params[i])
+                # server_results = self.indices[i].search(server_queries, self.search_params[i])
+                pass
 
             results.append(server_results)
             start_idx = end_idx
