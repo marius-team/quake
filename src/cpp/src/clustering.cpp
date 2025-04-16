@@ -11,6 +11,7 @@
 #include <list_scanning.h>
 
 #ifdef QUAKE_ENABLE_GPU
+#include <c10/cuda/CUDAStream.h>
 #include <raft/core/resources.hpp>   // RAFT resources (handle)
 #include <raft/core/device_mdspan.hpp> // RAFT device view (make_device_matrix_view, etc.)
 #include <cuvs/cluster/kmeans.hpp>   // cuVS k-means API
@@ -21,6 +22,7 @@ shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
     MetricType metric,
     int niter,
     Tensor initial_centroids) {
+
     // Validate input shapes and sizes.
     TORCH_CHECK(vectors.dim() == 2, "Input 'vectors' must be a 2D tensor");
     TORCH_CHECK(ids.dim() == 1 || (ids.dim() == 2 && ids.size(1) == 1),
@@ -39,22 +41,23 @@ shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
 
     // RAFT handle and stream setup.
     raft::resources handle;
-    cudaStream_t cuda_stream = at::cuda::getCurrentCUDAStream().stream();
+    // Replace the at::cuda call with c10's current CUDA stream.
+    cudaStream_t cuda_stream = c10::cuda::getCurrentCUDAStream();
     raft::resource::set_cuda_stream(handle, cuda_stream);
 
-    // Wrap the input data in a RAFT device_matrix_view.
+    // Wrap the input data in a RAFT *device* matrix view.
     float* data_ptr = vectors.data_ptr<float>();
-    auto X_view = raft::make_host_matrix_view<const float, int>(data_ptr, (int)n_samples, (int)n_features);
+    auto X_view = raft::make_device_matrix_view<const float, int>(data_ptr, (int)n_samples, (int)n_features);
 
     // Allocate output centroids on GPU.
     Tensor centroids_tensor = torch::empty({num_clusters, n_features},
-                                                  torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+                                             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
     float* centroids_ptr = centroids_tensor.data_ptr<float>();
     auto centroids_view = raft::make_device_matrix_view<float, int>(centroids_ptr, (int)num_clusters, (int)n_features);
 
     // Set up k-means parameters.
     cuvs::cluster::kmeans::params params;
-    params.n_clusters = (int)num_clusters;
+    params.n_clusters = num_clusters;
     params.max_iter = niter;
     params.init = cuvs::cluster::kmeans::params::InitMethod::Random;
 
@@ -66,12 +69,12 @@ shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
 
     // Run k-means clustering (fit).
     cuvs::cluster::kmeans::fit(handle, params, X_view, std::nullopt,
-                             centroids_view, inertia_view, iter_view);
+                               centroids_view, inertia_view, iter_view);
 
     // If inner-product, renormalize centroids.
     if (metric == faiss::METRIC_INNER_PRODUCT) {
-    Tensor cent_norms = torch::sqrt((centroids_tensor * centroids_tensor).sum(1, /*keepdim=*/true));
-    centroids_tensor.div_(cent_norms);
+        Tensor cent_norms = torch::sqrt((centroids_tensor * centroids_tensor).sum(1, /*keepdim=*/true));
+        centroids_tensor.div_(cent_norms);
     }
 
     // Allocate memory for labels and run prediction.
@@ -80,15 +83,15 @@ shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
     auto labels_view = raft::make_device_vector_view<int, int>(labels_ptr, (int)n_samples);
 
     cuvs::cluster::kmeans::predict(handle, params, X_view, std::nullopt,
-                                 centroids_view, labels_view, false,
-                                 raft::make_host_scalar_view(&inertia));
+                                   centroids_view, labels_view, false,
+                                   raft::make_host_scalar_view(&inertia));
 
     // Synchronize the stream.
     raft::resource::sync_stream(handle);
 
     // ----- Grouping (GPU vectorized) -----
     // Sort the labels and get the sorted indices.
-    Tensor sorted_tuple = std::get<1>(torch::sort(labels));  // sorted indices only, since sorted labels are not needed
+    Tensor sorted_tuple = std::get<1>(torch::sort(labels));  // sorted indices only
     Tensor sorted_labels = labels.index_select(0, sorted_tuple);
 
     // Reorder the data and ids using the sorted indices.
@@ -97,8 +100,6 @@ shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
 
     // Compute per-cluster counts using torch::bincount.
     Tensor counts = torch::bincount(sorted_labels.to(torch::kInt64), /*weights=*/{}, num_clusters);
-
-    // Transfer counts to CPU and build a vector for split sizes.
     auto counts_cpu = counts.to(torch::kCPU);
     std::vector<int64_t> split_sizes(counts_cpu.data_ptr<int64_t>(), counts_cpu.data_ptr<int64_t>() + counts_cpu.numel());
 
