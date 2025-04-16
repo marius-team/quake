@@ -11,6 +11,11 @@
 #include <list_scanning.h>
 
 #ifdef QUAKE_ENABLE_GPU
+#include <raft/core/resources.hpp>   // RAFT resources (handle)
+#include <raft/core/device_mdspan.hpp> // RAFT device view (make_device_matrix_view, etc.)
+#include <cuvs/cluster/kmeans.hpp>   // cuVS k-means API
+#endif
+
 shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
     Tensor ids,
     int num_clusters,
@@ -24,13 +29,13 @@ shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
     TORCH_CHECK(vectors.size(0) == ids.size(0), "Number of ids must match number of vectors");
     TORCH_CHECK(vectors.size(0) >= num_clusters, "Number of clusters cannot exceed number of points");
 
-    int64_t n_samples  = data.size(0);
-    int64_t n_features = data.size(1);
+    int64_t n_samples  = vectors.size(0);
+    int64_t n_features = vectors.size(1);
 
     // If using inner-product (cosine), normalize input vectors.
     if (metric == faiss::METRIC_INNER_PRODUCT) {
-        Tensor norms = torch::sqrt((data * data).sum(1, /*keepdim=*/true));
-        data = data / norms;
+        Tensor norms = torch::sqrt((vectors * vectors).sum(1, /*keepdim=*/true));
+        vectors = vectors / norms;
     }
 
     // RAFT handle and stream setup.
@@ -39,7 +44,7 @@ shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
     raft::resource::set_cuda_stream(handle, cuda_stream);
 
     // Wrap the input data in a RAFT device_matrix_view.
-    float* data_ptr = data.data_ptr<float>();
+    float* data_ptr = vectors.data_ptr<float>();
     auto X_view = raft::make_host_matrix_view<const float, int>(data_ptr, (int)n_samples, (int)n_features);
 
     // Allocate output centroids on GPU.
@@ -88,8 +93,8 @@ shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
     Tensor sorted_labels = labels.index_select(0, sorted_tuple);
 
     // Reorder the data and ids using the sorted indices.
-    Tensor sorted_data = data.index_select(0, sorted_tuple);
-    Tensor sorted_ids = id_dev.index_select(0, sorted_tuple);
+    Tensor sorted_data = vectors.index_select(0, sorted_tuple);
+    Tensor sorted_ids = ids.index_select(0, sorted_tuple);
 
     // Compute per-cluster counts using torch::bincount.
     Tensor counts = torch::bincount(sorted_labels.to(torch::kInt64), /*weights=*/{}, num_clusters);
