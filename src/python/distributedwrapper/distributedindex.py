@@ -1,5 +1,7 @@
 from typing import Any, List, Dict, Optional, Tuple
 import torch
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from quake import QuakeIndex, IndexBuildParams, SearchParams
 from quake.distributedwrapper import distributed
 
@@ -90,9 +92,13 @@ class DistributedIndex:
             if self.server_addresses[i] == server_address:
                 return self.indices[i], self.build_params[i], self.search_params[i]
             
+    def _search_single_server(self, server_idx: int, queries: torch.Tensor) -> torch.Tensor:
+        """Helper method to perform search on a single server."""
+        return self.indices[server_idx].search(queries, self.search_params[server_idx])
+
     def search(self, queries: torch.Tensor) -> torch.Tensor:
         """
-        Distribute queries across servers and merge results.
+        Distribute queries across servers in parallel and merge results.
         
         Args:
             queries: Tensor of query vectors
@@ -110,34 +116,35 @@ class DistributedIndex:
         
         # Split queries among servers
         start_idx = 0
-        results = []
+        futures = []
         
-        for i in range(n_servers):
-            # Calculate number of queries for this server
-            n_queries_for_server = queries_per_server + (1 if i < remainder else 0)
-            if n_queries_for_server == 0:
-                continue
+        with ThreadPoolExecutor(max_workers=n_servers) as executor:
+            for i in range(n_servers):
+                # Calculate number of queries for this server
+                n_queries_for_server = queries_per_server + (1 if i < remainder else 0)
+                if n_queries_for_server == 0:
+                    continue
+                    
+                # Get queries for this server
+                end_idx = start_idx + n_queries_for_server
+                server_queries = queries[start_idx:end_idx]
                 
-            # Get queries for this server
-            end_idx = start_idx + n_queries_for_server
+                # Submit search task to thread pool
+                future = executor.submit(self._search_single_server, i, server_queries)
+                futures.append(future)
+                start_idx = end_idx
 
-            server_queries = queries[start_idx:end_idx]
-            
-            # Perform search
-            server_results = self.indices[i].search(server_queries, self.search_params[i])
-            if i >= 1: 
-                # Perform search again (I have to do this, otherwise the results appear to cache the first result)
-                # server_results = self.indices[i].search(server_queries, self.search_params[i])
-                pass
-
-            results.append(server_results)
-            start_idx = end_idx
-
-            # force refresh of server_queries
-            # del server_queries
-
+            # Collect results as they complete
+            results = [future.result() for future in futures]
+        
         # Merge results
         return self._merge_search_results(results)
+
+    def search_sync(self, queries: torch.Tensor) -> torch.Tensor:
+        """
+        Synchronous wrapper for the async search method.
+        """
+        return asyncio.run(self.search(queries))
 
     def add(self, vectors: torch.Tensor, ids: torch.Tensor):
         """
