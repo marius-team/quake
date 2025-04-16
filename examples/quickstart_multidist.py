@@ -26,7 +26,8 @@ from quake.distributedwrapper import distributed
 # Server addresses
 SERVERS = [
     "quake2:50052",
-    "quake3:50053"
+    "quake3:50053",
+    "quake4:50054"
 ]
 
 def run_single_server_test(dist_index: DistributedIndex, server_address: str, queries: torch.Tensor, gt: torch.Tensor, k: int, nprobe: int):

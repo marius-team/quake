@@ -9,8 +9,8 @@ services:
             - ./sift/:/quake/data/sift/
     quake2:
         build: .
-#        command: python3 -c "from quake.distributedwrapper import Remote; Remote(50052).start()"
-        command: tail -f /dev/null
+        command: python3 -c "from quake.distributedwrapper import Remote; Remote(50052).start()"
+        # command: tail -f /dev/null
         volumes:
             - ./src/python/distributedwrapper:/usr/local/lib/python3.12/dist-packages/quake/distributedwrapper
             - ./examples/quickstart_dist.py:/quake/examples/quickstart_dist.py
@@ -18,8 +18,17 @@ services:
             - ./sift/:/quake/data/sift/
     quake3:
         build: .
-#        command: python3 -c "from quake.distributedwrapper import Remote; Remote(50053).start()"
-        command: tail -f /dev/null
+        command: python3 -c "from quake.distributedwrapper import Remote; Remote(50053).start()"
+        # command: tail -f /dev/null
+        volumes:
+            - ./src/python/distributedwrapper:/usr/local/lib/python3.12/dist-packages/quake/distributedwrapper
+            - ./examples/quickstart_dist.py:/quake/examples/quickstart_dist.py
+            - ./examples/quickstart_multidist.py:/quake/examples/quickstart_multidist.py
+            - ./sift/:/quake/data/sift/
+    quake4:
+        build: .
+        command: python3 -c "from quake.distributedwrapper import Remote; Remote(50054).start()"
+        # command: tail -f /dev/null
         volumes:
             - ./src/python/distributedwrapper:/usr/local/lib/python3.12/dist-packages/quake/distributedwrapper
             - ./examples/quickstart_dist.py:/quake/examples/quickstart_dist.py
