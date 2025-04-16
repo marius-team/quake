@@ -283,7 +283,7 @@ TEST(QuakeIndexStressTest, LargeBuildTest) {
               << " vectors took " << build_duration_ms << " ms.\n";
 }
 
-#ifdef FAISS_ENABLE_GPU
+#ifdef QUAKE_ENABLE_GPU
 TEST(QuakeIndexStressTestGPU, LargeBuildTest) {
     // Attempt to build an index with a large number of vectors.
     // Adjust these numbers based on your available memory/compute.
@@ -527,7 +527,7 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
 }
 
 // Define the GPU related test only if FAISS GPU support is enabled
-#ifdef FAISS_ENABLE_GPU
+#ifdef QUAKE_ENABLE_GPU
 // Test build with GPU enabled
 TEST(QuakeIndexGPUTest, BuildWithGPUTest) {
     int64_t dimension = 32;
