@@ -96,9 +96,24 @@ endif()
 # ---------------------------------------------------------------
 # Find Required Packages
 # ---------------------------------------------------------------
+find_package(CuVS REQUIRED)
 find_package(Torch REQUIRED)
 find_package(Python3 COMPONENTS Development Interpreter REQUIRED)
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
+
+include(src/cpp/third_party/cmake/fetch_rapids.cmake)
+include(rapids-cmake)
+include(rapids-cpm)
+include(rapids-cuda)
+include(rapids-export)
+include(rapids-find)
+
+rapids_cuda_init_architectures(quake_c)
+
+rapids_cpm_init()
+set(BUILD_CUVS_C_LIBRARY OFF)
+include(src/cpp/third_party/cmake/get_cuvs.cmake)
+
 
 message(STATUS "Torch include dir: ${TORCH_INCLUDE_DIRS}")
 message(STATUS "Torch libraries: ${TORCH_LIBRARIES}")
@@ -131,6 +146,7 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 # Base libraries common to all platforms
 set(LINK_LIBS
         ${TORCH_LIBRARIES}
+	cuvs::cuvs
         -ffast-math
         -lpthread
         -fPIC
