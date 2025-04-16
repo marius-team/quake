@@ -89,13 +89,16 @@ class Local:
             return pickle.loads(response.result)
 
         uuid = pickle.loads(response.result)
-        if uuid in Local._uuid_lookup:
-            return Local._uuid_lookup[uuid]
-
-        new_local = Local(self._address, IndirectLocal)
+        addr = self._address
+        if not Local._uuid_lookup.get(addr):
+            Local._uuid_lookup[addr] = {}
+        if uuid in Local._uuid_lookup[addr]:
+            return Local._uuid_lookup[addr][uuid]
+        new_local = Local(addr, IndirectLocal)
         new_local.uuid = uuid
-        Local._uuid_lookup[uuid] = new_local
+        Local._uuid_lookup[addr][uuid] = new_local
         return new_local
+
 
     def _interceptor(self, action, *args, **kwargs):
         if not self.uuid:
