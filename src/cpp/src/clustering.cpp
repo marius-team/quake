@@ -14,7 +14,6 @@
 #include <raft/core/resources.hpp>   // RAFT resources (handle)
 #include <raft/core/device_mdspan.hpp> // RAFT device view (make_device_matrix_view, etc.)
 #include <cuvs/cluster/kmeans.hpp>   // cuVS k-means API
-#endif
 
 shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
     Tensor ids,
