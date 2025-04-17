@@ -24,9 +24,7 @@ class IndexPartition;
  */
 shared_ptr<Clustering> kmeans_cpu(Tensor vectors,
                               Tensor ids,
-                              int n_clusters,
-                              MetricType metric_type,
-                              int niter = 5,
+                              shared_ptr<IndexBuildParams> build_params,
                               Tensor initial_centroids = Tensor());
 
 /**
@@ -42,12 +40,7 @@ shared_ptr<Clustering> kmeans_cpu(Tensor vectors,
  */
 #ifdef QUAKE_ENABLE_GPU
 shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
-    Tensor vectors, Tensor ids,
-    int num_clusters,
-    MetricType metric,
-    int sample_size,
-    int niter,
-    int gpu_batch_size);
+    Tensor vectors, Tensor ids, shared_ptr<IndexBuildParams> build_params);
 #endif
 
 /**
@@ -63,10 +56,7 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
  */
 shared_ptr<Clustering> kmeans(Tensor vectors,
                               Tensor ids,
-                              int n_clusters,
-                              MetricType metric_type,
-                              int niter = 5,
-                              bool use_gpu = false,
+                              shared_ptr<IndexBuildParams> build_params,
                               Tensor initial_centroids = Tensor());
 
 

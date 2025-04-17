@@ -54,8 +54,11 @@ class ClusteringTest : public ::testing::Test {
 
 // Test existing CPU kmeans
 TEST_F(ClusteringTest, KMeansCPU_L2) {
-  auto cl = kmeans_cpu(vectors_cpu, ids_cpu, num_clusters,
-                       faiss::METRIC_L2, /*niter=*/10, torch::Tensor());
+  shared_ptr<IndexBuildParams> build_params = std::make_shared<IndexBuildParams>();
+  build_params->nlist = num_clusters;
+  build_params->metric = "l2";
+  build_params->niter = 10;
+  auto cl = kmeans_cpu(vectors_cpu, ids_cpu, build_params, torch::Tensor());
   ASSERT_EQ(cl->centroids.sizes(), (std::vector<int64_t>{num_clusters, dim}));
   int64_t tot=0;
   for (int i=0;i<num_clusters;++i) {
@@ -67,8 +70,12 @@ TEST_F(ClusteringTest, KMeansCPU_L2) {
 
 // Compare CPU vs CPU wrapper
 TEST_F(ClusteringTest, KMeansWrapper_CPU) {
-  auto cl = kmeans(vectors_cpu, ids_cpu, num_clusters,
-                   faiss::METRIC_L2, /*niter=*/10, /*use_gpu=*/false, torch::Tensor());
+  shared_ptr<IndexBuildParams> build_params = std::make_shared<IndexBuildParams>();
+  build_params->nlist = num_clusters;
+  build_params->metric = "l2";
+  build_params->niter = 10;
+  build_params->use_gpu = false;
+  auto cl = kmeans(vectors_cpu, ids_cpu, build_params, torch::Tensor());
   ASSERT_EQ(cl->centroids.sizes(), (std::vector<int64_t>{num_clusters, dim}));
   int64_t tot=0;
   for (int i=0;i<num_clusters;++i) {
@@ -79,17 +86,16 @@ TEST_F(ClusteringTest, KMeansWrapper_CPU) {
 
 #ifdef QUAKE_ENABLE_GPU
 TEST_F(ClusteringTest, SampleAndPredict_GPU_L2) {
-  const int sample_size    = 1000;
-  const int niter          = 5;
-  const int gpu_batch_size = 512;
+  shared_ptr<IndexBuildParams> build_params = std::make_shared<IndexBuildParams>();
+  build_params->nlist = num_clusters;
+  build_params->metric = "l2";
+  build_params->niter = 10;
+  build_params->use_gpu = true;
+  build_params->gpu_sample_size = 2000;
+  build_params->gpu_batch_size = 100;
 
   auto cl = kmeans_cuvs_sample_and_predict(
-      vectors_cpu, ids_cpu,
-      num_clusters,
-      faiss::METRIC_L2,
-      sample_size,
-      niter,
-      gpu_batch_size);
+      vectors_cpu, ids_cpu, build_params);
 
   // centroids must live on CPU and have correct shape
   ASSERT_EQ(cl->centroids.device().type(), torch::kCPU);
@@ -105,9 +111,10 @@ TEST_F(ClusteringTest, SampleAndPredict_GPU_L2) {
   }
   ASSERT_EQ(tot, num_vectors);
 
+  build_params->use_gpu = false;
+
   // Optional quality check: rough MSE vs CPU run
-  auto cl_cpu = kmeans_cpu(vectors_cpu, ids_cpu, num_clusters,
-                           faiss::METRIC_L2, niter, torch::Tensor());
+  auto cl_cpu = kmeans_cpu(vectors_cpu, ids_cpu, build_params, torch::Tensor());
   double mse_cpu = compute_mse(cl_cpu->centroids, cl_cpu->vectors);
   double mse_gpu = compute_mse(cl->centroids, cl->vectors);
   ASSERT_NEAR(mse_cpu, mse_gpu, mse_cpu * 0.30);
@@ -115,13 +122,15 @@ TEST_F(ClusteringTest, SampleAndPredict_GPU_L2) {
 
 // Full wrapper test for GPU
 TEST_F(ClusteringTest, KMeansWrapper_GPU) {
-  const int gpu_sample    = 2000;
-  const int gpu_iter      = 3;
-  const int gpu_batch     = 1024;
+  shared_ptr<IndexBuildParams> build_params = std::make_shared<IndexBuildParams>();
+  build_params->nlist = num_clusters;
+  build_params->metric = "l2";
+  build_params->niter = 10;
+  build_params->use_gpu = true;
+  build_params->gpu_sample_size = 2000;
+  build_params->gpu_batch_size = 100;
 
-  auto cl = kmeans(vectors_cpu, ids_cpu, num_clusters,
-                   faiss::METRIC_L2, gpu_iter,
-                   /*use_gpu=*/true,
+  auto cl = kmeans(vectors_cpu, ids_cpu, build_params,
                    torch::Tensor());
   ASSERT_EQ(cl->centroids.device().type(), torch::kCPU);
   ASSERT_EQ(cl->vectors.size(), size_t(num_clusters));
