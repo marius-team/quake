@@ -41,12 +41,13 @@ shared_ptr<Clustering> kmeans_cpu(Tensor vectors,
  * @param initial_centroids The initial centroids to use for k-means.
  */
 #ifdef QUAKE_ENABLE_GPU
-shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
-                              Tensor ids,
-                              int n_clusters,
-                              MetricType metric_type,
-                              int niter = 5,
-                              Tensor initial_centroids = Tensor());
+shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
+    Tensor vectors, Tensor ids,
+    int num_clusters,
+    MetricType metric,
+    int sample_size,
+    int niter,
+    int gpu_batch_size);
 #endif
 
 /**

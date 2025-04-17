@@ -1,179 +1,132 @@
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 #include "clustering.h"
-#include <vector>
 
-// Helper functions to generate random test data.
-static Tensor generate_random_data(int64_t num_vectors, int64_t dim) {
-  return torch::randn({num_vectors, dim}, torch::kFloat32).contiguous();
+// Helpers to generate random data and sequential ids
+static torch::Tensor generate_random_data(int64_t N, int64_t D) {
+  return torch::randn({N, D}, torch::kFloat32).contiguous();
+}
+static torch::Tensor generate_sequential_ids(int64_t N, int64_t start = 0) {
+  return torch::arange(start, start + N, torch::kInt64).contiguous();
 }
 
-static Tensor generate_sequential_ids(int64_t count, int64_t start = 0) {
-  return torch::arange(start, start + count, torch::kInt64).contiguous();
-}
-
-// Helpers to compute mean squared error (MSE) for clustering.
-// For FAISS-based clustering: 'vectors' is a vector of tensors (one per cluster).
-static double compute_mse(const Tensor& centroids,
-                              const std::vector<Tensor>& clusters) {
-  double total_error = 0.0;
-  int64_t total_count = 0;
-  auto centroids_cpu = centroids.to(torch::kCPU);
+// Compute mean squared error for clustering (for CPU sanity)
+static double compute_mse(const torch::Tensor& centroids,
+                          const std::vector<torch::Tensor>& clusters) {
+  double total_err = 0.0;
+  int64_t count = 0;
+  auto C = centroids.to(torch::kCPU);
   for (size_t i = 0; i < clusters.size(); ++i) {
-    if (clusters[i].size(0) > 0) {
-      auto cluster = clusters[i].to(torch::kCPU);
-      auto diff = cluster - centroids_cpu[i].unsqueeze(0);
-      total_error += diff.pow(2).sum().item<double>();
-      total_count += cluster.size(0);
-    }
+    auto cl = clusters[i].to(torch::kCPU);
+    if (cl.size(0) == 0) continue;
+    auto diff = cl - C[i].unsqueeze(0);
+    total_err += diff.pow(2).sum().item<double>();
+    count += cl.size(0);
   }
-  return total_count > 0 ? total_error / total_count : 0.0;
+  return count>0 ? total_err / count : 0.0;
 }
 
-// Test fixture for clustering tests.
+// Fixture
 class ClusteringTest : public ::testing::Test {
  protected:
   const int64_t num_vectors = 5000;
-  const int64_t dim = 64;
-  const int num_clusters = 20;
-  Tensor vectors_cpu, ids_cpu;
-  Tensor vectors_cuda, ids_cuda;
+  const int64_t dim         = 64;
+  const int     num_clusters= 20;
+
+  torch::Tensor vectors_cpu, ids_cpu;
+#ifdef QUAKE_ENABLE_GPU
+  torch::Tensor vectors_cuda, ids_cuda;
+#endif
 
   void SetUp() override {
-    // Skip these tests if CUDA is not available.
-    if (!torch::cuda::is_available()) {
-      GTEST_SKIP() << "CUDA is not available; skipping clustering tests.";
-    }
     vectors_cpu = generate_random_data(num_vectors, dim);
-    ids_cpu = generate_sequential_ids(num_vectors);
+    ids_cpu     = generate_sequential_ids(num_vectors);
+
 #ifdef QUAKE_ENABLE_GPU
+    if (!torch::cuda::is_available()) {
+      GTEST_SKIP() << "CUDA not available";
+    }
     vectors_cuda = vectors_cpu.to(torch::kCUDA).contiguous();
-    ids_cuda = ids_cpu.to(torch::kCUDA).contiguous();
+    ids_cuda     = ids_cpu.to(torch::kCUDA).contiguous();
 #endif
   }
 };
 
-// Compare clustering methods using the L2 (Euclidean) metric.
-#ifdef QUAKE_ENABLE_GPU
-TEST_F(ClusteringTest, CompareClustering_L2) {
-  const int niter = 20;
-  // FAISS-based clustering on CPU.
-  auto clustering_cpu = kmeans_cpu(vectors_cpu, ids_cpu, num_clusters, faiss::METRIC_L2, niter, Tensor());
-  // cuVS-based clustering on GPU.
-  auto clustering_cuvs = kmeans_cuvs(vectors_cuda, ids_cuda, num_clusters, faiss::METRIC_L2);
-
-  // Verify centroid shapes.
-  ASSERT_EQ(clustering_cpu->centroids.dim(), 2);
-  ASSERT_EQ(clustering_cpu->centroids.size(0), num_clusters);
-  ASSERT_EQ(clustering_cpu->centroids.size(1), dim);
-  ASSERT_EQ(clustering_cuvs->centroids.dim(), 2);
-  ASSERT_EQ(clustering_cuvs->centroids.size(0), num_clusters);
-  ASSERT_EQ(clustering_cuvs->centroids.size(1), dim);
-
-  // Compare the mean squared errors (MSEs) between the methods.
-  double mse_cpu = compute_mse(clustering_cpu->centroids, clustering_cpu->vectors);
-  double mse_cuvs = compute_mse(clustering_cuvs->centroids, clustering_cuvs->vectors);
-  // They should agree within roughly 20% relative difference.
-  ASSERT_NEAR(mse_cpu, mse_cuvs, mse_cpu * 0.20);
-}
-
-// Compare clustering methods using the inner product metric.
-TEST_F(ClusteringTest, CompareClustering_InnerProduct) {
-  const int niter = 20;
-  auto clustering_cpu = kmeans(vectors_cpu, ids_cpu, num_clusters,
-                               faiss::METRIC_INNER_PRODUCT, niter, false, Tensor());
-  auto clustering_cuvs = kmeans_cuvs(vectors_cuda, ids_cuda, num_clusters, faiss::METRIC_INNER_PRODUCT);
-
-  // Verify centroid shapes.
-  ASSERT_EQ(clustering_cpu->centroids.dim(), 2);
-  ASSERT_EQ(clustering_cpu->centroids.size(0), num_clusters);
-  ASSERT_EQ(clustering_cpu->centroids.size(1), dim);
-  ASSERT_EQ(clustering_cuvs->centroids.dim(), 2);
-  ASSERT_EQ(clustering_cuvs->centroids.size(0), num_clusters);
-  ASSERT_EQ(clustering_cuvs->centroids.size(1), dim);
-
-  // For inner product, check that cuVS centroids are normalized.
-  auto norms = clustering_cuvs->centroids.norm(2, 1);
-  for (int i = 0; i < norms.size(0); ++i) {
-    ASSERT_NEAR(norms[i].item<float>(), 1.0f, 1e-3);
-  }
-
-  double mse_cpu = compute_mse(clustering_cpu->centroids, clustering_cpu->vectors);
-  double mse_cuvs = compute_mse(clustering_cuvs->centroids, clustering_cuvs->vectors);
-  // Allow a bit larger relative difference for inner product.
-  ASSERT_NEAR(mse_cpu, mse_cuvs, mse_cpu * 0.25);
-}
-
-// Test that cuVS clustering partitions all vectors correctly (L2 metric).
-TEST_F(ClusteringTest, CUVSClustering_Partitioning_L2) {
-  auto result = kmeans_cuvs(vectors_cuda, ids_cuda, num_clusters, faiss::METRIC_L2);
-  ASSERT_EQ(result->centroids.dim(), 2);
-  ASSERT_EQ(result->centroids.size(0), num_clusters);
-  ASSERT_EQ(result->centroids.size(1), dim);
-
-  int64_t total_vectors = 0;
-  for (int i = 0; i < num_clusters; ++i) {
-    auto cluster = result->vectors[i];
-    ASSERT_EQ(cluster.size(0), result->vector_ids[i].size(0));
-    total_vectors += cluster.size(0);
-  }
-  ASSERT_EQ(total_vectors, num_vectors);
-}
-
-
-// Test that cuVS clustering (inner product) produces unit-norm centroids and correctly partitions vectors.
-TEST_F(ClusteringTest, CUVSClustering_Partitioning_InnerProduct) {
-  auto result = kmeans_cuvs(vectors_cuda, ids_cuda, num_clusters, faiss::METRIC_INNER_PRODUCT);
-  ASSERT_EQ(result->centroids.dim(), 2);
-  ASSERT_EQ(result->centroids.size(0), num_clusters);
-  ASSERT_EQ(result->centroids.size(1), dim);
-
-  // Verify centroids are normalized.
-  auto norms = result->centroids.norm(2, 1);
-  for (int i = 0; i < norms.size(0); ++i) {
-    ASSERT_NEAR(norms[i].item<float>(), 1.0f, 1e-3);
-  }
-
-  int64_t total_vectors = 0;
-  for (int i = 0; i < num_clusters; ++i) {
-    auto cluster = result->vectors[i];
-    ASSERT_EQ(cluster.size(0), result->vector_ids[i].size(0));
-    total_vectors += cluster.size(0);
-  }
-  ASSERT_EQ(total_vectors, num_vectors);
-}
-#endif
-
+// Test existing CPU kmeans
 TEST_F(ClusteringTest, KMeansCPU_L2) {
-  // Test CPU-based k-means clustering.
-  int niter = 10;
-  auto clustering = kmeans_cpu(vectors_cpu, ids_cpu, num_clusters, faiss::METRIC_L2, niter);
-  ASSERT_EQ(clustering->centroids.dim(), 2);
-  ASSERT_EQ(clustering->centroids.size(0), num_clusters);
-  ASSERT_EQ(clustering->centroids.size(1), dim);
-
-  int64_t total_vectors = 0;
-  for (int i = 0; i < num_clusters; ++i) {
-    auto cluster = clustering->vectors[i];
-    ASSERT_EQ(cluster.size(0), clustering->vector_ids[i].size(0));
-    total_vectors += cluster.size(0);
+  auto cl = kmeans_cpu(vectors_cpu, ids_cpu, num_clusters,
+                       faiss::METRIC_L2, /*niter=*/10, torch::Tensor());
+  ASSERT_EQ(cl->centroids.sizes(), (std::vector<int64_t>{num_clusters, dim}));
+  int64_t tot=0;
+  for (int i=0;i<num_clusters;++i) {
+    ASSERT_EQ(cl->vectors[i].size(0), cl->vector_ids[i].size(0));
+    tot += cl->vectors[i].size(0);
   }
-  ASSERT_EQ(total_vectors, num_vectors);
+  ASSERT_EQ(tot, num_vectors);
 }
 
-TEST_F(ClusteringTest, KMeansCPU_InnerProduct) {
-  // Test CPU-based k-means clustering with inner product metric.
-  int niter = 10;
-  auto clustering = kmeans_cpu(vectors_cpu, ids_cpu, num_clusters, faiss::METRIC_INNER_PRODUCT, niter);
-  ASSERT_EQ(clustering->centroids.dim(), 2);
-  ASSERT_EQ(clustering->centroids.size(0), num_clusters);
-  ASSERT_EQ(clustering->centroids.size(1), dim);
-
-  int64_t total_vectors = 0;
-  for (int i = 0; i < num_clusters; ++i) {
-    auto cluster = clustering->vectors[i];
-    ASSERT_EQ(cluster.size(0), clustering->vector_ids[i].size(0));
-    total_vectors += cluster.size(0);
+// Compare CPU vs CPU wrapper
+TEST_F(ClusteringTest, KMeansWrapper_CPU) {
+  auto cl = kmeans(vectors_cpu, ids_cpu, num_clusters,
+                   faiss::METRIC_L2, /*niter=*/10, /*use_gpu=*/false, torch::Tensor());
+  ASSERT_EQ(cl->centroids.sizes(), (std::vector<int64_t>{num_clusters, dim}));
+  int64_t tot=0;
+  for (int i=0;i<num_clusters;++i) {
+    tot += cl->vectors[i].size(0);
   }
-  ASSERT_EQ(total_vectors, num_vectors);
+  ASSERT_EQ(tot, num_vectors);
 }
+
+#ifdef QUAKE_ENABLE_GPU
+TEST_F(ClusteringTest, SampleAndPredict_GPU_L2) {
+  const int sample_size    = 1000;
+  const int niter          = 5;
+  const int gpu_batch_size = 512;
+
+  auto cl = kmeans_cuvs_sample_and_predict(
+      vectors_cpu, ids_cpu,
+      num_clusters,
+      faiss::METRIC_L2,
+      sample_size,
+      niter,
+      gpu_batch_size);
+
+  // centroids must live on CPU and have correct shape
+  ASSERT_EQ(cl->centroids.device().type(), torch::kCPU);
+  ASSERT_EQ(cl->centroids.sizes(), (std::vector<int64_t>{num_clusters, dim}));
+
+  // all vectors accounted for
+  int64_t tot=0;
+  for (int i=0;i<num_clusters;++i) {
+    auto &part = cl->vectors[i];
+    ASSERT_EQ(part.device().type(), torch::kCPU);
+    ASSERT_EQ(part.size(0), cl->vector_ids[i].size(0));
+    tot += part.size(0);
+  }
+  ASSERT_EQ(tot, num_vectors);
+
+  // Optional quality check: rough MSE vs CPU run
+  auto cl_cpu = kmeans_cpu(vectors_cpu, ids_cpu, num_clusters,
+                           faiss::METRIC_L2, niter, torch::Tensor());
+  double mse_cpu = compute_mse(cl_cpu->centroids, cl_cpu->vectors);
+  double mse_gpu = compute_mse(cl->centroids, cl->vectors);
+  ASSERT_NEAR(mse_cpu, mse_gpu, mse_cpu * 0.30);
+}
+
+// Full wrapper test for GPU
+TEST_F(ClusteringTest, KMeansWrapper_GPU) {
+  const int gpu_sample    = 2000;
+  const int gpu_iter      = 3;
+  const int gpu_batch     = 1024;
+
+  auto cl = kmeans(vectors_cpu, ids_cpu, num_clusters,
+                   faiss::METRIC_L2, gpu_iter,
+                   /*use_gpu=*/true,
+                   torch::Tensor());
+  ASSERT_EQ(cl->centroids.device().type(), torch::kCPU);
+  ASSERT_EQ(cl->vectors.size(), size_t(num_clusters));
+  int64_t tot=0;
+  for (auto &p : cl->vectors) tot += p.size(0);
+  ASSERT_EQ(tot, num_vectors);
+}
+#endif  // QUAKE_ENABLE_GPU

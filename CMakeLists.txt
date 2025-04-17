@@ -70,6 +70,7 @@ if(QUAKE_ENABLE_GPU)
     add_compile_definitions(QUAKE_ENABLE_GPU)
 endif()
 
+set(FAISS_ENABLE_GPU OFF)
 # ---------------------------------------------------------------
 # Print out Compiler and Path Information
 # ---------------------------------------------------------------
@@ -87,7 +88,6 @@ message(STATUS "QUAKE_USE_NUMA: ${QUAKE_USE_NUMA}")
 # Apple-specific adjustments
 if(APPLE)
     include_directories("/opt/homebrew/opt/openblas/include")
-    set(FAISS_ENABLE_GPU OFF)
 endif()
 
 # Compiler options and definitions
