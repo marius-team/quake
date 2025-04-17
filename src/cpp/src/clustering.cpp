@@ -16,106 +16,155 @@
 #include <raft/core/device_mdspan.hpp> // RAFT device view (make_device_matrix_view, etc.)
 #include <cuvs/cluster/kmeans.hpp>   // cuVS k-means API
 
-shared_ptr<Clustering> kmeans_cuvs(Tensor vectors,
-    Tensor ids,
+shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
+    Tensor vectors, Tensor ids,
     int num_clusters,
     MetricType metric,
+    int sample_size,
     int niter,
-    Tensor initial_centroids) {
+    int gpu_batch_size) {
 
-    // Validate input shapes and sizes.
-    TORCH_CHECK(vectors.dim() == 2, "Input 'vectors' must be a 2D tensor");
-    TORCH_CHECK(ids.dim() == 1 || (ids.dim() == 2 && ids.size(1) == 1),
-              "Input 'ids' must be a 1D tensor or 2D with shape (N,1)");
-    TORCH_CHECK(vectors.size(0) == ids.size(0), "Number of ids must match number of vectors");
-    TORCH_CHECK(vectors.size(0) >= num_clusters, "Number of clusters cannot exceed number of points");
+  TORCH_CHECK(vectors.dim()==2, "vectors must be [N,D]");
+  TORCH_CHECK(ids.dim()==1,      "ids must be [N]");
+  int64_t N = vectors.size(0), D = vectors.size(1);
+  TORCH_CHECK(sample_size > 0 && sample_size <= N,
+              "invalid sample_size");
 
-    int64_t n_samples  = vectors.size(0);
-    int64_t n_features = vectors.size(1);
+  // 1) pin + normalize if needed
+  Tensor cpu_pts = vectors.contiguous().pin_memory();
+  if (metric == faiss::METRIC_INNER_PRODUCT) {
+    auto norms = cpu_pts.norm(2,1,true);
+    cpu_pts = cpu_pts.div(norms);
+  }
 
-    // If using inner-product (cosine), normalize input vectors.
-    if (metric == faiss::METRIC_INNER_PRODUCT) {
-        Tensor norms = torch::sqrt((vectors * vectors).sum(1, /*keepdim=*/true));
-        vectors = vectors / norms;
+  // 2) choose a random sample of indices
+  auto perm = torch::randperm(N, torch::kLong);
+  auto samp_idx = perm.slice(0, 0, sample_size);
+  Tensor samp_pts = cpu_pts.index_select(0, samp_idx);
+  Tensor samp_ids = ids.index_select(0, samp_idx);
+
+  // 3) move sample to GPU
+  Tensor samp_gpu = samp_pts.to(torch::kCUDA, /*non_blocking=*/true)
+                            .contiguous();
+
+  // 4) prepare RAFT handle & cuVS params
+  raft::resources handle;
+  cudaStream_t stream = c10::cuda::getCurrentCUDAStream();
+  raft::resource::set_cuda_stream(handle, stream);
+
+  cuvs::cluster::kmeans::params params;
+  params.n_clusters = num_clusters;
+  params.init       = cuvs::cluster::kmeans::params::InitMethod::Random;
+  params.max_iter   = niter;
+
+  // 5) allocate centroids on GPU
+  Tensor cent_gpu = torch::empty({num_clusters, D},
+                                 torch::kFloat32,
+                                 torch::TensorOptions().device(torch::kCUDA))
+                    .contiguous();
+
+  // 6) run fit on just the sample
+  {
+    auto X_view = raft::make_device_matrix_view<const float,int>(
+                     samp_gpu.data_ptr<float>(),
+                     (int)sample_size, (int)D);
+    auto C_view = raft::make_device_matrix_view<float,int>(
+                     cent_gpu.data_ptr<float>(),
+                     num_clusters, (int)D);
+
+    cuvs::cluster::kmeans::fit(
+      handle, params,
+      X_view,
+      std::nullopt,
+      C_view,
+      raft::make_host_scalar_view<float>(nullptr),
+      raft::make_host_scalar_view<int>(nullptr)
+    );
+  }
+
+  // 7) now predict labels for all N in batches
+  Tensor all_labels = torch::empty({N}, torch::kLong);
+  Tensor labels32  = torch::empty({gpu_batch_size},
+                                  torch::kInt32,
+                                  torch::TensorOptions().device(torch::kCUDA));
+  auto predict_fn = [&](Tensor batch_cpu, int64_t off) {
+    int64_t bs = batch_cpu.size(0);
+    Tensor batch_gpu = batch_cpu.to(torch::kCUDA, /*NB=*/true)
+                                .contiguous();
+    auto Xv = raft::make_device_matrix_view<const float,int>(
+                batch_gpu.data_ptr<float>(),
+                (int)bs, (int)D);
+    auto Lv = raft::make_device_vector_view<int,int>(
+                labels32.data_ptr<int>(), (int)bs);
+
+    cuvs::cluster::kmeans::predict(
+      handle, params,
+      Xv,
+      std::nullopt,
+      raft::make_device_matrix_view<float,int>(
+        cent_gpu.data_ptr<float>(),
+        num_clusters, (int)D),
+      Lv,
+      false,
+      raft::make_host_scalar_view<float>(nullptr)
+    );
+
+    // copy back
+    all_labels.narrow(0, off, bs)
+              .copy_(labels32.slice(0,0,bs)
+                         .to(torch::kLong)
+                         .to(torch::kCPU));
+  };
+
+  // 7a) predict for the sample slice
+  predict_fn(samp_pts, /*off=*/0);
+  // 7b) predict for the rest
+  int64_t written = sample_size;
+  // we’ll write the rest starting at index sample_size
+  for (int64_t off = 0; off < N; off += gpu_batch_size) {
+    int64_t bs = std::min<int64_t>(gpu_batch_size, N - off);
+    // skip the sample zone
+    if (off < sample_size) {
+      // overlap: part sample / part rest
+      if (off + bs <= sample_size) {
+        // whole chunk was sample: already done
+        continue;
+      } else {
+        // split chunk
+        int64_t s_end = sample_size - off;
+        int64_t r_bs = bs - s_end;
+        Tensor rest_chunk = cpu_pts.slice(0, off + s_end, off + bs);
+        predict_fn(rest_chunk, /*off=*/off + s_end);
+        continue;
+      }
     }
+    // pure rest
+    Tensor rest_chunk = cpu_pts.slice(0, off, off + bs);
+    predict_fn(rest_chunk, /*off=*/off);
+  }
 
-    // RAFT handle and stream setup.
-    raft::resources handle;
-    // Replace the at::cuda call with c10's current CUDA stream.
-    cudaStream_t cuda_stream = c10::cuda::getCurrentCUDAStream();
-    raft::resource::set_cuda_stream(handle, cuda_stream);
+  // 8) group on CPU
+  Tensor sorted_lbl, sorted_idx;
+  std::tie(sorted_lbl, sorted_idx) = torch::sort(all_labels);
+  Tensor sorted_vecs = vectors.index_select(0, sorted_idx);
+  Tensor sorted_ids  = ids.index_select(0, sorted_idx);
 
-    // Wrap the input data in a RAFT *device* matrix view.
-    float* data_ptr = vectors.data_ptr<float>();
-    auto X_view = raft::make_device_matrix_view<const float, int>(data_ptr, (int)n_samples, (int)n_features);
+  Tensor counts = torch::bincount(sorted_lbl, /*weights=*/{}, num_clusters);
+  auto cnt_cpu = counts.to(torch::kCPU);
+  std::vector<int64_t> split_sizes(
+    cnt_cpu.data_ptr<int64_t>(),
+    cnt_cpu.data_ptr<int64_t>() + num_clusters
+  );
 
-    // Allocate output centroids on GPU.
-    Tensor centroids_tensor = torch::empty({num_clusters, n_features},
-                                             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
-    float* centroids_ptr = centroids_tensor.data_ptr<float>();
-    auto centroids_view = raft::make_device_matrix_view<float, int>(centroids_ptr, (int)num_clusters, (int)n_features);
+  auto cluster_vecs = torch::split(sorted_vecs, split_sizes, 0);
+  auto cluster_ids  = torch::split(sorted_ids,   split_sizes, 0);
 
-    // Set up k-means parameters.
-    cuvs::cluster::kmeans::params params;
-    params.n_clusters = num_clusters;
-    params.max_iter = niter;
-    params.init = cuvs::cluster::kmeans::params::InitMethod::Random;
-
-    // Prepare host-side scalars to capture inertia and iterations.
-    float inertia = 0.0f;
-    int iterations = 0;
-    auto inertia_view = raft::make_host_scalar_view(&inertia);
-    auto iter_view = raft::make_host_scalar_view(&iterations);
-
-    // Run k-means clustering (fit).
-    cuvs::cluster::kmeans::fit(handle, params, X_view, std::nullopt,
-                               centroids_view, inertia_view, iter_view);
-
-    // If inner-product, renormalize centroids.
-    if (metric == faiss::METRIC_INNER_PRODUCT) {
-        Tensor cent_norms = torch::sqrt((centroids_tensor * centroids_tensor).sum(1, /*keepdim=*/true));
-        centroids_tensor.div_(cent_norms);
-    }
-
-    // Allocate memory for labels and run prediction.
-    Tensor labels = torch::empty({n_samples}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
-    int* labels_ptr = labels.data_ptr<int>();
-    auto labels_view = raft::make_device_vector_view<int, int>(labels_ptr, (int)n_samples);
-
-    cuvs::cluster::kmeans::predict(handle, params, X_view, std::nullopt,
-                                   centroids_view, labels_view, false,
-                                   raft::make_host_scalar_view(&inertia));
-
-    // Synchronize the stream.
-    raft::resource::sync_stream(handle);
-
-    // ----- Grouping (GPU vectorized) -----
-    // Sort the labels and get the sorted indices.
-    Tensor sorted_tuple = std::get<1>(torch::sort(labels));  // sorted indices only
-    Tensor sorted_labels = labels.index_select(0, sorted_tuple);
-
-    // Reorder the data and ids using the sorted indices.
-    Tensor sorted_data = vectors.index_select(0, sorted_tuple);
-    Tensor sorted_ids = ids.index_select(0, sorted_tuple);
-
-    // Compute per-cluster counts using torch::bincount.
-    Tensor counts = torch::bincount(sorted_labels.to(torch::kInt64), /*weights=*/{}, num_clusters);
-    auto counts_cpu = counts.to(torch::kCPU);
-    std::vector<int64_t> split_sizes(counts_cpu.data_ptr<int64_t>(), counts_cpu.data_ptr<int64_t>() + counts_cpu.numel());
-
-    // Split the sorted data and ids into clusters.
-    vector<Tensor> cluster_vectors = torch::split(sorted_data, split_sizes, 0);
-    vector<Tensor> cluster_ids     = torch::split(sorted_ids, split_sizes, 0);
-
-    Tensor partition_ids = torch::arange(num_clusters, torch::kInt64);
-
-    shared_ptr<Clustering> clustering = std::make_shared<Clustering>();
-    clustering->centroids = centroids_tensor;
-    clustering->partition_ids = partition_ids;
-    clustering->vectors = cluster_vectors;
-    clustering->vector_ids = cluster_ids;
-
-    return clustering;
+  auto out = std::make_shared<Clustering>();
+  out->centroids     = cent_gpu.cpu().contiguous();
+  out->partition_ids = torch::arange(num_clusters, torch::kLong);
+  out->vectors       = std::move(cluster_vecs);
+  out->vector_ids    = std::move(cluster_ids);
+  return out;
 }
 #endif
 
@@ -199,7 +248,13 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
                               Tensor /* initial_centroids */) {
     if (use_gpu) {
     #ifdef QUAKE_ENABLE_GPU
-            return kmeans_cuvs(vectors, ids, n_clusters, metric_type, niter);
+        const int sample_size    = std::min<int>(1000000, vectors.size(0));
+        const int gpu_batch_size = 100000;   // or from build_params
+        return kmeans_cuvs_sample_and_predict(
+            vectors, ids,
+            n_clusters, metric,
+            sample_size, niter,
+            gpu_batch_size);
     #elif
             throw std::runtime_error("GPU support is not enabled. Please compile with QUAKE_ENABLE_GPU.");
     #endif
