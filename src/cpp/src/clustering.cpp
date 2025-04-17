@@ -10,7 +10,7 @@
 #include "index_partition.h"
 #include <list_scanning.h>
 
-#ifdef QUAKE_ENABLE_GPU
+// #ifdef QUAKE_ENABLE_GPU
 #include <c10/cuda/CUDAStream.h>
 #include <raft/core/resources.hpp>   // RAFT resources (handle)
 #include <raft/core/device_mdspan.hpp> // RAFT device view (make_device_matrix_view, etc.)
@@ -24,13 +24,6 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
     int niter,
     int gpu_batch_size) {
 
-  std::cout << "[kmeans] Starting sample_and_predict: N="
-            << vectors.size(0) << ", D=" << vectors.size(1)
-            << ", clusters=" << num_clusters
-            << ", sample_size=" << sample_size
-            << ", niter=" << niter
-            << ", batch_size=" << gpu_batch_size << std::endl;
-
   TORCH_CHECK(vectors.dim() == 2, "vectors must be [N,D]");
   TORCH_CHECK(ids.dim() == 1,      "ids must be [N]");
   int64_t N = vectors.size(0), D = vectors.size(1);
@@ -42,17 +35,14 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
   if (metric == faiss::METRIC_INNER_PRODUCT) {
     auto norms = cpu_pts.norm(2, 1, true);
     cpu_pts = cpu_pts.div(norms);
-    std::cout << "[kmeans] Normalized for inner product metric" << std::endl;
   }
 
   // 2) choose a random sample of indices
-  std::cout << "[kmeans] Sampling " << sample_size << " points" << std::endl;
   auto perm     = torch::randperm(N, torch::kLong);
   auto samp_idx = perm.slice(0, 0, sample_size);
   Tensor samp_pts = cpu_pts.index_select(0, samp_idx);
 
   // 3) move sample to GPU
-  std::cout << "[kmeans] Uploading sample to GPU" << std::endl;
   Tensor samp_gpu = samp_pts.to(torch::kCUDA, /*non_blocking=*/true).contiguous();
 
   // 4) prepare RAFT handle & cuVS params
@@ -74,7 +64,6 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
 
   // 6) run fit on just the sample
   {
-    std::cout << "[kmeans] Running cuVS fit on sample" << std::endl;
     // host scalars
     float inertia    = 0.0f;
     int   actual_iter= 0;
@@ -96,12 +85,8 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
       host_inertia,
       host_iter
     );
-
-    std::cout << "[kmeans] Fit complete: inertia=" << inertia
-              << ", iterations=" << actual_iter << std::endl;
   }
 
-  std::cout << "[kmeans] Beginning predict over all " << N << " points" << std::endl;
   Tensor all_labels = torch::empty({N}, torch::kLong);
 
   auto predict_fn = [&](Tensor batch_cpu, int64_t off) {
@@ -138,10 +123,6 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
       host_pred
     );
 
-    std::cout << "[kmeans] Predict batch off=" << off
-              << ", bs=" << bs
-              << ", inertia=" << pred_inertia << std::endl;
-
     // now safe to copy back exactly bs elements
     all_labels.narrow(0, off, bs)
               .copy_(
@@ -151,11 +132,9 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
   };
 
   // predict the sample slice
-  std::cout << "[kmeans] Predicting sample slice [0," << sample_size << ")" << std::endl;
   predict_fn(samp_pts, /*off=*/0);
 
   // predict the rest
-  std::cout << "[kmeans] Predicting remaining chunks" << std::endl;
   for (int64_t off = 0; off < N; off += gpu_batch_size) {
     int64_t bs = std::min<int64_t>(gpu_batch_size, N - off);
     if (off < sample_size) {
@@ -172,7 +151,6 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
     predict_fn(rest_chunk, /*off=*/off);
   }
   // 8) group on CPU
-  std::cout << "[kmeans] Grouping on CPU" << std::endl;
   Tensor sorted_lbl, sorted_idx;
   std::tie(sorted_lbl, sorted_idx) = torch::sort(all_labels);
   Tensor sorted_vecs = vectors.index_select(0, sorted_idx);
@@ -194,11 +172,9 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
   out->vectors       = std::move(cluster_vecs);
   out->vector_ids    = std::move(cluster_ids);
 
-  std::cout << "[kmeans] Completed sample_and_predict\n";
   return out;
 }
-
-#endif
+// #endif
 
 shared_ptr<Clustering> kmeans_cpu(Tensor vectors,
                               Tensor ids,
