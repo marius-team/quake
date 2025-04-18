@@ -257,14 +257,14 @@ TEST(QuakeIndexStressTest, LargeBuildTest) {
     // Attempt to build an index with a large number of vectors.
     // Adjust these numbers based on your available memory/compute.
     int64_t dimension = 128;     // Medium-high dimension
-    int64_t num_vectors = 10e6;   // 1 million vectors
+    int64_t num_vectors = 1e6;   // 1 million vectors
     auto data_vectors = generate_random_data(num_vectors, dimension);
     auto data_ids = generate_sequential_ids(num_vectors, 0);
 
     QuakeIndex index;
 
     auto build_params = std::make_shared<IndexBuildParams>();
-    build_params->nlist = 5120;
+    build_params->nlist = 512;
     build_params->metric = "l2";
     // Keep the iteration count modest to avoid overly long tests
     build_params->niter = 5;
@@ -288,7 +288,7 @@ TEST(QuakeIndexStressTestGPU, LargeBuildTest) {
     // Attempt to build an index with a large number of vectors.
     // Adjust these numbers based on your available memory/compute.
     int64_t dimension = 128;     // Medium-high dimension
-    int64_t num_vectors = 10e6;   // 1 million vectors
+    int64_t num_vectors = 1e6;   // 1 million vectors
     auto data_vectors = generate_random_data(num_vectors, dimension).contiguous();
     auto data_ids = generate_sequential_ids(num_vectors, 0).contiguous();
 
@@ -297,7 +297,7 @@ TEST(QuakeIndexStressTestGPU, LargeBuildTest) {
     std::cout << "generated\n";
 
     auto build_params = std::make_shared<IndexBuildParams>();
-    build_params->nlist = 5120;
+    build_params->nlist = 512;
     build_params->metric = "l2";
     build_params->use_gpu = true;
     // Keep the iteration count modest to avoid overly long tests
@@ -533,8 +533,8 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
 // Test build with GPU enabled
 TEST(QuakeIndexGPUTest, BuildWithGPUTest) {
     int64_t dimension = 32;
-    int64_t num_vectors = 200;
-    int64_t nlist = 5;
+    int64_t num_vectors = 10000;
+    int64_t nlist = 10;
 
     torch::Tensor data_vectors = generate_random_data(num_vectors, dimension);
     torch::Tensor data_ids = generate_sequential_ids(num_vectors, 0);

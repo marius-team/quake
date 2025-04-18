@@ -26,9 +26,14 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
     int gpu_sample_size    = build_params->gpu_sample_size;
     MetricType metric      = str_to_metric_type(build_params->metric);
 
+
     TORCH_CHECK(vectors.dim() == 2, "vectors must be [N,D]");
     TORCH_CHECK(ids.dim() == 1,      "ids must be [N]");
     int64_t N = vectors.size(0), D = vectors.size(1);
+
+    gpu_sample_size = std::min(gpu_sample_size, (int) N);
+    gpu_batch_size = std::min(gpu_batch_size, (int) N);
+
     TORCH_CHECK(gpu_sample_size > 0 && gpu_sample_size <= N,
               "invalid sample_size");
 
@@ -258,11 +263,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
         return kmeans_cuvs_sample_and_predict(
             vectors,
             ids,
-            n_clusters,
-            metric_type,
-            build_params->gpu-sample_size,
-            niter,
-            build_params->gpu_batch_size);
+            build_params);
     #else
             throw std::runtime_error("GPU support is not enabled. Please compile with QUAKE_ENABLE_GPU.");
     #endif
