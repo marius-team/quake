@@ -12,9 +12,40 @@
 class IndexPartition;
 
 /**
+ * @brief Clusters vectors into partitions using faiss::Clustering
+ *
+ *
+ * @param vectors The vectors to cluster.
+ * @param ids The IDs of the vectors.
+ * @param n_clusters The number of clusters to create.
+ * @param metric_type The metric type to use for clustering.
+ * @param niter The number of iterations to run k-means.
+ * @param initial_centroids The initial centroids to use for k-means.
+ */
+shared_ptr<Clustering> kmeans_cpu(Tensor vectors,
+                              Tensor ids,
+                              shared_ptr<IndexBuildParams> build_params,
+                              Tensor initial_centroids = Tensor());
+
+/**
+ * @brief Clusters vectors into partitions using CuVS k-means.
+ *
+ *
+ * @param vectors The vectors to cluster.
+ * @param ids The IDs of the vectors.
+ * @param n_clusters The number of clusters to create.
+ * @param metric_type The metric type to use for clustering.
+ * @param niter The number of iterations to run k-means.
+ * @param initial_centroids The initial centroids to use for k-means.
+ */
+#ifdef QUAKE_ENABLE_GPU
+shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
+    Tensor vectors, Tensor ids, shared_ptr<IndexBuildParams> build_params);
+#endif
+
+/**
  * @brief Clusters vectors into partitions using k-means.
  *
- * Uses the faiss::Clustering class to cluster vectors into n_clusters partitions.
  *
  * @param vectors The vectors to cluster.
  * @param ids The IDs of the vectors.
@@ -25,10 +56,7 @@ class IndexPartition;
  */
 shared_ptr<Clustering> kmeans(Tensor vectors,
                               Tensor ids,
-                              int n_clusters,
-                              MetricType metric_type,
-                              int niter = 5,
-                              bool use_gpu = false,
+                              shared_ptr<IndexBuildParams> build_params,
                               Tensor initial_centroids = Tensor());
 
 

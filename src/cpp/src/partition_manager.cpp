@@ -409,14 +409,16 @@ shared_ptr<Clustering> PartitionManager::split_partitions(const Tensor &partitio
 
     shared_ptr<Clustering> clustering = select_partitions(partition_ids);
 
+    shared_ptr<IndexBuildParams> build_params = make_shared<IndexBuildParams>();
+    build_params->nlist = num_splits;
+    build_params->metric = metric_type_to_str(parent_->metric_);
     for (int64_t i = 0; i < partition_ids.size(0); ++i) {
         // Ensure enough vectors to split
         assert(clustering->cluster_size(i) >= 4 && "Partition must have at least 8 vectors to split.");
         shared_ptr<Clustering> curr_split_clustering = kmeans(
             clustering->vectors[i],
             clustering->vector_ids[i],
-            num_splits,
-            parent_->metric_
+            build_params
         );
 
         for (size_t j = 0; j < curr_split_clustering->nlist(); ++j) {
