@@ -1,0 +1,23 @@
+name: quake-env
+channels:
+  - pytorch
+  - defaults
+  - conda-forge
+  - nvidia
+  - libcuvs
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - faiss-gpu
+  - matplotlib
+  - pytest
+  - libcuvs
+  - cuda-version=12.8
+  - pip
+  - pip:
+    - sphinx
+    - sphinx_rtd_theme
+    - sphinxcontrib-mermaid
+    - graphviz
+    - pyyaml
