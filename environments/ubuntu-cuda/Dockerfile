@@ -1,5 +1,5 @@
 # Use a CUDA-enabled Ubuntu base image
-FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 # -----------------------------
 # Set up environment variables
@@ -27,7 +27,7 @@ RUN apt-get update && \
 
 
 # Install CMake 3.24.2
-RUN wget -qO /tmp/cmake.sh https://github.com/Kitware/CMake/releases/download/v3.24.2/cmake-3.24.2-linux-x86_64.sh && \
+RUN wget -qO /tmp/cmake.sh https://github.com/Kitware/CMake/releases/download/v3.30.4/cmake-3.30.4-linux-x86_64.sh && \
     chmod +x /tmp/cmake.sh && \
     /tmp/cmake.sh --skip-license --prefix=/usr/local && \
     rm /tmp/cmake.sh
@@ -51,7 +51,7 @@ RUN conda env create -f /tmp/conda.yaml && conda clean -afy
 # -----------------------------
 # Install GPU-enabled PyTorch
 # -----------------------------
-RUN conda run -n quake-env pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu118
+RUN conda run -n quake-env pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu124
 
 # -----------------------------
 # Debug: show conda information
