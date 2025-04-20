@@ -36,7 +36,7 @@ exclude = '''
 
 [tool.isort]
 profile = "black"
-skip = ["src/cpp/*", "build/*", "dist/*"]
+skip = ["/Users/jason/projects/quake/src/cpp/third_party/", "build/", "dist/"]
 line_length = 120
 
 [project.optional-dependencies]
