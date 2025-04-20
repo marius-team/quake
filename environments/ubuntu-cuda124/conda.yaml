@@ -1,0 +1,24 @@
+name: quake-env
+channels:
+  - rapidsai
+  - pytorch
+  - defaults
+  - conda-forge
+  - nvidia
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - faiss-gpu
+  - matplotlib
+  - pytest
+  - libcuvs
+  - cuda-nvrtc-dev=12.4
+  - cuda-version=12.4
+  - pip
+  - pip:
+    - sphinx
+    - sphinx_rtd_theme
+    - sphinxcontrib-mermaid
+    - graphviz
+    - pyyaml
