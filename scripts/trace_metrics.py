@@ -45,25 +45,37 @@ def extract(j: Dict[str, Any]) -> Dict[str, float]:
         vals = diskio.values()
         if any(isinstance(v, dict) for v in vals):
             for v in vals:
-                if not isinstance(v, dict): continue
+                if not isinstance(v, dict):
+                    continue
                 read += v.get("rate/read_bytes", v.get("read_bytes", 0))
                 write += v.get("rate/write_bytes", v.get("write_bytes", 0))
         else:
             for k, v in diskio.items():
                 if k.endswith(".read_bytes") or k.endswith(".read_bytes_rate_per_sec"): read += v
                 if k.endswith(".write_bytes") or k.endswith(".write_bytes_rate_per_sec"): write += v
-    read /= _MB; write /= _MB
-    # GPU: find first dict in list or dict values
-    gpu_src = j.get("gpu") or []
-    gpu_list = []
-    if isinstance(gpu_src, dict):
-        gpu_list = list(gpu_src.values())
-    elif isinstance(gpu_src, list):
-        gpu_list = gpu_src
-    # first dict entry or fallback {}
-    gpu0 = next((x for x in gpu_list if isinstance(x, dict)), {})
-    gpu_util = gpu0.get("proc") or gpu0.get("utilization") or np.nan
-
+    read /= _MB
+    write /= _MB
+    # GPU
+    gpu_src = j.get("gpu") or {}
+    gpu_util: float = np.nan
+    # List of per-GPU dicts
+    if isinstance(gpu_src, list) and gpu_src:
+        first = gpu_src[0]
+        if isinstance(first, dict):
+            gpu_util = first.get("proc") or first.get("utilization") or np.nan
+    # Nested dicts under keys
+    elif isinstance(gpu_src, dict):
+        # Check for nested dict values
+        nested = [v for v in gpu_src.values() if isinstance(v, dict)]
+        if nested:
+            gpu0 = nested[0]
+            gpu_util = gpu0.get("proc") or gpu0.get("utilization") or np.nan
+        else:
+            # Flat mapping: look for .proc or .gpu_proc keys
+            for k, v in gpu_src.items():
+                if k.endswith(".proc") or k.endswith(".gpu_proc"):
+                    gpu_util = v
+                    break
     return {
         "cpu_pct": cpu.get("user", 0) + cpu.get("system", 0),
         "mem_pct": mem.get("percent", np.nan),
