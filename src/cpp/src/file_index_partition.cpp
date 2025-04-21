@@ -28,6 +28,7 @@ FileIndexPartition::~FileIndexPartition() {
 void FileIndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
     std::cout << "Appending to FileIndexPartition file (" << file_path_ << ") goes here" << std::endl;
     if (n_entry <= 0) return;
+    // offset? Maybe needs to be opened at offset = (code_bytes + sizeof(idx_t)) * num_vectors_
     std::ofstream ofs(file_path_, std::ios::binary | std::ios::app);
     if (!ofs) {
         throw std::runtime_error("Failed to open file for appending: " + file_path_);
@@ -87,10 +88,14 @@ void FileIndexPartition::load() {
 }
 
 void FileIndexPartition::save() {
+    // If not dirty just free memory?
+    // free_memory()
+
     std::ofstream out(file_path_, std::ios::binary);
     if (!out) {
         throw std::runtime_error("Unable to open file for writing");
     }
+    // Also need to free allocated memory?`
 
     // Save basic metadata
     out.write(reinterpret_cast<const char*>(&num_vectors_), sizeof(num_vectors_));
@@ -106,6 +111,17 @@ void FileIndexPartition::save() {
 void FileIndexPartition::set_file_path(std::string file_path) {
     file_path_ = file_path;
 }
+
+// void FileIndexPartition::free_memory() {
+//     if (codes_ == nullptr && ids_ == nullptr) {
+//         return;
+//     }
+//     std::free(codes_);
+//     std::free(ids_);
+    
+//     codes_ = nullptr;
+//     ids_ = nullptr;
+// }
 
 #ifdef QUAKE_USE_NUMA
 void FileIndexPartition::set_numa_node(int new_numa_node) {

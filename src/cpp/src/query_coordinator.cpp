@@ -549,15 +549,18 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 continue; // Skip invalid partitions
             }
 
+            shared_ptr<FileIndexPartition> dip = nullptr;
             // Get the partition’s data.
             if (partition_manager_->parent_ && partition_manager_->parent_->current_level_ == 1) {
                 auto it = partition_manager_->partitions_->partitions_.find(pi);
                 if (it == partition_manager_->partitions_->partitions_.end()) {
                     throw std::runtime_error("List does not exist in list_size");
                 }
-                auto dip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pi]);
-                std::cout << "[QueryCoordinator] serial_scan: Loading level " << partition_manager_->parent_->current_level_ - 1 << " partition ID: " << pi << std::endl;
-                dip->load();
+                dip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pi]);
+                if(dip) {
+                    std::cout << "[QueryCoordinator] serial_scan: Loading level " << partition_manager_->parent_->current_level_ - 1 << " partition ID: " << pi << std::endl;
+                    dip->load();
+                }
             }
 
             start_time = std::chrono::high_resolution_clock::now();
@@ -576,6 +579,10 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             float curr_radius = topk_buf->get_kth_distance();
             float percent_change = abs(curr_radius - query_radius) / curr_radius;
 
+            // if(dip != nullptr) {
+            //     dip->free_memory();
+            // }
+
             start_time = std::chrono::high_resolution_clock::now();
             if (use_aps) {
                 if (percent_change > search_params->recompute_threshold) {
@@ -590,6 +597,10 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 if (partition_probabilities[p].item<float>() >= search_params->recall_target) {
                     break;
                 }
+            }
+            
+            if(dip) {
+                dip->free_memory();
             }
         }
         // Retrieve the top-k results for query q.
@@ -626,6 +637,13 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
 shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchParams> search_params) {
     if (!partition_manager_) {
         throw std::runtime_error("[QueryCoordinator::search] partition_manager_ is null.");
+    }
+
+    if(partition_manager_->parent_) {
+        std::cout << "Entered QueryCoordinator::search for level : " << partition_manager_->parent_->current_level_ << std::endl;
+    }
+    else {
+        std::cout << "Entered QueryCoordinator::search for level : 0" << std::endl;
     }
 
     x = x.contiguous();
@@ -784,6 +802,10 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
             // Merge: global buffer adds the new candidate distances/ids.
             global_buffers[global_q]->batch_add(local_dists.data(), local_ids.data(), local_ids.size());
         }
+
+        // Free memory here?
+        // dip->save()
+        // Or do this in the destructor?
     }
 
     // Aggregate the final results into output tensors.

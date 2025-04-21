@@ -144,6 +144,8 @@ public:
      * @param new_capacity The new capacity (number of vectors).
      */
     void reallocate_memory(int64_t new_capacity);
+    
+    void free_memory();
 
 #ifdef QUAKE_USE_NUMA
     /**
@@ -171,7 +173,7 @@ private:
      *
      * Releases the codes and IDs buffers.
      */
-    void free_memory();
+    // void free_memory();
 
     /**
      * @brief Ensure capacity.
@@ -206,5 +208,6 @@ protected:
      * @param required The minimum required number of vectors.
      */
     void ensure_capacity(int64_t required);
+
 };
 #endif //INDEX_PARTITION_H
