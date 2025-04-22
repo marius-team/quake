@@ -1,0 +1,18 @@
+# existing keys...
+dataset:
+  name: sift1m
+  num_queries: 10000
+  k: 10
+  nprobe: 10
+
+#n_workers: [0,1,2,4,8,16]
+#batch_sizes: [1, 10, 100, 100]
+n_workers: [1, 2, 4, 8, 16]
+batch_sizes: [1, 10, 100, 1000, 10000]
+
+# new keys:
+trials: 5
+warmup: 10
+
+output:
+  results_csv: numa_multi_query_results.csv
