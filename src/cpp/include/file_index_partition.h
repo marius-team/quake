@@ -11,6 +11,8 @@ public:
     int fd_ = -1; // file descriptor
     bool is_in_memory = false; // indicate whether the partition is in memory
     bool is_dirty = false; // indicate whether the partition is dirty (changes haven't been synced to disk)
+    std::mutex ref_mutex;
+    int ref_cnt = 0;
 
     /// Default constructor.
     FileIndexPartition() = default;
