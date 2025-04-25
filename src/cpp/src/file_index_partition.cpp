@@ -26,7 +26,7 @@ FileIndexPartition::~FileIndexPartition() {
 }
 
 void FileIndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
-    std::cout << "Appending to FileIndexPartition file (" << file_path_ << ") goes here" << std::endl;
+    // std::cout << "Appending to FileIndexPartition file (" << file_path_ << ") goes here" << std::endl;
     if (n_entry <= 0) return;
     // offset? Maybe needs to be opened at offset = (code_bytes + sizeof(idx_t)) * num_vectors_
     std::ofstream ofs(file_path_, std::ios::binary | std::ios::app);
@@ -71,7 +71,7 @@ void FileIndexPartition::reallocate(int64_t new_capacity) {
 
 // for testing
 void FileIndexPartition::load() {
-    std::cout << "[FileIndexPartition] load" << std::endl;
+    // std::cout << "[FileIndexPartition] load" << std::endl;
     std::ifstream in(file_path_, std::ios::binary);
     if (!in) {
         throw std::runtime_error("Unable to open file for reading: " + file_path_);

@@ -37,7 +37,7 @@ void PartitionManager::init_partitions(
     bool check_uniques
 ) {
     if (debug_) {
-        std::cout << "[PartitionManager] init_partitions: Entered." << std::endl;
+        // std::cout << "[PartitionManager] init_partitions: Entered." << std::endl;
     }
     parent_ = parent;
     int64_t nlist = clustering->nlist();
@@ -79,14 +79,14 @@ void PartitionManager::init_partitions(
     for (int64_t i = 0; i < nlist; i++) {
         // Might have to change the function in here to init the correct disk version
         if(curr_level == 0) {
-            std::cout << "[PartitionManager] added empty file partition for " << partition_ids_accessor[i] << std::endl;
+            // std::cout << "[PartitionManager] added empty file partition for " << partition_ids_accessor[i] << std::endl;
             partitions_->add_list_file(partition_ids_accessor[i]);
         }
         else {
             partitions_->add_list(partition_ids_accessor[i]);
         }
         if (debug_) {
-            std::cout << "[PartitionManager] init_partitions: Added empty list for partition " << i << std::endl;
+            // std::cout << "[PartitionManager] init_partitions: Added empty list for partition " << i << std::endl;
         }
     }
 
@@ -103,7 +103,7 @@ void PartitionManager::init_partitions(
         // std::cout << "Partition with ID " << i << " for level " << current_level << " has " << count << " vectors" << std::endl;
         if (count == 0) {
             if (debug_) {
-                std::cout << "[PartitionManager] init_partitions: Partition " << i << " is empty." << std::endl;
+                // std::cout << "[PartitionManager] init_partitions: Partition " << i << " is empty." << std::endl;
             }
             continue;
         } else {
@@ -125,8 +125,8 @@ void PartitionManager::init_partitions(
             as_uint8_ptr(v)
             );
             if (debug_) {
-                std::cout << "[PartitionManager] init_partitions: Added " << count
-                          << " entries to partition " << partition_ids_accessor[i] << std::endl;
+                // std::cout << "[PartitionManager] init_partitions: Added " << count
+                //           << " entries to partition " << partition_ids_accessor[i] << std::endl;
             }
         }
     }
@@ -749,7 +749,7 @@ Tensor PartitionManager::get_ids() {
 
 Tensor PartitionManager::get_partition_sizes(Tensor partition_ids) {
     if (debug_) {
-        std::cout << "[PartitionManager] get_partition_sizes: Getting sizes for partitions." << std::endl;
+        // std::cout << "[PartitionManager] get_partition_sizes: Getting sizes for partitions." << std::endl;
     }
     if (!partitions_) {
         throw runtime_error("[PartitionManager] get_partition_sizes: partitions_ is null.");
@@ -765,8 +765,8 @@ Tensor PartitionManager::get_partition_sizes(Tensor partition_ids) {
         int64_t list_no = partition_ids_accessor[i];
         partition_sizes_accessor[i] = partitions_->list_size(list_no);
         if (debug_) {
-            std::cout << "[PartitionManager] get_partition_sizes: Partition " << list_no
-                      << " size: " << partition_sizes_accessor[i] << std::endl;
+            // std::cout << "[PartitionManager] get_partition_sizes: Partition " << list_no
+            //           << " size: " << partition_sizes_accessor[i] << std::endl;
         }
     }
     return partition_sizes;
