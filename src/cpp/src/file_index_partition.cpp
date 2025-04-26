@@ -28,8 +28,8 @@ FileIndexPartition::~FileIndexPartition() {
 void FileIndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
     // std::cout << "Appending to FileIndexPartition file (" << file_path_ << ") goes here" << std::endl;
     if (n_entry <= 0) return;
-    // offset? Maybe needs to be opened at offset = (code_bytes + sizeof(idx_t)) * num_vectors_
-    std::ofstream ofs(file_path_, std::ios::binary | std::ios::app);
+
+    std::ofstream ofs(file_path_, std::ios::binary | std::ios::app); // append mode
     if (!ofs) {
         throw std::runtime_error("Failed to open file for appending: " + file_path_);
     }
@@ -50,6 +50,49 @@ void FileIndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* ne
 
 void FileIndexPartition::remove(int64_t index) {
     // Implementation here
+    // if (index < 0 || index >= num_vectors_) {
+    //     throw std::runtime_error("Index out of range in remove");
+    // }
+    // if (index == num_vectors_ - 1) {
+    //     num_vectors_--;
+    //     return;
+    // }
+
+    // int64_t last_idx = num_vectors_ - 1;
+    // const size_t code_bytes = static_cast<size_t>(code_size_);
+
+    // if (is_in_memory) {
+    //     std::lock_guard<std::mutex> lock(ref_mutex);
+    //     std::cout << "[File_index_partition] remove : Removing index " << index << " of partition ID (in memory) " << file_path_ << std::endl; 
+    //     std::memcpy(codes_ + index * code_bytes, codes_ + last_idx * code_bytes, code_bytes);
+    //     ids_[index] = ids_[last_idx];
+    //     is_dirty = true;
+    //     num_vectors_--;
+    // }
+    // else {
+    //     std::cout << "[File_index_partition] remove : Removing index " << index << " of file path " << file_path_ << std::endl; 
+    //     std::fstream file(file_path_, std::ios::in | std::ios::out | std::ios::binary);
+    //     if (!file) {
+    //         throw std::runtime_error("Failed to open file for remove: " + file_path_);
+    //     }
+
+    //     std::vector<uint8_t> last_code(code_bytes);
+    //     idx_t last_id;
+        
+    //     // seek the last entry
+    //     file.seekg(last_idx * (code_bytes + sizeof(idx_t)), std::ios::beg);
+    //     file.read(reinterpret_cast<char*>(last_code.data()), code_bytes);
+    //     file.read(reinterpret_cast<char*>(&last_id), sizeof(idx_t));
+    
+    //     // seek the deleted entry and replace with the last entry
+    //     file.seekp(index * (code_bytes + sizeof(idx_t)), std::ios::beg);
+    //     file.write(reinterpret_cast<const char*>(last_code.data()), code_bytes);
+    //     file.write(reinterpret_cast<const char*>(&last_id), sizeof(idx_t));
+    
+    //     file.close();
+    //     num_vectors_--;
+    // }
+
 }
 
 void FileIndexPartition::resize(int64_t new_capacity) {
@@ -77,6 +120,11 @@ void FileIndexPartition::load() {
         throw std::runtime_error("Unable to open file for reading: " + file_path_);
     }
 
+    std::lock_guard<std::mutex> lock(ref_mutex);
+    
+    ref_cnt ++;
+    if (is_in_memory) return;
+
     ensure_capacity(num_vectors_); // allocate memory for codes_ and ids_
 
     for (int64_t i = 0; i < num_vectors_; ++i) {
@@ -85,27 +133,34 @@ void FileIndexPartition::load() {
     }
 
     in.close();
+    is_in_memory = true;
 }
 
+// decrement the reference bit, if its zero called the buffer manager to flush the file
+// the buffer manager should loop over the buffer pool and evict all buffers that belongs to the file
 void FileIndexPartition::save() {
-    // If not dirty just free memory?
-    // free_memory()
-
-    std::ofstream out(file_path_, std::ios::binary);
-    if (!out) {
-        throw std::runtime_error("Unable to open file for writing");
+    std::lock_guard<std::mutex> lock(ref_mutex);
+    ref_cnt --;
+    if (ref_cnt == 0) {
+        buffer_size_ = 0;
+        free_memory(); // for now, we don't have a dedicated buffer pool so just free the memory
+        is_in_memory = false;
     }
-    // Also need to free allocated memory?`
 
-    // Save basic metadata
-    out.write(reinterpret_cast<const char*>(&num_vectors_), sizeof(num_vectors_));
-    out.write(reinterpret_cast<const char*>(&code_size_), sizeof(code_size_));
+    if (is_dirty) {
+        std::ofstream out(file_path_, std::ios::binary); // if num_vectors_ is maintained correctly, no need to clear all vectors before writing back
+        if (!out) {
+            throw std::runtime_error("Unable to open file for writing");
+        }
+    
+        const size_t code_bytes = static_cast<size_t>(code_size_);
+        for (int64_t i = 0; i < num_vectors_; ++i) {
+            out.write(reinterpret_cast<const char*>(codes_ + i * code_bytes), code_bytes);
+            out.write(reinterpret_cast<const char*>(&ids_[i]), sizeof(idx_t));
+        }
 
-    // Save codes and IDs
-    out.write(reinterpret_cast<const char*>(codes_), num_vectors_ * code_size_);
-    out.write(reinterpret_cast<const char*>(ids_), num_vectors_ * sizeof(idx_t));
-
-    out.close();
+        out.close();
+    }
 }
 
 void FileIndexPartition::set_file_path(std::string file_path) {

@@ -554,7 +554,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             if (partition_manager_->parent_ && partition_manager_->parent_->current_level_ == 1) {
                 auto it = partition_manager_->partitions_->partitions_.find(pi);
                 if (it == partition_manager_->partitions_->partitions_.end()) {
-                    throw std::runtime_error("List does not exist in list_size");
+                    throw std::runtime_error("pid does not exist");
                 }
                 dip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pi]);
                 if(dip) {
@@ -579,10 +579,6 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             float curr_radius = topk_buf->get_kth_distance();
             float percent_change = abs(curr_radius - query_radius) / curr_radius;
 
-            // if(dip != nullptr) {
-            //     dip->free_memory();
-            // }
-
             start_time = std::chrono::high_resolution_clock::now();
             if (use_aps) {
                 if (percent_change > search_params->recompute_threshold) {
@@ -598,11 +594,9 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                     break;
                 }
             }
-            
-            if(dip) {
-                dip->buffer_size_ = 0;
-                dip->free_memory();
-            }
+           
+            // release the buffer
+            if(dip) dip->save();
         }
         // Retrieve the top-k results for query q.
         all_topk_dists[q] = topk_buf->get_topk();
@@ -768,15 +762,15 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
         int64_t batch_size = x_subset.size(0);
         
         // Get the partition’s data.
-        if (partition_manager_->parent_ && partition_manager_->parent_->current_level_ == 1) {
-            auto it = partition_manager_->partitions_->partitions_.find(pid);
-            if (it == partition_manager_->partitions_->partitions_.end()) {
-                throw std::runtime_error("List does not exist in list_size");
-            }
-            auto dip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pid]);
-            std::cout << "[QueryCoordinator] batched_serial_scan: Loading level " << partition_manager_->parent_->current_level_ - 1 << " partition ID: " << pid << std::endl;
-            dip->load();
-        }
+        // if (partition_manager_->parent_ && partition_manager_->parent_->current_level_ == 1) {
+        //     auto it = partition_manager_->partitions_->partitions_.find(pid);
+        //     if (it == partition_manager_->partitions_->partitions_.end()) {
+        //         throw std::runtime_error("pid does not exist");
+        //     }
+        //     auto dip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pid]);
+        //     std::cout << "[QueryCoordinator] batched_serial_scan: Loading level " << partition_manager_->parent_->current_level_ - 1 << " partition ID: " << pid << std::endl;
+        //     dip->load();
+        // }
         const float *list_codes = (float *) partition_manager_->partitions_->get_codes(pid);
         const int64_t *list_ids = partition_manager_->partitions_->get_ids(pid);
         int64_t list_size = partition_manager_->partitions_->list_size(pid);
