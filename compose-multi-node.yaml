@@ -6,6 +6,7 @@ services:
             - ./src/python/distributedwrapper:/usr/local/lib/python3.12/dist-packages/quake/distributedwrapper
             - ./examples/quickstart_dist.py:/quake/examples/quickstart_dist.py
             - ./examples/quickstart_multidist.py:/quake/examples/quickstart_multidist.py
+            - ./examples/quickstart_multidist_with_partitions.py:/quake/examples/quickstart_multidist_with_partitions.py
             - ./sift/:/quake/data/sift/
     quake2:
         build: .
@@ -15,6 +16,7 @@ services:
             - ./src/python/distributedwrapper:/usr/local/lib/python3.12/dist-packages/quake/distributedwrapper
             - ./examples/quickstart_dist.py:/quake/examples/quickstart_dist.py
             - ./examples/quickstart_multidist.py:/quake/examples/quickstart_multidist.py
+            - ./examples/quickstart_multidist_with_partitions.py:/quake/examples/quickstart_multidist_with_partitions.py
             - ./sift/:/quake/data/sift/
     quake3:
         build: .
@@ -24,6 +26,7 @@ services:
             - ./src/python/distributedwrapper:/usr/local/lib/python3.12/dist-packages/quake/distributedwrapper
             - ./examples/quickstart_dist.py:/quake/examples/quickstart_dist.py
             - ./examples/quickstart_multidist.py:/quake/examples/quickstart_multidist.py
+            - ./examples/quickstart_multidist_with_partitions.py:/quake/examples/quickstart_multidist_with_partitions.py
             - ./sift/:/quake/data/sift/
     quake4:
         build: .
@@ -33,4 +36,5 @@ services:
             - ./src/python/distributedwrapper:/usr/local/lib/python3.12/dist-packages/quake/distributedwrapper
             - ./examples/quickstart_dist.py:/quake/examples/quickstart_dist.py
             - ./examples/quickstart_multidist.py:/quake/examples/quickstart_multidist.py
+            - ./examples/quickstart_multidist_with_partitions.py:/quake/examples/quickstart_multidist_with_partitions.py
             - ./sift/:/quake/data/sift/
