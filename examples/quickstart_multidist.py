@@ -88,7 +88,8 @@ def main():
         "k": k,
         "nprobe": nprobe
     }
-    dist_index = DistributedIndex(SERVERS, build_params_kw_args, search_params_kw_args)
+    num_partitions = 1
+    dist_index = DistributedIndex(SERVERS, num_partitions, build_params_kw_args, search_params_kw_args)
     print("Building index on all servers...")
     start_time = time.time()
     dist_index.build(vectors, ids)
