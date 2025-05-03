@@ -418,7 +418,10 @@ class WorkloadEvaluator:
             index.save(index_path)
             print(f"Index {name} built and saved to {index_path}")
         else:
-            index.load(index_path, n_workers=build_params.get("num_workers", 0))
+            if build_params.get("num_workers"):
+                index.load(index_path, num_workers=build_params["num_workers"])
+            else:
+                index.load(index_path)
             print(f"Index {name} loaded from {index_path}")
 
         if isinstance(index, QuakeWrapper) and m_params is not None:

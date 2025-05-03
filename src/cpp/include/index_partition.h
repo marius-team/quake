@@ -109,7 +109,7 @@ public:
      *
      * @param index Index of the vector to remove.
      */
-    void remove(int64_t index);
+    int64_t remove(int64_t index);
 
     /**
      * @brief Resize the partition.

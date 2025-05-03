@@ -112,6 +112,8 @@ void PartitionManager::init_partitions(
         }
     }
 
+    partition_store_->build_map();
+
     if (debug_) {
         std::cout << "[PartitionManager] init_partitions: Created " << nlist
                   << " partitions, dimension=" << dim << std::endl;

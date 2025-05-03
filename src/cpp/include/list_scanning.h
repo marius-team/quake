@@ -187,6 +187,11 @@ public:
     DistanceType get_kth_distance() {
         std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
         flush(); // Ensure the buffer is properly flushed
+
+        if (curr_offset_ < k_) {
+            return 0.0;
+        }
+
         return topk_[std::min(curr_offset_, k_ - 1)].first;
     }
 

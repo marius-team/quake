@@ -46,7 +46,6 @@ class MaintenancePolicy {
    */
   void reset();
 
- private:
   shared_ptr<PartitionManager> partition_manager_;  ///< Manages partition state.
   shared_ptr<MaintenancePolicyParams> params_;        ///< Maintenance parameters.
   shared_ptr<MaintenanceCostEstimator> cost_estimator_; ///< Cost estimator for maintenance actions.

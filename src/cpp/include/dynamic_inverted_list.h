@@ -31,6 +31,7 @@ namespace faiss {
         int d_;                        ///< Dimensionality of the vectors (derived from code_size).
         int code_size_;                ///< Size in bytes of each vector code.
         unordered_map<size_t, shared_ptr<IndexPartition>> partitions_; ///< Map of partition ID to IndexPartition.
+        unordered_map<int64_t, std::pair<IndexPartition*, int64_t>> id_to_location_;
 
         /**
          * @brief Constructor for DynamicInvertedLists.
@@ -82,6 +83,8 @@ namespace faiss {
          * @throws std::runtime_error if the partition does not exist.
          */
         const idx_t* get_ids(size_t list_no) const override;
+
+        void build_map();
 
         /**
          * @brief Release the codes pointer.
@@ -325,6 +328,19 @@ namespace faiss {
          * @return A 1D tensor containing all partition IDs.
          */
         Tensor get_partition_ids();
+
+        template<typename IdT>
+        inline void map_add(IndexPartition* p, int64_t off, IdT id) noexcept {
+             id_to_location_[id] = {p, off};
+        }
+        template<typename IdT>
+        inline void map_erase(IdT id) noexcept {
+             id_to_location_.erase(id);
+        }
+        template<typename IdT>
+        inline void map_swap(IndexPartition* p, int64_t off, IdT id) noexcept {
+             id_to_location_[id] = {p, off};
+        }
     };
 
     /**

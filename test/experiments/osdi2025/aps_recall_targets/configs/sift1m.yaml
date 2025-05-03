@@ -1,0 +1,28 @@
+# configs/experiment.yaml
+mode: run  # options: build, run, plot
+base_dir: data/aps
+dataset:
+  name: sift1m
+  path: data
+experiment:
+  nq: 100
+  k: 100
+  n_workers: 0
+  recall_targets: [.2, .3, .4, .5, .6, .7, .8, .9, .95, .99, .999]
+  recompute_ratio: 0.00001
+  use_precompute: true
+  initial_search_fraction: .1
+index:
+  metric: l2
+  nlist: 1000
+overwrite:
+  index: false
+  results: true
+methods: ['Oracle', 'APS']
+#methods: ['APS']
+#methods: ['Oracle']
+
+paths:
+  index_dir: data/sift1m/indexes
+  results_dir: data/sift1m/results
+  plot_dir: data/sift1m/plots

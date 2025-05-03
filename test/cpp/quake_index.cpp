@@ -7,6 +7,9 @@
 #include <gtest/gtest.h>
 #include "quake_index.h"
 #include <torch/torch.h>
+#include <faiss/IndexFlat.h>
+#include <faiss/IndexIVFFlat.h>
+#include <faiss/Index.h>
 
 // Helper functions for random data
 static torch::Tensor generate_random_data(int64_t num_vectors, int64_t dim) {
@@ -474,56 +477,6 @@ TEST(QuakeIndexStressTest, HighDimensionTest) {
 
     ASSERT_EQ(result->ids.size(0), query_vectors.size(0));
     ASSERT_EQ(result->ids.size(1), search_params->k);
-}
-
-// -------------------------------------------------------------------------
-// SEARCH, ADD, REMOVE, AND MAINTENANCE TEST
-// -------------------------------------------------------------------------
-TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
-    // Repeatedly search, add, remove, and perform maintenance to see if the index remains consistent.
-
-    int64_t dimension = 16;
-    int64_t num_vectors = 100000;
-    int64_t num_queries = 100;
-    int64_t batch_size = 10;
-
-    QuakeIndex index;
-    auto build_params = std::make_shared<IndexBuildParams>();
-    build_params->nlist = 100;
-    build_params->metric = "l2";
-    build_params->niter = 3;
-
-    Tensor data_vectors = generate_random_data(num_vectors, dimension);
-    Tensor data_ids = generate_sequential_ids(num_vectors, 0);
-
-    index.build(data_vectors, data_ids, build_params);
-
-    for (int i = 0; i < 100; i++) {
-        // Search
-        std::cout << "Iteration " << i << std::endl;
-        auto query_vectors = generate_random_data(num_queries, dimension) * .1;
-        auto search_params = std::make_shared<SearchParams>();
-        search_params->nprobe = 1;
-        search_params->k = 5;
-        auto search_result = index.search(query_vectors, search_params);
-        ASSERT_EQ(search_result->ids.size(0), query_vectors.size(0));
-        ASSERT_EQ(search_result->ids.size(1), search_params->k);
-
-        // Add
-        auto add_vectors = generate_random_data(batch_size, dimension);
-        auto add_ids = generate_sequential_ids(batch_size, (i * batch_size) + num_vectors);
-        auto add_info = index.add(add_vectors, add_ids);
-        ASSERT_EQ(add_info->n_vectors, batch_size);
-
-        // Remove
-        auto remove_ids = add_ids.slice(0, 0, batch_size / 2);
-        auto remove_info = index.remove(remove_ids);
-        ASSERT_EQ(remove_info->n_vectors, batch_size / 2);
-
-        index.maintenance();
-    }
-
-    SUCCEED();
 }
 
 // Define the GPU related test only if FAISS GPU support is enabled

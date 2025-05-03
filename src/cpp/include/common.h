@@ -180,6 +180,14 @@ struct SearchParams {
     float initial_search_fraction = DEFAULT_INITIAL_SEARCH_FRACTION;
     int aps_flush_period_us = DEFAULT_APS_FLUSH_PERIOD_US;
 
+    // early termination params
+    float spann_threshold = 1.25f; // prune all centroids with distance > 1.25 * min_distance
+
+    float auncel_a = 0.5f; // auncel's parameter
+    float auncel_b = 0.5f; // auncel's parameter
+
+
+
     SearchParams() = default;
 };
 

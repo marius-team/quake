@@ -514,6 +514,9 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
     // Use our custom parallel_for to process queries in parallel.
     parallel_for<int64_t>(0, num_queries, [&](int64_t q) {
         // Create a local TopK buffer for query q.
+
+        auto t1 = high_resolution_clock::now();
+
         auto topk_buf = std::make_shared<TopkBuffer>(k, is_descending);
         const float* query_vec = x_ptr + q * dimension;
         int num_parts = partition_ids.size(1);
@@ -525,16 +528,33 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             query_radius = -1000000.0;
         }
 
+        auto t2 = high_resolution_clock::now();
+
         Tensor partition_sizes = partition_manager_->get_partition_sizes(partition_ids[q]);
+        vector<int64_t> partition_sizes_vec = vector<int64_t>(partition_sizes.data_ptr<int64_t>(),
+                                                              partition_sizes.data_ptr<int64_t>() + partition_sizes.size(0));
+        auto t3 = high_resolution_clock::now();
         if (use_aps) {
             vector<int64_t> partition_ids_to_scan_vec = std::vector<int64_t>(partition_ids[q].data_ptr<int64_t>(),
                                                                 partition_ids[q].data_ptr<int64_t>() + partition_ids[q].size(0));
             vector<float *> cluster_centroids = parent_->partition_manager_->get_vectors(partition_ids_to_scan_vec);
+            t3 = high_resolution_clock::now();
+
+
             boundary_distances = compute_boundary_distances(x[q],
                                                             cluster_centroids,
                                                             metric_ == faiss::METRIC_L2);
         }
+        auto t4 = high_resolution_clock::now();
+
+        int64_t scan_time = 0;
+        int64_t aps_time = 0;
+
+        vector<int64_t> scanned_ids;
+
         for (int p = 0; p < num_parts; p++) {
+
+            auto curr_time = high_resolution_clock::now();
             int64_t pi = partition_ids_accessor[q][p];
 
             if (pi == -1) {
@@ -553,13 +573,19 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                       dimension,
                       *topk_buf,
                       metric_);
+            scanned_ids.push_back(pi);
 
             float curr_radius = topk_buf->get_kth_distance();
             float percent_change = abs(curr_radius - query_radius) / curr_radius;
 
+            auto end_time = high_resolution_clock::now();
+
+            scan_time += duration_cast<nanoseconds>(end_time - start_time).count();
+
             start_time = high_resolution_clock::now();
-            if (use_aps) {
-                if (percent_change > search_params->recompute_threshold) {
+            bool first_list = (p == 0);
+            if (use_aps && curr_radius != 0) {
+                if (first_list || percent_change > search_params->recompute_threshold) {
                     query_radius = curr_radius;
 
                     partition_probs = compute_recall_profile(boundary_distances,
@@ -570,10 +596,13 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                                                              metric_ == faiss::METRIC_L2);
                 }
                 float recall_estimate = 0.0;
-                for (int i = 0; i < p; i++) {
+                for (int i = 0; i < p + 1; i++) {
                     recall_estimate += partition_probs[i];
                 }
+                end_time = high_resolution_clock::now();
+                aps_time += duration_cast<nanoseconds>(end_time - start_time).count();
                 if (recall_estimate >= search_params->recall_target) {
+                    timing_info->partitions_scanned = p + 1;
                     break;
                 }
             }
@@ -581,7 +610,20 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
         // Retrieve the top-k results for query q.
         all_topk_dists[q] = topk_buf->get_topk();
         all_topk_ids[q] = topk_buf->get_topk_indices();
+        auto t5 = high_resolution_clock::now();
+
+        // mark the partitions as scanned
+        maintenance_policy_->record_query_hits(scanned_ids);
+        std::cout << "Query " << q << " partitions scanned: " << scanned_ids.size() << std::endl;
+        std::cout << "Total queries processed: " << maintenance_policy_->hit_count_tracker_->get_num_queries_recorded() << std::endl;
+
+        // std::cout << "Query " << q << " times: " << duration_cast<microseconds>(t2 - t1).count() << " "
+        //           << duration_cast<microseconds>(t3 - t2).count() << " "
+        //           << duration_cast<microseconds>(t4 - t3).count() << " "
+        //           << duration_cast<microseconds>(t5 - t4).count() << std::endl;
+        // std::cout << "Scan time: " << scan_time / 1000.0 << " APS time: " << aps_time / 1000.0 << std::endl;
     }, search_params->num_threads);
+
 
     // Aggregate per-query results into output tensors.
     auto ret_ids_accessor = ret_ids.accessor<int64_t, 2>();

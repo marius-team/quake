@@ -76,29 +76,21 @@ void IndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_id
     std::memcpy(ids_ + offset, new_ids, n_entry * sizeof(idx_t));
 }
 
-void IndexPartition::remove(int64_t index) {
-    if (index < 0 || index >= num_vectors_) {
-        throw std::runtime_error("Index out of range in remove");
+int64_t IndexPartition::remove(int64_t idx)
+{
+    assert(idx >= 0 && idx < num_vectors_);
+    const int64_t last = num_vectors_ - 1;
+
+    // optional: bookkeeping for norms, etc.
+
+    if (idx != last) {                 // swap last -> idx
+        std::memcpy(codes_ + idx * code_size_,
+                    codes_ + last * code_size_,
+                    code_size_);
+        ids_[idx] = ids_[last];
     }
-    if (index == num_vectors_ - 1) {
-        num_vectors_--;
-        return;
-    }
-
-    int64_t last_idx = num_vectors_ - 1;
-    const size_t code_bytes = static_cast<size_t>(code_size_);
-
-    // // Update id_to_index_
-    // idx_t last_id = ids_[last_idx];
-    // idx_t removed_id = ids_[index];
-    //
-    // id_to_index_[last_id] = index;
-    // id_to_index_.erase(removed_id);
-
-    std::memcpy(codes_ + index * code_bytes, codes_ + last_idx * code_bytes, code_bytes);
-    ids_[index] = ids_[last_idx];
-
-    num_vectors_--;
+    --num_vectors_;
+    return (idx == last) ? -1 : idx;   // <‑‑ the new occupant of slot idx
 }
 
 void IndexPartition::resize(int64_t new_capacity) {
