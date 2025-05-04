@@ -94,6 +94,12 @@ QuakeIndex::search(Tensor x, shared_ptr<SearchParams> search_params) {
     if (!query_coordinator_) {
         throw std::runtime_error("[QuakeIndex::search()] No query coordinator. Did you build the index?");
     }
+    std::cout << "Search params has buffer size set to: " << search_params->buffer_size << std::endl;
+    if(search_params->buffer_size != query_coordinator_->buffer->bufSize) {
+        std::cout << "Changing buffer size from " << query_coordinator_->buffer->bufSize << " to " << search_params->buffer_size << std::endl;
+        query_coordinator_->buffer->bufSize = search_params->buffer_size;
+    }
+
     return query_coordinator_->search(x, search_params);
 }
 
