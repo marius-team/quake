@@ -1,6 +1,7 @@
 #include <query_coordinator.h>
 #include <buffer_manager.h>
 #include <fifo_policy.h>
+#include <lru_policy.h>
 
 // for destructor, flush all pages
 
@@ -8,7 +9,7 @@
 BufferManager::BufferManager() {
     std::cout << "Constructing buffer manager" << std::endl;
     bufSize = 1;
-    policy = make_shared<FIFOPolicy>();
+    policy = make_shared<LRUPolicy>();
     curSize = 0;
 }
 
