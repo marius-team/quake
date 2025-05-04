@@ -13,6 +13,7 @@
 #include <common.h>
 #include <faiss/invlists/InvertedLists.h>
 #include <index_partition.h>
+#include <file_index_partition.h>
 
 namespace faiss {
     /**
@@ -195,6 +196,15 @@ namespace faiss {
          * @throws std::runtime_error if the partition already exists.
          */
         void add_list(size_t list_no);
+
+        
+        /**
+         * @brief Add a new, empty disk-based partition (need to decide if we create a file for it also here)
+         *
+         * @param list_no The partition number to add.
+         * @throws std::runtime_error if the partition already exists.
+         */
+        void add_list_file(size_t list_no);
 
         /**
          * @brief Check if a given ID exists in a partition.

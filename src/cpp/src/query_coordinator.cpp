@@ -23,6 +23,7 @@ QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
       metric_(metric),
       num_workers_(num_workers),
       stop_workers_(false) {
+    buffer = make_shared<BufferManager>();
     if (num_workers_ > 0) {
         initialize_workers(num_workers_);
     }
@@ -549,6 +550,21 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 continue; // Skip invalid partitions
             }
 
+            shared_ptr<FileIndexPartition> fip = nullptr;
+            // Get the partition’s data.
+            if (partition_manager_->parent_ && partition_manager_->parent_->current_level_ == 1) {
+                auto it = partition_manager_->partitions_->partitions_.find(pi);
+                if (it == partition_manager_->partitions_->partitions_.end()) {
+                    throw std::runtime_error("pid does not exist");
+                }
+                fip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pi]);
+                if(fip) {
+                    // std::cout << "[QueryCoordinator] serial_scan: Loading level " << partition_manager_->parent_->current_level_ - 1 << " partition ID: " << pi << std::endl;
+                    // dip->load();
+                    buffer->put(pi, fip, partition_manager_);
+                }
+            }
+
             start_time = std::chrono::high_resolution_clock::now();
             float *list_vectors = (float *) partition_manager_->partitions_->get_codes(pi);
             int64_t *list_ids = (int64_t *) partition_manager_->partitions_->get_ids(pi);
@@ -580,6 +596,9 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                     break;
                 }
             }
+           
+            // release the buffer
+            // if(dip) dip->save();
         }
         // Retrieve the top-k results for query q.
         all_topk_dists[q] = topk_buf->get_topk();
@@ -615,6 +634,13 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
 shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchParams> search_params) {
     if (!partition_manager_) {
         throw std::runtime_error("[QueryCoordinator::search] partition_manager_ is null.");
+    }
+
+    if(partition_manager_->parent_) {
+        std::cout << "Entered QueryCoordinator::search for level : " << partition_manager_->parent_->current_level_ << std::endl;
+    }
+    else {
+        std::cout << "Entered QueryCoordinator::search for level : 0" << std::endl;
     }
 
     x = x.contiguous();
@@ -736,8 +762,17 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
         Tensor indices_tensor = torch::tensor(query_indices, torch::kInt64);
         Tensor x_subset = x.index_select(0, indices_tensor);
         int64_t batch_size = x_subset.size(0);
-
+        
         // Get the partition’s data.
+        // if (partition_manager_->parent_ && partition_manager_->parent_->current_level_ == 1) {
+        //     auto it = partition_manager_->partitions_->partitions_.find(pid);
+        //     if (it == partition_manager_->partitions_->partitions_.end()) {
+        //         throw std::runtime_error("pid does not exist");
+        //     }
+        //     auto dip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pid]);
+        //     std::cout << "[QueryCoordinator] batched_serial_scan: Loading level " << partition_manager_->parent_->current_level_ - 1 << " partition ID: " << pid << std::endl;
+        //     dip->load();
+        // }
         const float *list_codes = (float *) partition_manager_->partitions_->get_codes(pid);
         const int64_t *list_ids = partition_manager_->partitions_->get_ids(pid);
         int64_t list_size = partition_manager_->partitions_->list_size(pid);
@@ -764,6 +799,10 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
             // Merge: global buffer adds the new candidate distances/ids.
             global_buffers[global_q]->batch_add(local_dists.data(), local_ids.data(), local_ids.size());
         }
+
+        // Free memory here?
+        // dip->save()
+        // Or do this in the destructor?
     }
 
     // Aggregate the final results into output tensors.

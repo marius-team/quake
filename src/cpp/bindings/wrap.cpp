@@ -170,6 +170,8 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Threshold to trigger recomputation of APS. default = ") + std::to_string(DEFAULT_RECOMPUTE_THRESHOLD)).c_str())
         .def_readwrite("aps_flush_period_us", &SearchParams::aps_flush_period_us,
              (std::string("APS flush period in microseconds. default = ") + std::to_string(DEFAULT_APS_FLUSH_PERIOD_US)).c_str())
+        .def_readwrite("buffer_size", &SearchParams::buffer_size,
+             (std::string("Buffer size in number of partitons. default") + std::to_string(1)).c_str())
         .def("__repr__", [](const SearchParams &s) {
             std::ostringstream oss;
             oss << "{";
@@ -181,6 +183,7 @@ PYBIND11_MODULE(_bindings, m) {
             oss << "\"initial_search_fraction\": " << s.initial_search_fraction << ", ";
             oss << "\"recompute_threshold\": " << s.recompute_threshold << ", ";
             oss << "\"aps_flush_period_us\": " << s.aps_flush_period_us;
+            oss << "\"buffer_size\": " << s.buffer_size;
             oss << "}";
             return oss.str();
         });

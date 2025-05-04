@@ -66,7 +66,7 @@ public:
     IndexPartition& operator=(IndexPartition&& other) noexcept;
 
     /// Destructor. Frees all allocated memory.
-    ~IndexPartition();
+    virtual ~IndexPartition();
 
     /**
      * @brief Set the code size.
@@ -144,6 +144,8 @@ public:
      * @param new_capacity The new capacity (number of vectors).
      */
     void reallocate_memory(int64_t new_capacity);
+    
+    void free_memory();
 
 #ifdef QUAKE_USE_NUMA
     /**
@@ -171,7 +173,7 @@ private:
      *
      * Releases the codes and IDs buffers.
      */
-    void free_memory();
+    // void free_memory();
 
     /**
      * @brief Ensure capacity.
@@ -181,7 +183,7 @@ private:
      *
      * @param required The minimum required number of vectors.
      */
-    void ensure_capacity(int64_t required);
+    // void ensure_capacity(int64_t required);
 
     /**
      * @brief Allocate memory for a given type.
@@ -195,5 +197,17 @@ private:
      */
     template <typename T>
     T* allocate_memory(size_t num_elements, int numa_node);
+
+protected:
+    /**
+     * @brief Ensure capacity.
+     *
+     * Checks that the internal buffer can hold at least the required number of vectors,
+     * and resizes if necessary.
+     *
+     * @param required The minimum required number of vectors.
+     */
+    void ensure_capacity(int64_t required);
+
 };
 #endif //INDEX_PARTITION_H

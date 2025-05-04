@@ -174,6 +174,7 @@ void IndexPartition::move_from(IndexPartition&& other) {
 }
 
 void IndexPartition::free_memory() {
+    // std::cout << "Entered free_memory() (parent class)" << std::endl;
     if (codes_ == nullptr && ids_ == nullptr) {
         return;
     }
@@ -187,6 +188,7 @@ void IndexPartition::free_memory() {
         numa_free(ids_, buffer_size_ * sizeof(idx_t));
     }
 #else
+    // std::cout << "About to free codes_ and ids_ (parent class)" << std::endl;
     std::free(codes_);
     std::free(ids_);
 #endif
