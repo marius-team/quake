@@ -23,6 +23,7 @@ QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
       metric_(metric),
       num_workers_(num_workers),
       stop_workers_(false) {
+    buffer = make_shared<BufferManager>();
     if (num_workers_ > 0) {
         initialize_workers(num_workers_);
     }
@@ -549,17 +550,18 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 continue; // Skip invalid partitions
             }
 
-            shared_ptr<FileIndexPartition> dip = nullptr;
+            shared_ptr<FileIndexPartition> fip = nullptr;
             // Get the partition’s data.
             if (partition_manager_->parent_ && partition_manager_->parent_->current_level_ == 1) {
                 auto it = partition_manager_->partitions_->partitions_.find(pi);
                 if (it == partition_manager_->partitions_->partitions_.end()) {
                     throw std::runtime_error("pid does not exist");
                 }
-                dip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pi]);
-                if(dip) {
+                fip = std::dynamic_pointer_cast<FileIndexPartition>(partition_manager_->partitions_->partitions_[pi]);
+                if(fip) {
                     // std::cout << "[QueryCoordinator] serial_scan: Loading level " << partition_manager_->parent_->current_level_ - 1 << " partition ID: " << pi << std::endl;
-                    dip->load();
+                    // dip->load();
+                    buffer->put(pi, fip, partition_manager_);
                 }
             }
 
@@ -596,7 +598,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             }
            
             // release the buffer
-            if(dip) dip->save();
+            // if(dip) dip->save();
         }
         // Retrieve the top-k results for query q.
         all_topk_dists[q] = topk_buf->get_topk();
