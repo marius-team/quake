@@ -497,20 +497,32 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
 
     int64_t dimension = 128;
     int64_t num_vectors = 100000;
-    int64_t num_queries = 1;
+    int64_t num_queries = 100;
     int64_t batch_size = 10000;
     int n_ops = 100;
 
     QuakeIndex index;
     auto build_params = std::make_shared<IndexBuildParams>();
-    build_params->nlist = 1000;
+    build_params->nlist = 2500;
     build_params->metric = "l2";
     build_params->niter = 5;
+
+    auto maintenance_params = std::make_shared<MaintenancePolicyParams>();
+    maintenance_params->refinement_radius = 10;
+    maintenance_params->refinement_iterations = 1;
 
     Tensor data_vectors = torch::randn({num_vectors, dimension}, torch::kFloat32);
     Tensor data_ids = torch::arange(num_vectors, torch::kInt64);
 
     index.build(data_vectors, data_ids, build_params);
+    index.initialize_maintenance_policy(maintenance_params);
+
+    // add level
+    auto parent_index_build_params = std::make_shared<IndexBuildParams>();
+    parent_index_build_params->nlist = 250;
+    parent_index_build_params->metric = "l2";
+    parent_index_build_params->niter = 5;
+    index.add_level(parent_index_build_params);
 
     // timers
     int64_t search_time = 0;

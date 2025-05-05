@@ -627,6 +627,14 @@ compute_recall_profile(const std::vector<float>& boundary_distances,
             // Or fallback: goto method1_label; (using labels/goto is generally discouraged)
     }
 
+    // if the cluster_sizes are given, we can use them to scale the probabilities
+    if (partition_sizes.size() > 0) {
+        for (int k = 1; k < m; ++k) {
+            if (partition_sizes[k] > 0) {
+                P_prime[k] *= static_cast<float>(partition_sizes[k]);
+            }
+        }
+    }
 
     // --- Final Normalization ---
     std::vector<float> probs(m, 0.0f);

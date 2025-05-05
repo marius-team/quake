@@ -42,10 +42,21 @@ class QuakeWrapper(IndexWrapper):
 
         :return: The state of the index as a dictionary.
         """
-        return {
+        state = {
             "n_list": self.index.nlist(),
             "n_total": self.index.ntotal(),
         }
+        # # if has parent get the parent nlist
+        # if self.index.parent.parent:
+        #     state["n_list1"] = self.index.parent.parent.nlist()
+
+        # get all the parents
+        curr = self.index.parent
+        while curr.parent:
+            state["n_list1"] = curr.nlist()
+            curr = curr.parent
+
+        return state
 
     def build(
         self,
@@ -56,6 +67,7 @@ class QuakeWrapper(IndexWrapper):
         num_workers: int = 0,
         m: int = -1,
         code_size: int = 8,
+        parent=None,
     ):
         """
         Build the index with the given vectors and arguments.
@@ -78,6 +90,10 @@ class QuakeWrapper(IndexWrapper):
         build_params.metric = metric
         build_params.nlist = nc
         build_params.num_workers = num_workers
+
+        if parent is not None:
+            build_params.parent_params = quake.IndexBuildParams()
+            build_params.parent_params.nlist = parent.get("nlist", 1)
 
         self.index = QuakeIndex()
 
@@ -125,6 +141,7 @@ class QuakeWrapper(IndexWrapper):
         recompute_threshold=0.1,
         aps_flush_period_us=50,
         n_threads=1,
+        parent=None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Find the k-nearest neighbors of the query vectors.
@@ -145,6 +162,11 @@ class QuakeWrapper(IndexWrapper):
         search_params.aps_flush_period_us = aps_flush_period_us
         search_params.k = k
         search_params.num_threads = n_threads
+
+        if parent is not None:
+            search_params.parent_params = quake.SearchParams()
+            search_params.parent_params.nprobe = parent.get("nprobe", 1)
+            search_params.parent_params.recall_target = parent.get("recall_target", -1)
 
         return self.index.search(query, search_params)
 

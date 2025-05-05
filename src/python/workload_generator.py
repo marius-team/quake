@@ -6,6 +6,7 @@ from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 
 from quake import SearchParams
@@ -414,6 +415,7 @@ class WorkloadEvaluator:
         initial_indices = torch.load(self.initial_indices_path, weights_only=True).to(torch.int64)
         vectors = vectors[initial_indices]
         if not index_path.exists():
+            print(build_params)
             index.build(vectors, ids=initial_indices, **build_params)
             index.save(index_path)
             print(f"Index {name} built and saved to {index_path}")
@@ -605,5 +607,10 @@ class WorkloadEvaluator:
         plt.savefig(plot_path)
         print(f"Saved evaluation plots to {plot_path}")
         plt.close()
+
+        df = pd.DataFrame(results)
+        csv_path = self.output_dir / "results.csv"
+        df.to_csv(csv_path, index=False)
+        print(f"Saved results to {csv_path}")
 
         return results

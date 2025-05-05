@@ -49,6 +49,8 @@ public:
      */
     shared_ptr<BuildTimingInfo> build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params);
 
+    void add_level(shared_ptr<IndexBuildParams> params);
+
     /**
      * @brief Search for vectors in the index.
      * @param x Tensor of shape [num_queries, dimension].

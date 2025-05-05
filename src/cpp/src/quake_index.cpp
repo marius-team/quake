@@ -55,9 +55,14 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         auto s2 = std::chrono::high_resolution_clock::now();
         // create parent index over the centroids, assume is flat for now
         parent_ = make_shared<QuakeIndex>(current_level_ + 1);
+
         auto parent_build_params = make_shared<IndexBuildParams>();
-        parent_build_params->metric = build_params_->metric;
-        parent_build_params->num_workers = build_params_->num_workers;
+        if (build_params->parent_params == nullptr) {
+            parent_build_params->metric = build_params_->metric;
+            parent_build_params->num_workers = build_params_->num_workers;
+        } else {
+            parent_build_params = build_params_->parent_params;
+        }
         parent_->build(clustering->centroids, clustering->partition_ids, parent_build_params);
 
         // initialize the partition manager
@@ -87,6 +92,25 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
     auto end = std::chrono::high_resolution_clock::now();
     timing_info->total_time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     return timing_info;
+}
+
+void QuakeIndex::add_level(shared_ptr<IndexBuildParams> params) {
+
+    if (!parent_) {
+        throw std::runtime_error("[QuakeIndex::add_level()] No parent index. Cannot add level.");
+    }
+
+    if (parent_->parent_) {
+        parent_->add_level(params);
+    } else {
+        // create an index over the centroids
+
+        // get all centroids and their ids
+        Tensor ids = parent_->partition_manager_->get_ids();
+        Tensor centroids = parent_->partition_manager_->get(ids);
+
+        parent_->build(centroids, ids, params);
+    }
 }
 
 
@@ -159,7 +183,13 @@ shared_ptr<MaintenanceTimingInfo> QuakeIndex::maintenance() {
         throw std::runtime_error("[QuakeIndex::maintenance()] No maintenance policy set.");
     }
 
-    return maintenance_policy_->perform_maintenance();
+    auto maintenance_info = maintenance_policy_->perform_maintenance();
+
+    if (parent_->maintenance_policy_) {
+        parent_->maintenance_policy_->perform_maintenance();
+    }
+
+    return maintenance_info;
 }
 
 bool QuakeIndex::validate() {

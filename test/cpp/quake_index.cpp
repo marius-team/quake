@@ -25,7 +25,7 @@ protected:
     // Example parameters
     int64_t dimension_ = 16;
     int64_t nlist_ = 8;
-    int64_t num_vectors_ = 100;
+    int64_t num_vectors_ = 1000;
     int64_t num_queries_ = 5;
 
     // Data & IDs
@@ -477,6 +477,37 @@ TEST(QuakeIndexStressTest, HighDimensionTest) {
 
     ASSERT_EQ(result->ids.size(0), query_vectors.size(0));
     ASSERT_EQ(result->ids.size(1), search_params->k);
+}
+
+TEST_F(QuakeIndexTest, AddLevelTest)
+{
+    QuakeIndex index;
+
+    // 1.  Build a 2‑level index (leaf + one parent)
+    auto bp = std::make_shared<IndexBuildParams>();
+    bp->nlist  = 100;
+    bp->metric = "l2";
+    index.build(data_vectors_, data_ids_, bp);
+
+    const int64_t leaf_partitions = index.nlist();          // = nlist_
+
+    // 2.  Add a *new* level on top
+    auto top_bp = std::make_shared<IndexBuildParams>();
+    top_bp->nlist  = 10;      // flat over centroids
+    top_bp->metric = "l2";
+    index.add_level(top_bp);
+
+    // root now has a parent
+    ASSERT_NE(index.parent_, nullptr);
+    // that parent should have exactly `leaf_partitions` vectors (one per centroid)
+    EXPECT_EQ(index.parent_->ntotal(), leaf_partitions);
+
+    // 3.  Ensure we can still search and retrieve sane results
+    auto sp = std::make_shared<SearchParams>();
+    sp->k = 3;
+    auto res = index.search(query_vectors_, sp);
+    ASSERT_EQ(res->ids.size(0), query_vectors_.size(0));
+    ASSERT_EQ(res->ids.size(1), sp->k);
 }
 
 // Define the GPU related test only if FAISS GPU support is enabled

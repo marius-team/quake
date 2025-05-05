@@ -530,6 +530,8 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
 
         auto t2 = high_resolution_clock::now();
 
+
+
         Tensor partition_sizes = partition_manager_->get_partition_sizes(partition_ids[q]);
         vector<int64_t> partition_sizes_vec = vector<int64_t>(partition_sizes.data_ptr<int64_t>(),
                                                               partition_sizes.data_ptr<int64_t>() + partition_sizes.size(0));
@@ -591,7 +593,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                     partition_probs = compute_recall_profile(boundary_distances,
                                                              query_radius,
                                                              dimension,
-                                                             {},
+                                                             partition_sizes_vec,
                                                              search_params->use_precomputed,
                                                              metric_ == faiss::METRIC_L2);
                 }
@@ -614,8 +616,6 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
 
         // mark the partitions as scanned
         maintenance_policy_->record_query_hits(scanned_ids);
-        std::cout << "Query " << q << " partitions scanned: " << scanned_ids.size() << std::endl;
-        std::cout << "Total queries processed: " << maintenance_policy_->hit_count_tracker_->get_num_queries_recorded() << std::endl;
 
         // std::cout << "Query " << q << " times: " << duration_cast<microseconds>(t2 - t1).count() << " "
         //           << duration_cast<microseconds>(t3 - t2).count() << " "
@@ -667,15 +667,20 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
         // scan all partitions for each query
         partition_ids_to_scan = torch::arange(partition_manager_->nlist(), torch::kInt64);
     } else {
-        auto parent_search_params = make_shared<SearchParams>();
 
-        parent_search_params->recall_target = search_params->recall_target;
-        parent_search_params->use_precomputed = search_params->use_precomputed;
-        parent_search_params->recompute_threshold = search_params->recompute_threshold;
-        parent_search_params->batched_scan = true;
+
+        auto parent_search_params = make_shared<SearchParams>();
+        if (search_params->parent_params == nullptr) {
+            parent_search_params->recall_target = .99;
+            parent_search_params->use_precomputed = search_params->use_precomputed;
+            parent_search_params->recompute_threshold = search_params->recompute_threshold;
+            parent_search_params->batched_scan = false;
+        } else {
+            parent_search_params = search_params->parent_params;
+        }
 
         // if recall_target is set, we need an initial set of partitions to consider
-        if (parent_search_params->recall_target > 0.0 && !search_params->batched_scan) {
+        if (search_params->recall_target > 0.0 && !search_params->batched_scan) {
             int initial_num_partitions_to_search = std::max(
                 (int) (partition_manager_->nlist() * search_params->initial_search_fraction), 1);
             parent_search_params->k = initial_num_partitions_to_search;

@@ -69,6 +69,10 @@ PYBIND11_MODULE(_bindings, m) {
                      "         - num_workers: default = " + std::to_string(DEFAULT_NUM_WORKERS);
                  return doc.c_str();
              })())
+        .def("add_level", &QuakeIndex::add_level,
+             "Add a new level to the index.\n\n"
+             "Args:\n"
+             "    build_params (IndexBuildParams): Parameters for building the new level.")
         .def("search", &QuakeIndex::search,
              ([]() -> const char* {
                  static const std::string doc = std::string("Search the index for nearest neighbors.\n\n"
@@ -138,6 +142,8 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Distance metric. default = ") + DEFAULT_METRIC).c_str())
         .def_readwrite("num_workers", &IndexBuildParams::num_workers,
              (std::string("Number of workers. default = ") + std::to_string(DEFAULT_NUM_WORKERS)).c_str())
+        .def_readwrite("parent_params", &IndexBuildParams::parent_params,
+             "Parameters for the parent index, if any.")
         .def("__repr__", [](const IndexBuildParams &p) {
             std::ostringstream oss;
             oss << "{";
@@ -170,6 +176,8 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Threshold to trigger recomputation of APS. default = ") + std::to_string(DEFAULT_RECOMPUTE_THRESHOLD)).c_str())
         .def_readwrite("aps_flush_period_us", &SearchParams::aps_flush_period_us,
              (std::string("APS flush period in microseconds. default = ") + std::to_string(DEFAULT_APS_FLUSH_PERIOD_US)).c_str())
+        .def_readwrite("parent_params", &SearchParams::parent_params,
+             "Search parameters for the parent index, if any.")
         .def("__repr__", [](const SearchParams &s) {
             std::ostringstream oss;
             oss << "{";

@@ -679,7 +679,12 @@ Tensor PartitionManager::get_partition_sizes(Tensor partition_ids) {
     auto partition_sizes_accessor = partition_sizes.accessor<int64_t, 1>();
     for (int i = 0; i < partition_ids.size(0); i++) {
         int64_t list_no = partition_ids_accessor[i];
-        partition_sizes_accessor[i] = partition_store_->list_size(list_no);
+        if (list_no == -1) {
+            partition_sizes_accessor[i] = 0;
+        } else {
+            partition_sizes_accessor[i] = partition_store_->list_size(list_no);
+        }
+
         if (debug_) {
             std::cout << "[PartitionManager] get_partition_sizes: Partition " << list_no
                       << " size: " << partition_sizes_accessor[i] << std::endl;
