@@ -22,25 +22,7 @@ indexes:
     index: Quake
     build_params:
       nc: 1000
-      num_workers: 1
-      parent:
-        num_workers: 8
-    search_params:
-      k: 10
-#      nprobe: 10
-      recall_target: .9
-      parent:
-#        nprobe: 25
-        recall_target: .99
-        initial_search_fraction: 0.25
-
-  - name: Quake2
-    index: Quake
-    build_params:
-      nc: 1000
-      num_workers: 1
-      parent:
-        num_workers: 0
+      num_workers: 0
     search_params:
       k: 10
       recall_target: .9

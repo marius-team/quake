@@ -51,7 +51,7 @@ python3 examples/quickstart.py
 2. **Run the Benchmark:**
 
 ```bash
-python3 -m test.experiments.osdi2025.experiment_runner --experiment kick_the_tires --config sift1m
+OMP_NUM_THREADS=1 python3 -m test.experiments.osdi2025.experiment_runner --experiment kick_the_tires --config sift1m
 ```
 
 ---
