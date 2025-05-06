@@ -1,0 +1,73 @@
+# configs/experiment.yaml
+mode: run  # options: build, run, plot
+dataset:
+  name: sift1m
+  metric: l2
+  path: data
+workload_generator:
+  recall_target: 0.9
+  insert_ratio: 0.5
+  delete_ratio: 0.0
+  query_ratio: 0.5
+  number_of_operations: 1000
+  initial_size: 100000
+  cluster_size: 1000
+  update_batch_size: 10000
+  query_batch_size: 100
+  cluster_sample_distribution: skewed
+  query_cluster_sample_distribution: uniform
+  seed: 9299
+indexes:
+  - name: Quake
+    index: Quake
+    build_params:
+      nc: 1000
+      num_workers: 1
+      parent:
+        num_workers: 8
+    search_params:
+      k: 10
+#      nprobe: 10
+      recall_target: .9
+      parent:
+#        nprobe: 25
+        recall_target: .99
+        initial_search_fraction: 0.25
+
+  - name: Quake2
+    index: Quake
+    build_params:
+      nc: 1000
+      num_workers: 1
+      parent:
+        num_workers: 0
+    search_params:
+      k: 10
+      recall_target: .9
+  - name: IVF
+    index: IVF
+    build_params:
+      nc: 1000
+    search_params:
+      nprobe: 15
+      k: 10
+plot:
+  x_axis: operation_number      # any column from the results CSV
+  metrics: [latency_ms, recall] # any subset of stored metrics
+  styles:                       # one entry per index name
+    Quake:
+      color: "#1f77b4"          # default Matplotlib hex’s are fine
+      linestyle: "-"            # see plt.Line2D docs
+      marker: "o"
+    Quake2:
+      color: "#ff7f0e"          # default Matplotlib hex’s are fine
+      linestyle: "-"            # see plt.Line2D docs
+      marker: "o"
+    IVF:
+      color: "#d62728"
+      linestyle: "--"
+      marker: "s"
+overwrite:
+  workload: false
+  index: false
+  results: true

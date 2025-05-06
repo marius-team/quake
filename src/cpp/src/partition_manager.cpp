@@ -246,6 +246,11 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
 
     for (int64_t i = 0; i < n; i++) {
         int64_t pid = partition_ids_for_each[i];
+
+        if (pid < 0 || pid >= curr_partition_id_) {
+            throw runtime_error("[PartitionManager] add: Invalid partition ID.");
+        }
+
         if (debug_) {
             std::cout << "[PartitionManager] add: Inserting vector " << i << " with id " << id_accessor[i]
                       << " into partition " << pid << std::endl;

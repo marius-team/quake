@@ -497,21 +497,21 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
 
     int64_t dimension = 128;
     int64_t num_vectors = 10000;
-    int64_t num_queries = 10;
-    int64_t batch_size = 1000;
+    int64_t num_queries = 1;
+    int64_t batch_size = 10000;
     int n_ops = 100;
 
     QuakeIndex index;
     auto build_params = std::make_shared<IndexBuildParams>();
-    build_params->nlist = 1000;
+    build_params->nlist = 100;
     build_params->metric = "l2";
     build_params->niter = 5;
-    build_params->num_workers = 2;
+    build_params->num_workers = 0;
 
     auto maintenance_params = std::make_shared<MaintenancePolicyParams>();
     maintenance_params->refinement_radius = 10;
     maintenance_params->refinement_iterations = 0;
-    maintenance_params->window_size = 100;
+    maintenance_params->window_size = 10;
 
     Tensor data_vectors = torch::randn({num_vectors, dimension}, torch::kFloat32);
     Tensor data_ids = torch::arange(num_vectors, torch::kInt64);
@@ -519,11 +519,18 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
 
     // add level
     auto parent_index_build_params = std::make_shared<IndexBuildParams>();
-    parent_index_build_params->nlist = 50;
+    parent_index_build_params->nlist = 1;
     parent_index_build_params->metric = "l2";
     parent_index_build_params->niter = 5;
-    parent_index_build_params->num_workers = 1;
+    parent_index_build_params->num_workers = 0;
     build_params->parent_params = parent_index_build_params;
+
+    // auto grandparent_index_build_params = std::make_shared<IndexBuildParams>();
+    // grandparent_index_build_params->nlist = 1;
+    // grandparent_index_build_params->metric = "l2";
+    // grandparent_index_build_params->num_workers = 0;
+    // build_params->parent_params->parent_params = grandparent_index_build_params;
+
     index.build(data_vectors, data_ids, build_params);
     //
     index.initialize_maintenance_policy(maintenance_params);
@@ -577,10 +584,10 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
         // remove_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         // ASSERT_EQ(remove_info->n_vectors, batch_size / 2);
 
-        // start = std::chrono::high_resolution_clock::now();
-        // index.maintenance();
-        // end = std::chrono::high_resolution_clock::now();
-        // maintenance_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        start = std::chrono::high_resolution_clock::now();
+        index.maintenance();
+        end = std::chrono::high_resolution_clock::now();
+        maintenance_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     }
 
     // print out mean times per operation

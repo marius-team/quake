@@ -421,7 +421,7 @@ class WorkloadEvaluator:
             print(f"Index {name} built and saved to {index_path}")
         else:
             if build_params.get("n_workers"):
-                index.load(index_path, n_workers=build_params["n_workers"])
+                index.load(index_path, num_workers=build_params["num_workers"])
             else:
                 index.load(index_path)
             print(f"Index {name} loaded from {index_path}")

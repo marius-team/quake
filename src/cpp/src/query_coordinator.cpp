@@ -119,6 +119,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
         // Shutdown signal: -1 indicates the worker should exit.
         if (job.partition_id == -1) {
+            std::cout << "[QueryCoordinator::partition_scan_worker_fn] Worker " << core_index << " exiting." << std::endl;
             break;
         }
 
@@ -337,6 +338,9 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             job.num_queries = kv.second.size();
             job.query_ids = kv.second;
             int core_id = partition_manager_->get_partition_core_id(kv.first);
+            if (core_id < 0) {
+                throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
+            }
             core_resources_[core_id].job_queue.enqueue(job);
         }
     } else {
@@ -359,6 +363,9 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 job.rank = p;
 
                 int core_id = partition_manager_->get_partition_core_id(pid);
+                if (core_id < 0) {
+                    throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
+                }
                 core_resources_[core_id].job_queue.enqueue(job);
             }
             }, search_params->num_threads);
@@ -687,7 +694,7 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
     Tensor partition_ids_to_scan;
     if (parent_ == nullptr) {
         // scan all partitions for each query
-        partition_ids_to_scan = torch::arange(partition_manager_->nlist(), torch::kInt64);
+        partition_ids_to_scan = partition_manager_->get_partition_ids();
     } else {
         auto parent_search_params = make_shared<SearchParams>();
         if (search_params->parent_params == nullptr) {
