@@ -176,6 +176,10 @@ void QuakeIndex::initialize_maintenance_policy(shared_ptr<MaintenancePolicyParam
     if (query_coordinator_ != nullptr) {
         query_coordinator_->maintenance_policy_ = maintenance_policy_;
     }
+
+    if (parent_ != nullptr) {
+        parent_->initialize_maintenance_policy(maintenance_policy_params_);
+    }
 }
 
 shared_ptr<MaintenanceTimingInfo> QuakeIndex::maintenance() {
@@ -185,7 +189,7 @@ shared_ptr<MaintenanceTimingInfo> QuakeIndex::maintenance() {
 
     auto maintenance_info = maintenance_policy_->perform_maintenance();
 
-    if (parent_->maintenance_policy_) {
+    if (parent_ && parent_->maintenance_policy_) {
         parent_->maintenance_policy_->perform_maintenance();
     }
 

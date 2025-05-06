@@ -135,7 +135,6 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         const float *partition_codes = (float *) partition_manager_->partition_store_->get_codes(job.partition_id);
         const int64_t *partition_ids = (int64_t *) partition_manager_->partition_store_->get_ids(job.partition_id);
         int64_t partition_size = partition_manager_->partition_store_->list_size(job.partition_id);
-
         // Branch for non-batched jobs.
         if (!job.is_batched) {
 
@@ -260,7 +259,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     int64_t dimension = x.size(1);
     int k = search_params->k;
     int64_t nlist = partition_manager_->nlist();
-    bool use_aps = (search_params->recall_target > 0.0 && !search_params->batched_scan);
+    bool use_aps = (search_params->recall_target > 0.0 && !search_params->batched_scan && parent_ != nullptr);
     auto timing_info = make_shared<SearchTimingInfo>();
     timing_info->n_queries = num_queries;
     timing_info->n_clusters = nlist;
@@ -273,6 +272,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     if (partition_ids.dim() == 1) {
         partition_ids = partition_ids.unsqueeze(0).expand({num_queries, partition_ids.size(0)});
     }
+
+    auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
     job_flags_.clear();
     job_flags_.resize(num_queries);
@@ -303,8 +304,12 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 global_topk_buffer_pool_[q]->set_processing_query(true);
             }
         }
-        for (int64_t q = 0; q < num_queries; q++) {
-            global_topk_buffer_pool_[q]->set_jobs_left(partition_ids.size(1));
+        for (int64_t q = 0; q < num_queries; ++q) {
+            int valid = 0;
+            for (int64_t p = 0; p < partition_ids.size(1); ++p)
+                if (partition_ids_accessor[q][p] != -1) ++valid;
+
+            global_topk_buffer_pool_[q]->set_jobs_left(valid);
         }
     }
     auto end_time = high_resolution_clock::now();
@@ -363,7 +368,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     auto last_flush_time = high_resolution_clock::now();
     vector<vector<float>> boundary_distances(num_queries);
-    if (use_aps) {
+    if (use_aps && parent_) {
         for (int64_t q = 0; q < num_queries; q++) {
             vector<int64_t> partition_ids_to_scan_vec = vector<int64_t>(partition_ids[q].data_ptr<int64_t>(),
                                                                 partition_ids[q].data_ptr<int64_t>() + partition_ids[q].size(0));
@@ -379,7 +384,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     vector<float> query_radius(num_queries, 0.0f);
     vector<vector<float>> probs(num_queries);
-
     while (true) {
         // check if all jobs have been processed
         bool all_done = true;
@@ -455,7 +459,17 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                                              : std::numeric_limits<float>::infinity();
                 }
             }
-            timing_info->partitions_scanned = global_topk_buffer_pool_[q]->get_num_partitions_scanned();
+            timing_info->partitions_scanned += global_topk_buffer_pool_[q]->get_num_partitions_scanned();
+
+            if (search_params->track_hits && maintenance_policy_ != nullptr) {
+                vector<int64_t> partition_ids_vec;
+                for (int64_t p = 0; p < partition_ids.size(1); p++) {
+                    if (job_flags_[q][p]) {
+                        partition_ids_vec.push_back(partition_ids_accessor[q][p]);
+                    }
+                }
+                maintenance_policy_->record_query_hits(partition_ids_vec);
+            }
         }
     }
     end_time = high_resolution_clock::now();
@@ -539,8 +553,13 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
         if (use_aps) {
             vector<int64_t> partition_ids_to_scan_vec = std::vector<int64_t>(partition_ids[q].data_ptr<int64_t>(),
                                                                 partition_ids[q].data_ptr<int64_t>() + partition_ids[q].size(0));
+
             vector<float *> cluster_centroids = parent_->partition_manager_->get_vectors(partition_ids_to_scan_vec);
             t3 = high_resolution_clock::now();
+
+            // trim nullptrs
+            cluster_centroids.erase(std::remove(cluster_centroids.begin(), cluster_centroids.end(), nullptr),
+                                     cluster_centroids.end());
 
 
             boundary_distances = compute_boundary_distances(x[q],
@@ -609,13 +628,16 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 }
             }
         }
+
+
+        if (search_params->track_hits && maintenance_policy_) {
+            maintenance_policy_->record_query_hits(std::vector<int64_t>(scanned_ids.begin(), scanned_ids.end()));
+        }
+
         // Retrieve the top-k results for query q.
         all_topk_dists[q] = topk_buf->get_topk();
         all_topk_ids[q] = topk_buf->get_topk_indices();
         auto t5 = high_resolution_clock::now();
-
-        // mark the partitions as scanned
-        maintenance_policy_->record_query_hits(scanned_ids);
 
         // std::cout << "Query " << q << " times: " << duration_cast<microseconds>(t2 - t1).count() << " "
         //           << duration_cast<microseconds>(t3 - t2).count() << " "
@@ -667,13 +689,12 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
         // scan all partitions for each query
         partition_ids_to_scan = torch::arange(partition_manager_->nlist(), torch::kInt64);
     } else {
-
-
         auto parent_search_params = make_shared<SearchParams>();
         if (search_params->parent_params == nullptr) {
             parent_search_params->recall_target = .99;
             parent_search_params->use_precomputed = search_params->use_precomputed;
             parent_search_params->recompute_threshold = search_params->recompute_threshold;
+            parent_search_params->initial_search_fraction = .5;
             parent_search_params->batched_scan = false;
         } else {
             parent_search_params = search_params->parent_params;

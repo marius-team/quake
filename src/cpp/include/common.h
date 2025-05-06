@@ -179,6 +179,7 @@ struct SearchParams {
     float recompute_threshold = DEFAULT_RECOMPUTE_THRESHOLD;
     float initial_search_fraction = DEFAULT_INITIAL_SEARCH_FRACTION;
     int aps_flush_period_us = DEFAULT_APS_FLUSH_PERIOD_US;
+    bool track_hits = true;
 
     shared_ptr<SearchParams> parent_params = nullptr; ///< Search parameters for the parent index, if any.
 

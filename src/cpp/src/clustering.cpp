@@ -133,6 +133,7 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
             new_partitions[i] = make_shared<IndexPartition>();
             new_partitions[i]->set_code_size(partitions[0]->code_size_);
             new_partitions[i]->resize(10);
+            new_partitions[i]->set_core_id(partitions[i]->core_id_);
         }
 
         float *centroids_ptr = centroids.data_ptr<float>();

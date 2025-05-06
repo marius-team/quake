@@ -93,7 +93,7 @@ class QuakeWrapper(IndexWrapper):
 
         if parent is not None:
             build_params.parent_params = quake.IndexBuildParams()
-            build_params.parent_params.nlist = parent.get("nlist", 1)
+            build_params.parent_params.nlist = parent.get("nc", 1)
 
         self.index = QuakeIndex()
 
@@ -167,6 +167,7 @@ class QuakeWrapper(IndexWrapper):
             search_params.parent_params = quake.SearchParams()
             search_params.parent_params.nprobe = parent.get("nprobe", 1)
             search_params.parent_params.recall_target = parent.get("recall_target", -1)
+            search_params.parent_params.initial_search_fraction = parent.get("initial_search_fraction", 0.05)
 
         return self.index.search(query, search_params)
 

@@ -311,30 +311,42 @@ void DynamicInvertedLists::batch_update_entries(
     bool DynamicInvertedLists::get_vector_for_id(idx_t id, float *out) {
         if (id_to_location_.empty()) build_map();
 
+        if (id < 0) {
+            std::memset(out, 0, code_size_);
+            return true;
+        }
+
         auto it = id_to_location_.find(id);
         if (it == id_to_location_.end()) return false;
+
         IndexPartition* part = it->second.first;
         int64_t pos         = it->second.second;
         std::memcpy(out, part->codes_ + pos * part->code_size_, part->code_size_);
         return true;
     }
 
-    vector<float *> DynamicInvertedLists::get_vectors_by_id(vector<int64_t> ids) {
+    vector<float*> DynamicInvertedLists::get_vectors_by_id(vector<int64_t> ids)
+    {
         if (id_to_location_.empty()) build_map();
 
-        vector<float*> ret;
-        ret.reserve(ids.size());
+        vector<float*> ret; ret.reserve(ids.size());
 
         for (int64_t id : ids) {
-            auto it = id_to_location_.find(id);
-            if (it == id_to_location_.end()) {
-                throw std::runtime_error("ID not found in any partition");
+            if (id < 0) {
+                ret.push_back(nullptr);
+                continue;
             }
+
+            auto it = id_to_location_.find(id);
+            if (it == id_to_location_.end())
+                throw std::runtime_error("ID not found in any partition: " + std::to_string(id));
+
             IndexPartition* part = it->second.first;
-            int64_t pos = it->second.second;
+            int64_t pos         = it->second.second;
             ret.push_back(reinterpret_cast<float*>(part->codes_ + pos * part->code_size_));
         }
         return ret;
+    }
 
         // vector<float *> ret;
         // for (int64_t id : ids) {
@@ -353,7 +365,7 @@ void DynamicInvertedLists::batch_update_entries(
         //     }
         // }
         // return ret;
-    }
+    // }
 
     size_t DynamicInvertedLists::get_new_list_id() {
         return curr_list_id_++;

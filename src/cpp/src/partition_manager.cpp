@@ -484,6 +484,8 @@ void PartitionManager::refine_partitions(Tensor partition_ids, int iterations) {
         partition_store_->partitions_[pids[i]] = index_partitions[i];
     }
 
+    partition_store_->build_map();
+
     if (debug_) {
         std::cout << "[PartitionManager] refine_partitions: Completed refinement." << std::endl;
     }
@@ -505,6 +507,10 @@ void PartitionManager::add_partitions(shared_ptr<Clustering> partitions) {
     for (int64_t i = 0; i < nlist; i++) {
         int64_t list_no = p_ids_accessor[i];
         partition_store_->add_list(list_no);
+        if (num_workers_ > 0) {
+            set_partition_core_id(list_no, list_no % num_workers_);
+        }
+
         partition_store_->add_entries(
             list_no,
             partitions->vectors[i].size(0),
@@ -562,7 +568,9 @@ void PartitionManager::distribute_partitions(int num_workers) {
                   << num_workers << " workers." << std::endl;
     }
 
-    if (parent_ == nullptr) {
+    num_workers_ = num_workers;
+
+    if (parent_ == nullptr && partition_store_->nlist == 1) {
         auto codes = (float *) partition_store_->get_codes(0);
         auto ids = (int64_t *) partition_store_->get_ids(0);
         int64_t ntotal = partition_store_->list_size(0);
@@ -599,13 +607,14 @@ void PartitionManager::distribute_partitions(int num_workers) {
     }
 
     Tensor partition_ids = get_partition_ids();
-    for (int i = 0; i < partition_store_->nlist; i++) {
-        set_partition_core_id(partition_ids[i].item<int64_t>(), i % num_workers);
+    auto partition_ids_accessor = partition_ids.accessor<int64_t, 1>();
+    for (int i = 0; i < partition_ids.size(0); i++) {
+        set_partition_core_id(partition_ids_accessor[i], i % num_workers);
     }
 }
 
 void PartitionManager::set_partition_core_id(int64_t partition_id, int core_id) {
-    partition_store_->partitions_[partition_id]->core_id_ = core_id;
+    partition_store_->partitions_[partition_id]->set_core_id(core_id);
 }
 
 int PartitionManager::get_partition_core_id(int64_t partition_id) {

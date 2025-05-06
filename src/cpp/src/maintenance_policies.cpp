@@ -33,6 +33,10 @@ MaintenancePolicy::MaintenancePolicy(
 shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     // only consider split/deletion once the window is full
 
+    if (partition_manager_->parent_ == nullptr) {
+        return std::make_shared<MaintenanceTimingInfo>();
+    }
+
     int64_t num_queries = hit_count_tracker_->get_num_queries_recorded();
     if (hit_count_tracker_->get_num_queries_recorded() < params_->window_size) {
         std::cout << "Window not full yet. " << num_queries << " queries recorded and " << params_->window_size

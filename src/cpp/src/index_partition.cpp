@@ -78,11 +78,10 @@ void IndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_id
 
 int64_t IndexPartition::remove(int64_t idx)
 {
-    assert(idx >= 0 && idx < num_vectors_);
+    if (idx < 0 || idx >= num_vectors_) {
+        throw std::runtime_error("Index out of range in remove");
+    }
     const int64_t last = num_vectors_ - 1;
-
-    // optional: bookkeeping for norms, etc.
-
     if (idx != last) {                 // swap last -> idx
         std::memcpy(codes_ + idx * code_size_,
                     codes_ + last * code_size_,
