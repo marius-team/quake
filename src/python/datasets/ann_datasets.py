@@ -5,6 +5,7 @@ from typing import List, Union
 
 import numpy as np
 import torch
+import os
 
 from quake.utils import download_url, extract_file, fvecs_to_tensor, ivecs_to_tensor, to_path, knn
 
@@ -116,6 +117,51 @@ class UniformDataset(Dataset):
         return torch.from_numpy(np.load(self.download_dir / "ground_truth.npy"))
 
 
+class MSTuring10m(Dataset):
+    def __init__(self, download_dir: Union[str, Path] = DEFAULT_DOWNLOAD_DIR):
+        self.download_dir = to_path(download_dir)
+        self.data_dir = self.download_dir / "MSTuringANNS10M"
+        self.downloaded = False
+        self.metric = "l2"
+
+    def is_downloaded(self) -> bool:
+        base = self.data_dir / "base1b.fbin.crop_nb_10000000"
+        query = self.data_dir / "query100K.fbin"
+        gt = self.data_dir / "msturing-gt-10M"
+        downloaded = base.exists() and query.exists() and gt.exists()
+
+        if not downloaded:
+            raise RuntimeError("MSTuring dataset is not available. Please download it manually using big-ann-benchmarks.")
+
+        return downloaded
+
+    def download(self, overwrite: bool = False):
+        pass
+
+    def load_vectors(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "base1b.fbin.crop_nb_10000000"
+        n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
+        # return to_torch(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
+        return torch.from_numpy(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
+
+    def load_queries(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "query100K.fbin"
+        n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
+        # return to_torch(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
+        return torch.from_numpy(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
+
+    def load_ground_truth(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "msturing-gt-10M"
+        n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
+        assert os.stat(fname).st_size == 8 + n * d * (4 + 4)
+        f = open(fname, "rb")
+        f.seek(4 + 4)
+        ids = np.fromfile(f, dtype="int32", count=n * d).reshape(n, d)
+        # D = np.fromfile(f, dtype="float32", count=n * d).reshape(n, d)
+
+        return torch.from_numpy(ids).long()
+
+
 def load_dataset(
     name: str, download_dir: str = DEFAULT_DOWNLOAD_DIR, overwrite_download: bool = False
 ) -> List[Union[np.ndarray, torch.Tensor]]:
@@ -123,6 +169,8 @@ def load_dataset(
         dataset = Sift1m(download_dir=download_dir)
     elif name.lower() == "uniform":
         dataset = UniformDataset(num_vectors=100000, dim=8, download_dir=download_dir)
+    elif name.lower() == "msturing10m":
+        dataset = MSTuring10m(download_dir=download_dir)
     else:
         raise RuntimeError("Unimplemented dataset")
 
