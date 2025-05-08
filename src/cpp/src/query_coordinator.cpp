@@ -616,12 +616,20 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 if (first_list || percent_change > search_params->recompute_threshold) {
                     query_radius = curr_radius;
 
-                    partition_probs = compute_recall_profile(boundary_distances,
-                                                             query_radius,
-                                                             dimension,
-                                                             partition_sizes_vec,
-                                                             search_params->use_precomputed,
-                                                             metric_ == faiss::METRIC_L2);
+                    if (search_params->use_auncel) {
+                        partition_probs = compute_recall_profile_auncel(boundary_distances,
+                            query_radius,
+                            search_params->k,
+                            search_params->auncel_a,
+                            search_params->auncel_b);
+                    } else {
+                        partition_probs = compute_recall_profile(boundary_distances,
+                                                                 query_radius,
+                                                                 dimension,
+                                                                 partition_sizes_vec,
+                                                                 search_params->use_precomputed,
+                                                                 metric_ == faiss::METRIC_L2);
+                    }
                 }
                 float recall_estimate = 0.0;
                 for (int i = 0; i < p + 1; i++) {
@@ -630,12 +638,12 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                 end_time = high_resolution_clock::now();
                 aps_time += duration_cast<nanoseconds>(end_time - start_time).count();
                 if (recall_estimate >= search_params->recall_target) {
-                    timing_info->partitions_scanned = p + 1;
                     break;
                 }
             }
         }
 
+        timing_info->partitions_scanned = scanned_ids.size();
 
         if (search_params->track_hits && maintenance_policy_) {
             maintenance_policy_->record_query_hits(std::vector<int64_t>(scanned_ids.begin(), scanned_ids.end()));
@@ -692,6 +700,7 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
 
     // if there is no parent, then the coordinator is operating on a flat index and we need to scan all partitions
     Tensor partition_ids_to_scan;
+    Tensor partition_distances;
     if (parent_ == nullptr) {
         // scan all partitions for each query
         partition_ids_to_scan = partition_manager_->get_partition_ids();
@@ -718,7 +727,18 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
 
         auto parent_search_result = parent_->search(x, parent_search_params);
         partition_ids_to_scan = parent_search_result->ids;
+        partition_distances = parent_search_result->distances;
         parent_timing_info = parent_search_result->timing_info;
+    }
+
+    if (search_params->use_spann && partition_distances.defined()) {
+        // prune partitions based on relative distance compared to nearest centroid
+        partition_distances = partition_distances / partition_distances.select(1, 0).unsqueeze(0);
+
+        Tensor mask = partition_distances.ge(search_params->spann_eps);
+
+        // set mask partition ids to -1
+        partition_ids_to_scan.masked_fill_(mask, -1);
     }
 
     auto search_result = scan_partitions(x, partition_ids_to_scan, search_params);

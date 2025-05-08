@@ -174,12 +174,24 @@ struct SearchParams {
     float recall_target = DEFAULT_RECALL_TARGET;
     int num_threads = 1; // number of threads to use for search within a single worker
     float k_factor = 1.0f;
-    bool use_precomputed = DEFAULT_PRECOMPUTED;
     bool batched_scan = DEFAULT_BATCHED_SCAN;
+
+    bool track_hits = true;
+
+    // APS params
+    bool use_precomputed = DEFAULT_PRECOMPUTED;
     float recompute_threshold = DEFAULT_RECOMPUTE_THRESHOLD;
     float initial_search_fraction = DEFAULT_INITIAL_SEARCH_FRACTION;
     int aps_flush_period_us = DEFAULT_APS_FLUSH_PERIOD_US;
-    bool track_hits = true;
+
+    // Auncel params
+    bool use_auncel = false;
+    float auncel_a = 1.0f;
+    float auncel_b = 1.0f;
+
+    // Spann params
+    bool use_spann = false;
+    float spann_eps = 1.25;
 
     shared_ptr<SearchParams> parent_params = nullptr; ///< Search parameters for the parent index, if any.
 

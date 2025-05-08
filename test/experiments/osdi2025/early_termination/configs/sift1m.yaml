@@ -1,0 +1,59 @@
+# File: configs/experiment.yaml
+mode: run
+base_dir: data/aps # Base for your project's data if needed by Quake's load_dataset
+dataset:
+  name: sift1m # Used by Quake's load_dataset, e.g., "sift1m", "deep1m"
+  path: data    # Path for Quake's load_dataset
+experiment:
+  nq: 100
+  k: 100 # k for search and recall calculation
+  n_workers: 0
+  recall_targets: [.2, .3, .4, .5, .6, 0.7, .75, 0.8, .85, 0.9, 0.95, 0.99, .999]
+  # APS specific params (if used)
+  recompute_ratio: 0.01
+  use_precompute: true
+  initial_search_fraction: .1
+index: # For QuakeIndex (APS, Oracle, FixedNProbe, and base for LAET)
+  metric: l2
+  nlist: 1000 # This nlist is for your QuakeIndex
+overwrite:
+  index: false # Whether to rebuild QuakeIndex
+  results: true
+#methods: ['LAET', 'Auncel', 'Oracle', 'FixedNProbe', 'APS', 'SPANN'] # Added LAET
+#methods: ['SPANN', 'FixedNProbe']
+#methods: ['Auncel'] # Added LAET
+methods: ['APS', 'Oracle']
+#methods: ['APS']
+
+paths:
+  index_dir: data/sift1m/indexes # For QuakeIndex files
+  results_dir: data/sift1m/results # For experiment output CSVs and plots
+  plot_dir: data/sift1m/plots
+  laet_artifacts_base_dir: data/laet_files # IMPORTANT: Base directory for all LAET artifacts
+
+laet_config:
+  laet_index_key_full: "IVF1000"   # CRITICAL: Must match the index string in LAET's GBDT model
+  pred_thresh_for_model_features: 1 # The 'threshX' value from LAET's model filename (e.g., _model_thresh1_Full.txt).
+  feature_idx_for_model: 0         # 0-based index corresponding to `pred_thresh_for_model_features
+  base_vectors_path_for_laet_train: data/sift/sift_base.fvecs # Base vectors for LAET training
+  train_query_vectors_path_for_laet_train: data/sift/sift_query.fvecs # Training query vectors for LAET training
+  gt_train_path_for_laet_train: data/sift/sift_groundtruth.ivecs # Ground truth for LAET training
+  gt_format_for_laet_train: "ivecs" # Format for ground truth
+  faiss_training_vectors_path_for_laet_train: data/sift/sift_learn.fvecs # FAISS training vectors for LAET training
+    # if LAET generated features for a *list* of thresholds.
+    # E.g., if LAET's script had pred_thresh = [1,5,10] and this model
+    # is for the `thresh1` features, then feature_idx_for_model is 0.
+    # If LAET script used a single threshold value that matches
+  # `pred_thresh_for_model_features`, this is 0.
+  # Optional:
+  # multiplier_range: [0.1, 5.0] # Range for binary searching the nprobe multiplier
+  # num_binary_search_steps: 10  # Iterations for multiplier binary search
+
+#
+#  data_paths_for_laet_training = {
+#  "base_vectors": laet_main_cfg.get("base_vectors_path_for_laet_train", f"data/{dataset_name}_base.fvecs"),
+#  "train_query_vectors": laet_main_cfg.get("train_query_vectors_path_for_laet_train", f"data/{dataset_name}_learn.fvecs"),
+#  "gt_train": laet_main_cfg.get("gt_train_path_for_laet_train", f"data/{dataset_name}_learn_groundtruth.ivecs"),
+#  "gt_format": laet_main_cfg.get("gt_format_for_laet_train", "ivecs"),
+#  "training_vectors_for_faiss_index": laet_main_cfg.get("faiss_training_vectors_path_for_laet_train", f"data/{dataset_name}_learn.fvecs")
+#}

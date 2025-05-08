@@ -14,7 +14,6 @@ from sklearn.model_selection import train_test_split
 import torch
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-# --- Embedded I/O Utilities (Simplified) ---
 def _mmap_fvecs(fname):
     x = np.memmap(fname, dtype='int32', mode='r'); d = x[0]; return x.view('float32').reshape(-1, d + 1)[:, 1:]
 def _mmap_bvecs(fname):
@@ -262,7 +261,7 @@ class LAETPipeline:
             if abs(multi_low - multi_high) < 1e-4: break
             recall_sum = 0.0
 
-            tune_nq = int(nq * 0.01)
+            tune_nq = nq
             for i in range(tune_nq):
                 base_p = self._predict_base_search_param(queries_np[i])
                 final_p = min(max(1, int(round(base_p * curr_mult))), quake_nlist_cap)

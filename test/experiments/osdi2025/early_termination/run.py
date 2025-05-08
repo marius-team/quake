@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Recall-Target Runner for Approximate Nearest Neighbor Search Methods.
-Supports: Oracle, FixedNProbe, APS, and LAET (Learned Adaptive Early Termination).
-"""
-
 import time
 import yaml
 import logging
@@ -15,7 +9,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Assuming 'quake' and 'laet' are in the PYTHONPATH or same directory
 try:
     from quake import QuakeIndex, IndexBuildParams, SearchParams
     from quake.datasets.ann_datasets import load_dataset
@@ -25,13 +18,8 @@ except ImportError as e:
     raise
 
 try:
-    # Adjust this import based on your project structure.
-    # If laet.py is in the same directory as this script, it should be:
-    # from laet import LAETPipeline
-    # Your current script uses a relative import:
     from .laet import LAETPipeline
 except ImportError as e:
-    # Fallback if relative import fails (e.g., script run as top-level)
     try:
         from laet import LAETPipeline
         print("Note: Imported LAETPipeline using 'from laet import LAETPipeline'.")
@@ -45,13 +33,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 def run_experiment(cfg_path: str, output_dir_str: str):
-    """
-    Runs the ANN experimentation pipeline.
-
-    Args:
-        cfg_path (str): Path to the YAML configuration file.
-        output_dir_str (str): Path to the directory where results will be saved.
-    """
     # 1) Load config + setup output dir
     logger.info(f"Loading configuration from: {cfg_path}")
     try:
@@ -179,7 +160,7 @@ def run_experiment(cfg_path: str, output_dir_str: str):
             )
             logger.info("LAET GBDT model is ready (loaded or trained).")
 
-                # 5) Run each method × recall_target
+    # 5) Run each method × recall_target
     records = []
     k_metric = cfg["experiment"]["k"]
 
@@ -220,7 +201,7 @@ def run_experiment(cfg_path: str, output_dir_str: str):
                     logger.warning(f"LAET method specified but pipeline/model or QuakeIndex not ready. Skipping for RT={rt_metric}.")
                     # Metrics remain NaN by default
 
-            elif method in ["Oracle", "FixedNProbe", "APS"]:
+            elif method in ["Oracle", "FixedNProbe", "APS", "Auncel", "SPANN"]:
                 if not idx_quake:
                     logger.warning(f"QuakeIndex not available for method {method}. Skipping.")
                     continue
@@ -249,6 +230,63 @@ def run_experiment(cfg_path: str, output_dir_str: str):
                         elapsed_ns = time.perf_counter_ns() - t_start_ns
                         rec_oracle_final = compute_recall(res_oracle_final.ids, gt_torch[i].unsqueeze(0), k_metric).item()
                         per_query_data_list.append((best_param_oracle, rec_oracle_final, elapsed_ns / 1_000_000.0))
+
+                elif method == "Auncel":
+                    for i, q_single_torch in enumerate(queries_torch):
+                        sp_auncel = SearchParams()
+                        sp_auncel.nprobe = -1
+                        sp_auncel.k = k_metric
+                        sp_auncel.recall_target = rt_metric
+                        sp_auncel.recompute_threshold = cfg["experiment"].get("recompute_ratio", 0.00001)
+                        sp_auncel.use_auncel = True
+                        sp_auncel.auncel_a = .005
+                        sp_auncel.auncel_b = 1.0
+                        sp_auncel.initial_search_fraction = cfg["experiment"].get("initial_search_fraction", 0.1)
+
+                        t_start_ns = time.perf_counter_ns()
+                        res_auncel = idx_quake.search(q_single_torch.unsqueeze(0), sp_auncel)
+                        elapsed_ns = time.perf_counter_ns() - t_start_ns
+                        rec_auncel = compute_recall(res_auncel.ids, gt_torch[i].unsqueeze(0), k_metric).item()
+                        param_aps = res_auncel.timing_info.partitions_scanned if hasattr(res_auncel, 'timing_info') and hasattr(res_auncel.timing_info, 'partitions_scanned') else np.nan
+                        per_query_data_list.append((param_aps, rec_auncel, elapsed_ns / 1_000_000.0))
+
+                elif method == "SPANN":
+                    lo_fixed, hi_fixed, best_overall_param_fixed = 1, max_nlist_val, max_nlist_val
+                    while lo_fixed <= hi_fixed:
+                        mid_param_fixed = (lo_fixed + hi_fixed) // 2
+                        sp_fixed_bs = SearchParams()
+                        sp_fixed_bs.nprobe = mid_param_fixed
+                        sp_fixed_bs.k = k_metric
+                        sp_fixed_bs.use_spann = False
+                        sp_fixed_bs.spann_eps = 2.0
+                        sp_fixed_bs.recall_target = -1
+
+                        ids_list_fixed = []
+                        for q_bs_fixed in queries_torch:
+                            res_bs_fixed = idx_quake.search(q_bs_fixed.unsqueeze(0), sp_fixed_bs)
+                            if res_bs_fixed.ids is not None and res_bs_fixed.ids.numel() > 0:
+                                ids_list_fixed.append(res_bs_fixed.ids)
+
+                        if not ids_list_fixed: avg_rec_fixed = 0.0
+                        else: avg_rec_fixed = compute_recall(torch.cat(ids_list_fixed, 0), gt_torch, k_metric).mean().item()
+
+                        if avg_rec_fixed >= rt_metric:
+                            best_overall_param_fixed = mid_param_fixed
+                            hi_fixed = mid_param_fixed - 1
+                        else: lo_fixed = mid_param_fixed + 1
+
+                    for i, q_single_torch in enumerate(queries_torch):
+                        t_start_ns = time.perf_counter_ns()
+                        sp_fixed_final = SearchParams()
+                        sp_fixed_final.nprobe = best_overall_param_fixed
+                        sp_fixed_final.k = k_metric
+                        sp_fixed_final.use_spann = True
+                        sp_fixed_final.spann_eps = 1.5
+                        res_fixed_final = idx_quake.search(q_single_torch.unsqueeze(0), sp_fixed_final)
+                        elapsed_ns = time.perf_counter_ns() - t_start_ns
+                        rec_fixed_final = compute_recall(res_fixed_final.ids, gt_torch[i].unsqueeze(0), k_metric).item()
+                        param_spann = res_fixed_final.timing_info.partitions_scanned if hasattr(res_fixed_final, 'timing_info') and hasattr(res_fixed_final.timing_info, 'partitions_scanned') else np.nan
+                        per_query_data_list.append((param_spann, rec_fixed_final, elapsed_ns / 1_000_000.0))
 
                 elif method == "FixedNProbe":
                     lo_fixed, hi_fixed, best_overall_param_fixed = 1, max_nlist_val, max_nlist_val
@@ -340,14 +378,12 @@ def run_experiment(cfg_path: str, output_dir_str: str):
             grp = df_results[df_results["Method"] == m_name].sort_values(by="RecallTarget")
             if grp.empty: continue
 
-            axes[0].errorbar(grp["RecallTarget"], grp["mean_time_ms"], yerr=grp["std_time_ms"],
-                             marker="o", capsize=3, label=m_name, alpha=0.8, errorevery=1, elinewidth=1)
-            axes[1].errorbar(grp["RecallTarget"], grp["mean_recall"], yerr=grp["std_recall"],
-                             marker="o", capsize=3, label=m_name, alpha=0.8, errorevery=1, elinewidth=1)
-            axes[2].errorbar(grp["RecallTarget"], grp["mean_nprobe"], yerr=grp["std_nprobe"],
-                             marker="o", capsize=3, label=m_name, alpha=0.8, errorevery=1, elinewidth=1)
+            axes[0].plot(grp["RecallTarget"], grp["mean_time_ms"], marker="o", label=m_name, alpha=0.5)
+            axes[1].plot(grp["RecallTarget"], grp["mean_recall"], marker="o", label=m_name, alpha=0.5)
+            axes[2].plot(grp["RecallTarget"], grp["mean_nprobe"], marker="o", label=m_name, alpha=0.5)
 
         axes[0].set_ylabel("Mean Query Time (ms)")
+        axes[0].set_yscale("log")
         axes[0].set_title(f"Recall Target vs. Query Time ({dataset_name})")
         axes[0].legend(); axes[0].grid(True, ls=":", alpha=0.7)
 
@@ -361,7 +397,7 @@ def run_experiment(cfg_path: str, output_dir_str: str):
         axes[1].set_ylim(bottom=max(0.0, min_r - 0.05), top=min(1.01, max_r + 0.05))
 
         axes[2].set_xlabel("Recall Target")
-        axes[2].set_ylabel("Mean Search Parameter (nprobe/equiv.)")
+        axes[2].set_ylabel("Num Partitions Scanned")
         axes[2].set_yscale("log"); axes[2].set_title(f"Recall Target vs. Search Parameter ({dataset_name})")
         axes[2].legend(); axes[2].grid(True, which="both", ls=":", alpha=0.7)
 

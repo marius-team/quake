@@ -176,6 +176,21 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Threshold to trigger recomputation of APS. default = ") + std::to_string(DEFAULT_RECOMPUTE_THRESHOLD)).c_str())
         .def_readwrite("aps_flush_period_us", &SearchParams::aps_flush_period_us,
              (std::string("APS flush period in microseconds. default = ") + std::to_string(DEFAULT_APS_FLUSH_PERIOD_US)).c_str())
+        .def_readwrite("k_factor", &SearchParams::k_factor,
+             "Factor to adjust the number of neighbors to return.")
+        .def_readwrite("track_hits", &SearchParams::track_hits,
+             "Flag to track hits for maintenance policy.")
+        .def_readwrite("use_auncel", &SearchParams::use_auncel,
+                "Flag to use Auncel recall estimation for search.")
+        .def_readwrite("auncel_a", &SearchParams::auncel_a,
+                "Auncel parameter a for recall estimation.")
+        .def_readwrite("auncel_b", &SearchParams::auncel_b,
+                "Auncel parameter b for recall estimation.")
+        .def_readwrite("use_spann", &SearchParams::use_spann,
+                "Flag to use SPANN for search.")
+        .def_readwrite("spann_eps", &SearchParams::spann_eps,
+                "SPANN parameter epsilon for search.")
+
         .def_readwrite("parent_params", &SearchParams::parent_params,
              "Search parameters for the parent index, if any.")
         .def("__repr__", [](const SearchParams &s) {
