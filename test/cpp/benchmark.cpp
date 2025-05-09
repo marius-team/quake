@@ -496,17 +496,17 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
     // Repeatedly search, add, remove, and perform maintenance to see if the index remains consistent.
 
     int64_t dimension = 128;
-    int64_t num_vectors = 10000;
+    int64_t num_vectors = 100000;
     int64_t num_queries = 1;
     int64_t batch_size = 10000;
     int n_ops = 100;
 
     QuakeIndex index;
     auto build_params = std::make_shared<IndexBuildParams>();
-    build_params->nlist = 100;
+    build_params->nlist = 10000;
     build_params->metric = "l2";
     build_params->niter = 5;
-    build_params->num_workers = 0;
+    build_params->num_workers = 1;
 
     auto maintenance_params = std::make_shared<MaintenancePolicyParams>();
     maintenance_params->refinement_radius = 10;
@@ -519,10 +519,10 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
 
     // add level
     auto parent_index_build_params = std::make_shared<IndexBuildParams>();
-    parent_index_build_params->nlist = 1;
+    parent_index_build_params->nlist = 100;
     parent_index_build_params->metric = "l2";
     parent_index_build_params->niter = 5;
-    parent_index_build_params->num_workers = 0;
+    parent_index_build_params->num_workers = 1;
     build_params->parent_params = parent_index_build_params;
 
     // auto grandparent_index_build_params = std::make_shared<IndexBuildParams>();
@@ -584,10 +584,10 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
         // remove_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         // ASSERT_EQ(remove_info->n_vectors, batch_size / 2);
 
-        start = std::chrono::high_resolution_clock::now();
-        index.maintenance();
-        end = std::chrono::high_resolution_clock::now();
-        maintenance_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        // start = std::chrono::high_resolution_clock::now();
+        // index.maintenance();
+        // end = std::chrono::high_resolution_clock::now();
+        // maintenance_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     }
 
     // print out mean times per operation

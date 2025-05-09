@@ -1,0 +1,136 @@
+# ─── top-level controls ───────────────────────────────────────────────────────
+mode: run            # build | run | plot
+overwrite:
+  index:   false     # force rebuild of every index
+  results: true      # force rerun of every search
+
+# ─── dataset ──────────────────────────────────────────────────────────────────
+dataset:
+  name: msturing10m  # built-in quake dataset
+  metric: l2
+  path: data         # ignored for packaged datasets
+  nq: 100           # number of queries to use
+
+# ─── indexes / workloads ──────────────────────────────────────────────────────
+indexes:
+  - name: Quake5000
+    index: Quake
+    build_params:
+      nc: 5000
+      num_workers: 1
+    search_params:
+      k: 100
+#      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
+      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+      initial_search_fraction: 0.3
+#      batched_scan: true
+      batch_size: 1
+
+  - name: Quake10000
+    index: Quake
+    build_params:
+      nc: 10000
+      num_workers: 1
+    search_params:
+      k: 100
+#      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
+      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+      initial_search_fraction: 0.25
+#      batched_scan: true
+      batch_size: 1
+
+  - name: Quake20000
+    index: Quake
+    build_params:
+      nc: 20000
+      num_workers: 0
+    search_params:
+      k: 1
+#      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
+      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+      initial_search_fraction: 0.2
+#      batched_scan: true
+      batch_size: 1
+
+  - name: Quake40000
+    index: Quake
+    build_params:
+      nc: 40000
+      num_workers: 0
+    search_params:
+      k: 1
+      #      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
+      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+      initial_search_fraction: 0.2
+      #      batched_scan: true
+      batch_size: 1
+
+  - name: Quake80000
+    index: Quake
+    build_params:
+      nc: 80000
+      num_workers: 0
+    search_params:
+      k: 1
+      #      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
+      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+      initial_search_fraction: 0.2
+      #      batched_scan: true
+      batch_size: 1
+
+  - name: Quake160000
+    index: Quake
+    build_params:
+      nc: 160000
+      num_workers: 0
+    search_params:
+      k: 1
+      #      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
+      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+      initial_search_fraction: 0.2
+      #      batched_scan: true
+      batch_size: 1
+#
+#  - name: Quake20000_500           # two-level Quake index
+#    index: Quake
+#    build_params:
+#      nc: 20000
+#      num_workers: 0
+#      parent:
+#        nc: 500
+#        num_workers: 0
+#    search_params:
+#      k: 1
+#      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+##      initial_search_fraction: 0.05
+#      batch_size: 1
+#      parent:
+#        nprobe: 50
+#        # child-internal search; leave single high target here
+##        recall_target: 0.999
+##        initial_search_fraction: 0.2
+
+# ─── plotting ────────────────────────────────────────────────────────────────
+plot:
+  styles:               # one entry per *name* above
+    Quake5000:
+      color: "#1f77b4"
+      marker: "o"
+    Quake10000:
+      color: "#ff7f0e"
+      marker: "o"
+    Quake20000:
+      color: "#2ca02c"
+      marker: "o"
+    Quake40000:
+      color: "#9467bd"
+      marker: "o"
+    Quake80000:
+      color: "#8c564b"
+      marker: "o"
+    Quake160000:
+      color: "#e377c2"
+      marker: "o"
+    Quake20000_500:
+      color: "#d62728"
+      marker: "o"

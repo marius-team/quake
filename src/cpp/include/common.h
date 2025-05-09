@@ -78,9 +78,9 @@ constexpr int DEFAULT_NPROBE = 1;                        ///< Default number of 
 constexpr float DEFAULT_RECALL_TARGET = -1.0f;           ///< Default recall target (a negative value means no adaptive search).
 constexpr bool DEFAULT_BATCHED_SCAN = false;             ///< Default flag for batched scanning.
 constexpr bool DEFAULT_PRECOMPUTED = true;               ///< Default flag to use precomputed incomplete beta fn for APS.
-constexpr float DEFAULT_INITIAL_SEARCH_FRACTION = 0.02f; ///< Default initial fraction of partitions to search.
+constexpr float DEFAULT_INITIAL_SEARCH_FRACTION = 0.1f; ///< Default initial fraction of partitions to search.
 constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.001f;    ///< Default threshold to trigger recomputation of search parameters.
-constexpr int DEFAULT_APS_FLUSH_PERIOD_US = 100;         ///< Default period (in microseconds) for flushing the APS buffer.
+constexpr int DEFAULT_APS_FLUSH_PERIOD_US = 5;         ///< Default period (in microseconds) for flushing the APS buffer.
 
 // Default constants for maintenance policy parameters
 constexpr const char* DEFAULT_MAINTENANCE_POLICY = "query_cost"; ///< Default maintenance policy type.
@@ -91,8 +91,8 @@ constexpr int DEFAULT_MIN_PARTITION_SIZE = 32;         ///< Default minimum allo
 constexpr float DEFAULT_ALPHA = 0.9f;                  ///< Default alpha parameter for maintenance.
 constexpr bool DEFAULT_ENABLE_SPLIT_REJECTION = true;  ///< Default flag to enable rejection of splits.
 constexpr bool DEFAULT_ENABLE_DELETE_REJECTION = true; ///< Default flag to enable rejection of deletions.
-constexpr float DEFAULT_DELETE_THRESHOLD_NS = 10.0f;   ///< Default threshold in nanoseconds for deletion decisions.
-constexpr float DEFAULT_SPLIT_THRESHOLD_NS = 10.0f;    ///< Default threshold in nanoseconds for split decisions.
+constexpr float DEFAULT_DELETE_THRESHOLD_NS = 100.0f;   ///< Default threshold in nanoseconds for deletion decisions.
+constexpr float DEFAULT_SPLIT_THRESHOLD_NS = 100.0f;    ///< Default threshold in nanoseconds for split decisions.
 
 const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_N = {1, 2, 4, 16, 64, 256, 1024, 4096, 16384, 65536};   ///< Default range of n values for latency estimator.
 const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_K = {1, 4, 16, 64, 256};                                ///< Default range of k values for latency estimator.

@@ -220,7 +220,7 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
             }
             auto search_params = make_shared<SearchParams>();
             search_params->k = 1;
-            search_params->nprobe = parent_->nlist();
+            search_params->recall_target = .999;
             if (n > 10) {
                 search_params->batched_scan = true;
             }
