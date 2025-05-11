@@ -25,35 +25,41 @@ levels:
   - nc: 0
     search_params:
       nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+      batch_size: 1
   - nc: 100                    # baseline (keep the index single-level)
     search_params:           # ← optional override for the CHILD search
-      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+      batch_size: 1
     parent_search_params:    # ← optional params passed to *parent* search
       nprobe: 10
 
   - nc: 500                  # 500-centroid parent layer
     search_params:
       nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+      batch_size: 1
     parent_search_params:    # ← optional params passed to *parent* search
       nprobe: 50
 
   - nc: 1_000
     search_params:
       nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+      batch_size: 1
     parent_search_params:    # ← optional params passed to *parent* search
-      nprobe: 100
+      nprobe: 75
 
   - nc: 2_000
     search_params:
       nprobes: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+      batch_size: 1
     parent_search_params: # ← optional params passed to *parent* search
-      nprobe: 200
+      nprobe: 150
 
   - nc: 4_000
     search_params:
       nprobes: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+      batch_size: 1
     parent_search_params: # ← optional params passed to *parent* search
-      nprobe: 400
+      nprobe: 200
 
 # ─── plotting (optional) ──────────────────────────────────
 plot:
