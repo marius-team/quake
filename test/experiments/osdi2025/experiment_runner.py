@@ -11,6 +11,7 @@ from test.experiments.osdi2025.numa_multi_query.run  import run_experiment as ru
 from test.experiments.osdi2025.aps_recall_targets.run import run_experiment as run_aps_recall
 from test.experiments.osdi2025.early_termination.run import run_experiment as run_early_termination
 from test.experiments.osdi2025.multi_level.run import run_experiment as run_multi_level
+from test.experiments.osdi2025.vary_levels.run import run_experiment as run_vary_levels
 
 EXPERIMENTS = {
     "kick_the_tires":   run_kick_the_tires,
@@ -19,6 +20,7 @@ EXPERIMENTS = {
     "aps_recall_targets": run_aps_recall,
     "early_termination":   run_early_termination,
     "multi_level":        run_multi_level,
+    "vary_levels":        run_vary_levels,
 }
 
 def main():
