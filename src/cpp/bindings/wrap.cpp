@@ -131,6 +131,10 @@ PYBIND11_MODULE(_bindings, m) {
             return oss.str();
         });
 
+    // bool use_gpu = false;
+    // int gpu_batch_size = DEFAULT_GPU_BATCH_SIZE;
+    // int gpu_sample_size = DEFAULT_GPU_SAMPLE_SIZE;
+
     /*********** IndexBuildParams Binding ***********/
     class_<IndexBuildParams, shared_ptr<IndexBuildParams>>(m, "IndexBuildParams")
         .def(init<>())
@@ -144,6 +148,13 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Number of workers. default = ") + std::to_string(DEFAULT_NUM_WORKERS)).c_str())
         .def_readwrite("parent_params", &IndexBuildParams::parent_params,
              "Parameters for the parent index, if any.")
+        .def_readwrite("use_gpu", &IndexBuildParams::use_gpu,
+             (std::string("Flag to use GPU for index building. default = ") + std::to_string(false)).c_str())
+        .def_readwrite("gpu_batch_size", &IndexBuildParams::gpu_batch_size,
+             (std::string("Batch size for GPU index building. default = ") + std::to_string(DEFAULT_GPU_BATCH_SIZE)).c_str())
+        .def_readwrite("gpu_sample_size", &IndexBuildParams::gpu_sample_size,
+             (std::string("Sample size for GPU index building. default = ") + std::to_string(DEFAULT_GPU_SAMPLE_SIZE)).c_str())
+
         .def("__repr__", [](const IndexBuildParams &p) {
             std::ostringstream oss;
             oss << "{";

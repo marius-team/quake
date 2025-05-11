@@ -68,6 +68,9 @@ class QuakeWrapper(IndexWrapper):
         m: int = -1,
         code_size: int = 8,
         parent=None,
+        use_gpu=False,
+        gpu_batch_size=100000,
+        gpu_sample_size=1000000
     ):
         """
         Build the index with the given vectors and arguments.
@@ -94,6 +97,10 @@ class QuakeWrapper(IndexWrapper):
         if parent is not None:
             build_params.parent_params = quake.IndexBuildParams()
             build_params.parent_params.nlist = parent.get("nc", 1)
+
+        build_params.use_gpu = use_gpu
+        build_params.gpu_batch_size = gpu_batch_size
+        build_params.gpu_sample_size = gpu_sample_size
 
         self.index = QuakeIndex()
 
