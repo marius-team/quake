@@ -38,14 +38,6 @@
 #include <numaif.h>
 #endif
 
-#ifdef FAISS_ENABLE_GPU
-#include <faiss/gpu/GpuIndexFlat.h>
-#include <faiss/gpu/GpuIndexIVFFlat.h>
-#include <faiss/gpu/GpuIndexIVFPQ.h>
-#include <faiss/gpu/StandardGpuResources.h>
-#include <faiss/gpu/GpuCloner.h>
-#endif
-
 using torch::Tensor;
 using std::vector;
 using std::unordered_map;
@@ -71,6 +63,8 @@ constexpr int DEFAULT_NLIST = 0;                   ///< Default number of cluste
 constexpr int DEFAULT_NITER = 5;                   ///< Default number of k-means iterations used during clustering.
 constexpr const char* DEFAULT_METRIC = "l2";       ///< Default distance metric (either "l2" for Euclidean or "ip" for inner product).
 constexpr int DEFAULT_NUM_WORKERS = 0;             ///< Default number of workers (0 means single-threaded).
+constexpr int DEFAULT_GPU_BATCH_SIZE = 100000;             ///< Default batch size for GPU index building.
+constexpr int DEFAULT_GPU_SAMPLE_SIZE = 1000000;           ///< Default sample size for GPU index building.
 
 // Default constants for search parameters
 constexpr int DEFAULT_K = 1;                             ///< Default number of neighbors to return.
@@ -132,10 +126,14 @@ struct IndexBuildParams {
 
     bool use_adaptive_nprobe = false;
     bool use_numa = false;
-    bool use_gpu = false;
     bool verify_numa = false;
     bool same_core = true;
     bool verbose = false;
+
+    // gpu index build params
+    bool use_gpu = false;
+    int gpu_batch_size = DEFAULT_GPU_BATCH_SIZE;
+    int gpu_sample_size = DEFAULT_GPU_SAMPLE_SIZE;
 
     shared_ptr<IndexBuildParams> parent_params = nullptr;
 

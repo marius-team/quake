@@ -286,16 +286,18 @@ TEST(QuakeIndexStressTest, LargeBuildTest) {
               << " vectors took " << build_duration_ms << " ms.\n";
 }
 
-#ifdef FAISS_ENABLE_GPU
+#ifdef QUAKE_ENABLE_GPU
 TEST(QuakeIndexStressTestGPU, LargeBuildTest) {
     // Attempt to build an index with a large number of vectors.
     // Adjust these numbers based on your available memory/compute.
     int64_t dimension = 128;     // Medium-high dimension
     int64_t num_vectors = 1e6;   // 1 million vectors
-    auto data_vectors = generate_random_data(num_vectors, dimension);
-    auto data_ids = generate_sequential_ids(num_vectors, 0);
+    auto data_vectors = generate_random_data(num_vectors, dimension).contiguous();
+    auto data_ids = generate_sequential_ids(num_vectors, 0).contiguous();
 
     QuakeIndex index;
+
+    std::cout << "generated\n";
 
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 512;
@@ -511,12 +513,12 @@ TEST_F(QuakeIndexTest, AddLevelTest)
 }
 
 // Define the GPU related test only if FAISS GPU support is enabled
-#ifdef FAISS_ENABLE_GPU
+#ifdef QUAKE_ENABLE_GPU
 // Test build with GPU enabled
 TEST(QuakeIndexGPUTest, BuildWithGPUTest) {
     int64_t dimension = 32;
-    int64_t num_vectors = 200;
-    int64_t nlist = 5;
+    int64_t num_vectors = 10000;
+    int64_t nlist = 10;
 
     torch::Tensor data_vectors = generate_random_data(num_vectors, dimension);
     torch::Tensor data_ids = generate_sequential_ids(num_vectors, 0);

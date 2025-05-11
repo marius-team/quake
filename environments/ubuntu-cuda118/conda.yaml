@@ -3,6 +3,8 @@ channels:
   - pytorch
   - defaults
   - conda-forge
+  - nvidia
+  - libcuvs
 dependencies:
   - python=3.11
   - numpy
@@ -10,6 +12,8 @@ dependencies:
   - faiss-gpu
   - matplotlib
   - pytest
+  - libcuvs
+  - cuda-version=12.8
   - pip
   - pip:
     - sphinx
