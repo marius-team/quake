@@ -2,11 +2,12 @@ import json
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, Dict, List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import quake
 import torch
 
 from quake import SearchParams
@@ -387,230 +388,230 @@ class DynamicWorkloadGenerator:
 
 
 class WorkloadEvaluator:
-    """
-    Evaluates a generated workload on a given index and produces summary statistics and plots.
-    """
+    # ---------------------------------------------------------------------
+    def __init__(self,
+                 workload_dir: Union[str, Path],
+                 output_dir:  Union[str, Path],
+                 base_vectors_path: Optional[Union[str, Path]] = None):
 
-    def __init__(
-        self,
-        workload_dir: Union[str, Path],
-        output_dir: Union[str, Path],
-        base_vectors_path: Optional[Union[str, Path]] = None,
-    ):
-        self.workload_dir = to_path(workload_dir)
-        self.output_dir = to_path(output_dir)
-        self.runbook_path = self.workload_dir / "runbook.json"
-        self.operations_dir = self.workload_dir / "operations"
-        self.initial_indices_path = self.workload_dir / "initial_indices.pt"
-        self.base_vectors_path = (
-            to_path(base_vectors_path) if base_vectors_path else self.workload_dir / "base_vectors.pt"
-        )
-        self.runbook = None
+        self.workload_dir  = to_path(workload_dir)
+        self.output_dir    = to_path(output_dir)
+        self.runbook_path  = self.workload_dir / "runbook.json"
+        self.ops_dir       = self.workload_dir / "operations"
+        self.init_ids_path = self.workload_dir / "initial_indices.pt"
+        self.base_vec_path = (to_path(base_vectors_path)
+                              if base_vectors_path
+                              else self.workload_dir / "base_vectors.pt")
 
-    def initialize_index(self, name, index, build_params, m_params):
-        index_dir = self.workload_dir / "init_indexes"
-        index_dir.mkdir(parents=True, exist_ok=True)
-        index_path = index_dir / f"{name}.index"
-        vectors = torch.load(self.base_vectors_path, weights_only=True).to(torch.float32)
-        initial_indices = torch.load(self.initial_indices_path, weights_only=True).to(torch.int64)
-        vectors = vectors[initial_indices]
-        if not index_path.exists():
-            print(build_params)
-            index.build(vectors, ids=initial_indices, **build_params)
-            index.save(index_path)
-            print(f"Index {name} built and saved to {index_path}")
+    # ---------------------------------------------------------------------
+    def _init_index(self, name: str, wrapper, build_params: Dict,
+                    m_params: Optional[Dict]):
+
+        idx_dir  = self.workload_dir / "init_indexes"
+        idx_dir.mkdir(parents=True, exist_ok=True)
+        idx_file = idx_dir / f"{name}.index"
+
+        vecs      = torch.load(self.base_vec_path,  weights_only=True).float()
+        init_ids  = torch.load(self.init_ids_path,  weights_only=True).long()
+        vecs_init = vecs[init_ids]
+
+        if not idx_file.exists():
+            print(f"[{name}] building base index …")
+            wrapper.build(vecs_init, ids=init_ids, **build_params)
+            wrapper.save(idx_file)
+            print(f"[{name}] stored → {idx_file}")
         else:
-            if build_params.get("n_workers"):
-                index.load(index_path, num_workers=build_params["num_workers"])
-            else:
-                index.load(index_path)
-            print(f"Index {name} loaded from {index_path}")
+            wrapper.load(idx_file,
+                         num_workers=build_params.get("num_workers", 0))
+            print(f"[{name}] loaded ← {idx_file}")
 
-        if isinstance(index, QuakeWrapper) and m_params is not None:
-            index.index.initialize_maintenance_policy(m_params)
-            print(f"Maintenance policy initialized: {m_params}")
+        if isinstance(wrapper, QuakeWrapper) and m_params:
+            mp = quake.MaintenancePolicyParams()
+            for k, v in m_params.items():
+                setattr(mp, k, v)
+            wrapper.index.initialize_maintenance_policy(mp)
+            print(f"[{name}] maintenance policy: {m_params}")
 
-        return index
+        return wrapper
 
-    def evaluate_workload(
-        self, name, index, build_params, search_params, do_maintenance=False, m_params=None, batch=False
-    ):
-        """
-        Evaluate the workload on the index. At the end a summary is printed and a multi-panel plot is saved.
-        """
-        # validate search_params
-        assert "k" in search_params, "search_params must contain 'k' for number of neighbors"
+    # ---------------------------------------------------------------------
+    def evaluate_workload(self, *,
+                          name: str,
+                          index,
+                          build_params: Dict,
+                          search_params: Dict,
+                          do_maintenance: bool = False,
+                          m_params: Optional[Dict] = None,
+                          batch: bool = False) -> List[Dict]:
 
-        # --- Load Workload and Index ---
-        base_vectors = torch.load(self.base_vectors_path, weights_only=True).to(torch.float32)
-        initial_indices = torch.load(self.initial_indices_path, weights_only=True).to(torch.int64)
-
-        index = self.initialize_index(name, index, build_params, m_params)
-
-        self.runbook = json.load(open(self.runbook_path, "r"))
-        query_vectors = (
-            base_vectors
-            if self.runbook["parameters"]["sample_queries"]
-            else torch.load(self.workload_dir / "query_vectors.pt", weights_only=True)
-        )
-        query_vectors = query_vectors.to(torch.float32)
-        start_time = time.time()
-        init_time = time.time() - start_time
-        self.runbook["initialize"]["time"] = init_time
-
-        # --- Run Operations ---
-        curr_ids = initial_indices
-        curr_vectors = base_vectors[curr_ids]
-        results = []
-        for operation_id, operation in self.runbook["operations"].items():
-            print(f"Operation {operation_id}/{len(self.runbook['operations'])}...")
-            operation_id_int = int(operation_id)
-            operation_type = operation["type"]
-            operation_ids = torch.load(self.operations_dir / f"{operation_id}.pt", weights_only=True)
-            if operation_type == "insert":
-                curr_ids = torch.cat([curr_ids, operation_ids])
-                curr_vectors = torch.cat([curr_vectors, base_vectors[operation_ids]])
-                start_time = time.time()
-                index.add(base_vectors[operation_ids], ids=operation_ids, num_threads=16)
-                op_time = time.time() - start_time
-                mean_recall = None
-            elif operation_type == "delete":
-                start_time = time.time()
-                index.remove(operation_ids)
-                op_time = time.time() - start_time
-                mean_recall = None
-            elif operation_type == "query":
-                gt_ids = torch.load(self.operations_dir / f"{operation_id}_gt_ids.pt", weights_only=True)
-                # gt_dist = torch.load(self.operations_dir / f"{operation_id}_gt_dists.pt", weights_only=True)
-                queries = query_vectors[operation_ids]
-
-                start_time = time.time()
-                if batch:
-                    search_result = index.search(queries, **search_params)
-                    pred_ids = search_result.ids
-                    timing_infos = [search_result.timing_info]
-                else:
-                    Is, Ds, timing_infos = [], [], []
-
-                    for query in queries:
-                        query = query.unsqueeze(0)
-                        search_result = index.search(query, **search_params)
-                        Is.append(search_result.ids)
-                        Ds.append(search_result.distances)
-                        timing_infos.append(search_result.timing_info)
-                    pred_ids = torch.cat(Is)
-                op_time = time.time() - start_time
-
-                recalls = compute_recall(pred_ids, gt_ids, search_params["k"])
-                mean_recall = recalls.mean().item()
-                self.runbook["operations"][operation_id]["recall"] = mean_recall
-                total_time = sum([ti.total_time_ns for ti in timing_infos])
-                mean_time = total_time / len(timing_infos)
-                print(f"Query Time: {mean_time:.2f} ns, Recall: {mean_recall:.2f}")
-
-            if do_maintenance:
-                print("Running maintenance...")
-                index.maintenance()
-
-            n_resident = operation.get("n_resident", None)
-            index_state = index.index_state()
-            result = {
-                "operation_number": operation_id_int,
-                "operation_type": operation_type,
-                "latency_ms": op_time * 1000,
-                "recall": mean_recall,
-                "n_resident": n_resident,
-            }
-            result.update(index_state)
-            result.update(search_params)
-            results.append(result)
-
-        # --- Print Evaluation Summary ---
-        # Gather per-operation metrics
-        latencies_insert = [r["latency_ms"] for r in results if r["operation_type"] == "insert"]
-        op_nums_insert = [r["operation_number"] for r in results if r["operation_type"] == "insert"]
-        latencies_delete = [r["latency_ms"] for r in results if r["operation_type"] == "delete"]
-        op_nums_delete = [r["operation_number"] for r in results if r["operation_type"] == "delete"]
-        latencies_query = [r["latency_ms"] for r in results if r["operation_type"] == "query"]
-        op_nums_query = [r["operation_number"] for r in results if r["operation_type"] == "query"]
-        query_recalls = [r["recall"] for r in results if r["operation_type"] == "query" and r["recall"] is not None]
-        n_vectors = [r["n_resident"] for r in results if r["n_resident"] is not None]
-
-        avg_latency_insert = np.mean(latencies_insert) if latencies_insert else None
-        avg_latency_delete = np.mean(latencies_delete) if latencies_delete else None
-        avg_latency_query = np.mean(latencies_query) if latencies_query else None
-        avg_query_recall = np.mean(query_recalls) if query_recalls else None
-
-        print("\nWorkload Evaluation Summary:")
-        if avg_latency_insert is not None:
-            print(f"Average Insert Latency: {avg_latency_insert:.2f} ms")
-        if avg_latency_delete is not None:
-            print(f"Average Delete Latency: {avg_latency_delete:.2f} ms")
-        if avg_latency_query is not None:
-            print(f"Average Query Latency: {avg_latency_query:.2f} ms")
-        if avg_query_recall is not None:
-            print(f"Average Query Recall: {avg_query_recall:.2f}")
-
-        # --- Generate Multi-Panel Plot ---
-        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-        # Plot A: Latency per operation type
-        ax = axs[0, 0]
-        if op_nums_insert:
-            ax.plot(op_nums_insert, latencies_insert, label="Insert", marker="o")
-        if op_nums_delete:
-            ax.plot(op_nums_delete, latencies_delete, label="Delete", marker="s")
-        if op_nums_query:
-            ax.plot(op_nums_query, latencies_query, label="Query", marker="^")
-        ax.set_xlabel("Operation Number")
-        ax.set_ylabel("Latency (ms)")
-        ax.set_title("Operation Latency")
-        ax.legend()
-        # Plot B: Number of partitions per operation (if available)
-        ax = axs[0, 1]
-        partitions = [r["n_list"] for r in results if r["n_list"] is not None]
-        op_nums_part = [r["operation_number"] for r in results if r["n_list"] is not None]
-        if partitions:
-            ax.plot(op_nums_part, partitions, marker="o")
-            ax.set_xlabel("Operation Number")
-            ax.set_ylabel("Number of Partitions")
-            ax.set_title("Partitions per Operation")
-        else:
-            ax.text(0.5, 0.5, "No partition info", ha="center", va="center")
-            ax.axis("off")
-        # Plot C: Resident set size per operation
-        ax = axs[1, 0]
-        if n_vectors:
-            op_nums_vect = [r["operation_number"] for r in results if r["n_resident"] is not None]
-            ax.plot(op_nums_vect, n_vectors, marker="o")
-            ax.set_xlabel("Operation Number")
-            ax.set_ylabel("Resident Vectors")
-            ax.set_title("Resident Set Size")
-        else:
-            ax.text(0.5, 0.5, "No resident set info", ha="center", va="center")
-            ax.axis("off")
-        # Plot D: Query recall per query operation
-        ax = axs[1, 1]
-        if op_nums_query and query_recalls:
-            ax.plot(op_nums_query, query_recalls, marker="o")
-            ax.set_xlabel("Operation Number")
-            ax.set_ylabel("Query Recall")
-            ax.set_title("Query Recall")
-        else:
-            ax.text(0.5, 0.5, "No query recall info", ha="center", va="center")
-            ax.axis("off")
-        plt.tight_layout()
-
-        # create output directory if it doesn't exist
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        index = self._init_index(name, index, build_params, m_params)
 
-        plot_path = self.output_dir / "evaluation_plots.png"
-        plt.savefig(plot_path)
-        print(f"Saved evaluation plots to {plot_path}")
+        runbook   = json.load(open(self.runbook_path))
+        base_vecs = torch.load(self.base_vec_path, weights_only=True).float()
+        queries   = (base_vecs if runbook["parameters"]["sample_queries"]
+                     else torch.load(self.workload_dir / "query_vectors.pt",
+                                     weights_only=True).float())
+
+        results = []
+        totals  = dict(query=0., insert=0., delete=0., maintain=0.)
+
+        print(f"─ Evaluating workload on {name} ({len(runbook['operations'])} ops) ─")
+        for op_id, op in runbook["operations"].items():
+            op_no   = int(op_id)
+            op_type = op["type"]
+            ids     = torch.load(self.ops_dir / f"{op_id}.pt",
+                                 weights_only=True)
+
+            print(f"[{name}] op {op_no:4d} | {op_type:<6} | {len(ids):6d} ids", end="", flush=True)
+
+            # ----- perform the operation ----------------------------------
+            if op_type == "insert":
+                t0 = time.perf_counter()
+                index.add(base_vecs[ids], ids=ids)
+                latency_ms = (time.perf_counter() - t0) * 1e3
+                recall = None
+            elif op_type == "delete":
+                t0 = time.perf_counter()
+                index.remove(ids)
+                latency_ms = (time.perf_counter() - t0) * 1e3
+                recall = None
+            elif op_type == "query":
+                qs = queries[ids]
+                t0 = time.perf_counter()
+                if batch:
+                    sr = index.search(qs, **search_params)
+                    pred_ids = sr.ids
+                else:
+                    pred_ids = torch.cat([
+                        index.search(q.unsqueeze(0), **search_params).ids
+                        for q in qs
+                    ])
+                latency_ms = (time.perf_counter() - t0) * 1e3
+                gt_ids = torch.load(self.ops_dir / f"{op_id}_gt_ids.pt",
+                                    weights_only=True)
+                recall = compute_recall(pred_ids, gt_ids,
+                                        search_params["k"]).mean().item()
+                op["recall"] = recall
+            else:
+                raise ValueError(op_type)
+
+            totals[op_type] += latency_ms
+
+            # ----- maintenance -------------------------------------------
+            maint_ms = nsplits = ndeletes = 0
+            if do_maintenance:
+                mi = index.maintenance()
+                maint_ms = mi.total_time_us / 1e3
+                nsplits  = mi.n_splits
+                ndeletes = mi.n_deletes
+                totals["maintain"] += maint_ms
+
+            print(f" | lat {latency_ms:8.2f} ms"
+                  f" | maint {maint_ms:7.2f} ms"
+                  f" | splits {nsplits:4d}"
+                  f" | dels {ndeletes:4d}"
+                  f"{' | rec {:.3f}'.format(recall) if recall is not None else ''}")
+
+            # ----- store row ---------------------------------------------
+            row = {
+                "operation_number"   : op_no,
+                "operation_type"     : op_type,
+                "latency_ms"         : latency_ms,
+                "maintenance_time_ms": maint_ms,
+                "n_splits"           : nsplits,
+                "n_deletes"          : ndeletes,
+                "recall"             : recall,
+                "n_resident"         : op.get("n_resident"),
+            }
+            row.update(index.index_state())   # keeps existing behaviour
+            row.update(search_params)         # 〃
+            results.append(row)
+
+        # ---- original four-panel figure (unchanged) ---------------------
+        df = pd.DataFrame(results)
+        self._four_panel_plot(df)
+
+        # ---- cumulative-time bar chart ---------------------------------
+        self._time_breakdown_plot(totals, name)
+
+        # ---- CSV --------------------------------------------------------
+        df.to_csv(self.output_dir / "results.csv", index=False)
+        print(f"Results → {self.output_dir / 'results.csv'}")
+        return results
+
+    # ---------------------------------------------------------------------
+    def _four_panel_plot(self, df: pd.DataFrame):
+        """
+        Re-implementation of the original four-panel plot – byte-for-byte
+        identical file name (*evaluation_plots.png*).
+        """
+        lat_insert = df[df.operation_type == "insert"]
+        lat_delete = df[df.operation_type == "delete"]
+        lat_query  = df[df.operation_type == "query" ]
+
+        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+
+        # A: latency
+        ax = axs[0, 0]
+        if not lat_insert.empty:
+            ax.plot(lat_insert.operation_number, lat_insert.latency_ms,
+                    label="Insert", marker="o")
+        if not lat_delete.empty:
+            ax.plot(lat_delete.operation_number, lat_delete.latency_ms,
+                    label="Delete", marker="s")
+        if not lat_query.empty:
+            ax.plot(lat_query.operation_number,  lat_query.latency_ms,
+                    label="Query",  marker="^")
+        ax.set(xlabel="Operation Number", ylabel="Latency (ms)",
+               title="Operation Latency"); ax.legend()
+
+        # B: partitions
+        part = df[df.n_list.notna()]
+        ax = axs[0, 1]
+        if not part.empty:
+            ax.plot(part.operation_number, part.n_list, marker="o")
+            ax.set(xlabel="Operation Number", ylabel="Number of Partitions",
+                   title="Partitions per Operation")
+        else:
+            ax.text(0.5, 0.5, "No partition info",
+                    ha="center", va="center"); ax.axis("off")
+
+        # C: resident set size
+        res = df[df.n_resident.notna()]
+        ax = axs[1, 0]
+        if not res.empty:
+            ax.plot(res.operation_number, res.n_resident, marker="o")
+            ax.set(xlabel="Operation Number", ylabel="Resident Vectors",
+                   title="Resident Set Size")
+        else:
+            ax.text(0.5, 0.5, "No resident set info",
+                    ha="center", va="center"); ax.axis("off")
+
+        # D: recall
+        rec = df[(df.operation_type == "query") & df.recall.notna()]
+        ax = axs[1, 1]
+        if not rec.empty:
+            ax.plot(rec.operation_number, rec.recall, marker="o")
+            ax.set(xlabel="Operation Number", ylabel="Query Recall",
+                   title="Query Recall")
+        else:
+            ax.text(0.5, 0.5, "No query recall info",
+                    ha="center", va="center"); ax.axis("off")
+
+        plt.tight_layout()
+        plt.savefig(self.output_dir / "evaluation_plots.png")
         plt.close()
 
-        df = pd.DataFrame(results)
-        csv_path = self.output_dir / "results.csv"
-        df.to_csv(csv_path, index=False)
-        print(f"Saved results to {csv_path}")
-
-        return results
+    # ---------------------------------------------------------------------
+    def _time_breakdown_plot(self, totals: Dict[str, float], title: str):
+        plt.figure(figsize=(6, 4))
+        bars = [totals["query"], totals["insert"],
+                totals["delete"], totals["maintain"],
+                sum(totals.values())]
+        plt.bar(["Query", "Insert", "Delete", "Maintain", "Total"], bars)
+        plt.ylabel("Cumulative time (ms)")
+        plt.title(f"Time budget – {title}")
+        plt.tight_layout()
+        plt.savefig(self.output_dir / "time_breakdown.png", dpi=150)
+        plt.close()

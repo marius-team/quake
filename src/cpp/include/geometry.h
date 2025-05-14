@@ -285,14 +285,14 @@ compute_recall_profile(const std::vector<float>& boundary_distances,
     // Ensure P_prime is non-negative
     for (int k = 1; k < m; ++k) P_prime[k] = std::max(0.0f, P_prime[k]);
 
-    // if the cluster_sizes are given, scale P_prime[k] by the size of the cluster. this is a rudimentary density estimation
-    if (partition_sizes.size() > 0) {
-        for (int k = 1; k < m; ++k) {
-            if (partition_sizes[k] > 0) {
-                P_prime[k] *= static_cast<float>(partition_sizes[k]);
-            }
-        }
-    }
+    // // if the cluster_sizes are given, scale P_prime[k] by the size of the cluster. this is a rudimentary density estimation
+    // if (partition_sizes.size() > 0) {
+    //     for (int k = 1; k < m; ++k) {
+    //         if (partition_sizes[k] > 0) {
+    //             P_prime[k] *= static_cast<float>(partition_sizes[k]);
+    //         }
+    //     }
+    // }
 
 
     // normalize probs

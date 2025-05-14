@@ -18,41 +18,38 @@
 
 shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
     Tensor vectors, Tensor ids,
-    shared_ptr<IndexBuildParams> build_params) {
-
-    int num_clusters       = build_params->nlist;
-    int niter              = build_params->niter;
-    int gpu_batch_size     = build_params->gpu_batch_size;
-    int gpu_sample_size    = build_params->gpu_sample_size;
-    MetricType metric      = str_to_metric_type(build_params->metric);
-
+    shared_ptr<IndexBuildParams> build_params)
+{
+    /* ----------  unpack / sanity-check parameters  ----------------------- */
+    const int   num_clusters   = build_params->nlist;
+    const int   niter          = build_params->niter;
+    int         gpu_batch_size = build_params->gpu_batch_size;
+    int         gpu_sample_sz  = build_params->gpu_sample_size;
+    const MetricType metric    = str_to_metric_type(build_params->metric);
 
     TORCH_CHECK(vectors.dim() == 2, "vectors must be [N,D]");
-    TORCH_CHECK(ids.dim() == 1,      "ids must be [N]");
-    int64_t N = vectors.size(0), D = vectors.size(1);
+    TORCH_CHECK(ids.dim()     == 1, "ids must be [N]");
 
-    gpu_sample_size = std::min(gpu_sample_size, (int) N);
-    gpu_batch_size = std::min(gpu_batch_size, (int) N);
+    const int64_t N = vectors.size(0);
+    const int64_t D = vectors.size(1);
 
-    TORCH_CHECK(gpu_sample_size > 0 && gpu_sample_size <= N,
-              "invalid sample_size");
+    gpu_sample_sz  = std::min(gpu_sample_sz,  (int)N);
+    gpu_batch_size = std::min(gpu_batch_size, (int)N);
+    TORCH_CHECK(gpu_sample_sz > 0 && gpu_sample_sz <= N, "invalid sample size");
 
-    // 1) pin + normalize if needed
+    /* ----------  copy to pinned host & (optionally) normalize  ----------- */
     Tensor cpu_pts = vectors.contiguous().pin_memory();
     if (metric == faiss::METRIC_INNER_PRODUCT) {
-    auto norms = cpu_pts.norm(2, 1, true);
-    cpu_pts = cpu_pts.div(norms);
+        // k-means in RAFT is L2 – approximate cosine by L2 on the unit sphere
+        cpu_pts = cpu_pts.div(cpu_pts.norm(2, 1, /*keepdim=*/true));
     }
 
-    // 2) choose a random sample of indices
-    auto perm     = torch::randperm(N, torch::kLong);
-    auto samp_idx = perm.slice(0, 0, gpu_sample_size);
-    Tensor samp_pts = cpu_pts.index_select(0, samp_idx);
+    /* ----------  draw random sample for training  ------------------------ */
+    const Tensor samp_idx  = torch::randperm(N, torch::kLong).slice(0, 0, gpu_sample_sz);
+    const Tensor samp_host = cpu_pts.index_select(0, samp_idx);
+    const Tensor samp_gpu  = samp_host.to(torch::kCUDA, /*non_blocking=*/true).contiguous();
 
-    // 3) move sample to GPU
-    Tensor samp_gpu = samp_pts.to(torch::kCUDA, /*non_blocking=*/true).contiguous();
-
-    // 4) prepare RAFT handle & cuVS params
+    /* ----------  RAFT handle & cuVS parameters  -------------------------- */
     raft::resources handle;
     cudaStream_t stream = c10::cuda::getCurrentCUDAStream();
     raft::resource::set_cuda_stream(handle, stream);
@@ -62,123 +59,78 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
     params.init       = cuvs::cluster::kmeans::params::InitMethod::Random;
     params.max_iter   = niter;
 
-    // 5) allocate centroids on GPU
+    /* ----------  centroids on device  ------------------------------------ */
     Tensor cent_gpu = torch::empty({num_clusters, D},
-                                 torch::TensorOptions()
-                                   .dtype(torch::kFloat32)
-                                   .device(torch::kCUDA))
-                    .contiguous();
+                                   torch::dtype(torch::kFloat32).device(torch::kCUDA))
+                      .contiguous();
 
-    // 6) run fit on just the sample
-    {
-    // host scalars
-    float inertia    = 0.0f;
-    int   actual_iter= 0;
-    auto host_inertia = raft::make_host_scalar_view(&inertia);
-    auto host_iter    = raft::make_host_scalar_view(&actual_iter);
-
-    auto X_view = raft::make_device_matrix_view<const float,int>(
-                     samp_gpu.data_ptr<float>(),
-                     (int) gpu_sample_size, (int)D);
-    auto C_view = raft::make_device_matrix_view<float,int>(
-                     cent_gpu.data_ptr<float>(),
-                     num_clusters, (int)D);
+    /* ----------  fit on the sample  -------------------------------------- */
+    float inertia      = 0.0f;
+    int   actual_iter  = 0;
 
     cuvs::cluster::kmeans::fit(
-      handle, params,
-      X_view,
-      std::nullopt,
-      C_view,
-      host_inertia,
-      host_iter
-    );
-    }
-
-    Tensor all_labels = torch::empty({N}, torch::kLong);
-
-    auto predict_fn = [&](Tensor batch_cpu, int64_t off) {
-    int64_t bs = batch_cpu.size(0);
-
-    // allocate exactly bs labels on the GPU
-    Tensor labels32 = torch::empty(
-        {bs},
-        torch::TensorOptions()
-            .dtype(torch::kInt32)
-            .device(torch::kCUDA));
-
-    Tensor batch_gpu = batch_cpu.to(torch::kCUDA, /*NB=*/true)
-                                 .contiguous();
-
-    auto Xv = raft::make_device_matrix_view<const float,int>(
-                batch_gpu.data_ptr<float>(),
-                (int)bs, (int)D);
-    auto Lv = raft::make_device_vector_view<int,int>(
-                labels32.data_ptr<int>(), (int)bs);
-
-    float pred_inertia = 0.0f;
-    auto host_pred     = raft::make_host_scalar_view(&pred_inertia);
-
-    cuvs::cluster::kmeans::predict(
-      handle, params,
-      Xv,
-      std::nullopt,
-      raft::make_device_matrix_view<float,int>(
-        cent_gpu.data_ptr<float>(),
-        num_clusters, (int)D),
-      Lv,
-      false,
-      host_pred
+        handle, params,
+        raft::make_device_matrix_view<const float,int>(samp_gpu.data_ptr<float>(),
+                                                       gpu_sample_sz, (int)D),
+        std::nullopt,
+        raft::make_device_matrix_view<float,int>(cent_gpu.data_ptr<float>(),
+                                                 num_clusters, (int)D),
+        raft::make_host_scalar_view(&inertia),
+        raft::make_host_scalar_view(&actual_iter)
     );
 
-    // now safe to copy back exactly bs elements
-    all_labels.narrow(0, off, bs)
-              .copy_(
-                labels32.to(torch::kLong)
-                        .to(torch::kCPU)
-              );
+    /* ----------  predict every point, in order, exactly once  ------------ */
+    Tensor all_labels = torch::empty({N}, torch::kLong);               // on CPU
+
+    auto run_predict = [&](Tensor batch_host, int64_t dst_off)
+    {
+        const int64_t bs = batch_host.size(0);
+
+        Tensor batch_gpu = batch_host.to(torch::kCUDA, /*non_blocking=*/true)
+                                     .contiguous();
+        Tensor lbl_gpu32 = torch::empty({bs},
+                              torch::dtype(torch::kInt32).device(torch::kCUDA));
+
+        cuvs::cluster::kmeans::predict(
+            handle, params,
+            raft::make_device_matrix_view<const float,int>(batch_gpu.data_ptr<float>(),
+                                                           bs, (int)D),
+            std::nullopt,
+            raft::make_device_matrix_view<float,int>(cent_gpu.data_ptr<float>(),
+                                                     num_clusters, (int)D),
+            raft::make_device_vector_view<int,int>(lbl_gpu32.data_ptr<int>(), bs),
+            /*verbosity=*/false,
+            raft::make_host_scalar_view(nullptr)      // we don't need the inertia
+        );
+
+        all_labels.narrow(0, dst_off, bs)
+                  .copy_(lbl_gpu32.to(torch::kLong).cpu(), /*non_blocking=*/false);
     };
 
-    // predict the sample slice
-    predict_fn(samp_pts, /*off=*/0);
-
-    // predict the rest
     for (int64_t off = 0; off < N; off += gpu_batch_size) {
-    int64_t bs = std::min<int64_t>(gpu_batch_size, N - off);
-    if (off < gpu_sample_size) {
-      if (off + bs <= gpu_sample_size) {
-        continue;
-      } else {
-        int64_t overlap = gpu_sample_size - off;
-        Tensor rest_chunk = cpu_pts.slice(0, off + overlap, off + bs);
-        predict_fn(rest_chunk, /*off=*/off + overlap);
-        continue;
-      }
+        const int64_t bs = std::min<int64_t>(gpu_batch_size, N - off);
+        run_predict(cpu_pts.slice(0, off, off + bs), off);
     }
-    Tensor rest_chunk = cpu_pts.slice(0, off, off + bs);
-    predict_fn(rest_chunk, /*off=*/off);
-    }
-    // 8) group on CPU
-    Tensor sorted_lbl, sorted_idx;
-    std::tie(sorted_lbl, sorted_idx) = torch::sort(all_labels);
-    Tensor sorted_vecs = vectors.index_select(0, sorted_idx);
-    Tensor sorted_ids  = ids.index_select(0, sorted_idx);
 
-    Tensor counts = torch::bincount(sorted_lbl, /*weights=*/{}, num_clusters);
-    auto cnt_cpu = counts.to(torch::kCPU);
-    std::vector<int64_t> split_sizes(
-    cnt_cpu.data_ptr<int64_t>(),
-    cnt_cpu.data_ptr<int64_t>() + num_clusters
-    );
+    /* ----------  group vectors/ids by cluster on CPU  -------------------- */
+    Tensor lbl_sorted, idx_sorted;
+    std::tie(lbl_sorted, idx_sorted) = torch::sort(all_labels);
+    Tensor vecs_sorted = vectors.index_select(0, idx_sorted);
+    Tensor ids_sorted  = ids.index_select(0,    idx_sorted);
 
-    auto cluster_vecs = torch::split(sorted_vecs, split_sizes, 0);
-    auto cluster_ids  = torch::split(sorted_ids,   split_sizes, 0);
+    Tensor counts = torch::bincount(lbl_sorted, /*weights=*/{}, num_clusters);
+    std::vector<int64_t> split_sz(counts.data_ptr<int64_t>(),
+                                  counts.data_ptr<int64_t>() + num_clusters);
 
+    std::vector<Tensor> cluster_vecs = torch::split(vecs_sorted, split_sz, 0);
+    std::vector<Tensor> cluster_ids  = torch::split(ids_sorted,  split_sz, 0);
+
+    /* ----------  package result  ---------------------------------------- */
     auto out = std::make_shared<Clustering>();
     out->centroids     = cent_gpu.cpu().contiguous();
     out->partition_ids = torch::arange(num_clusters, torch::kLong);
     out->vectors       = std::move(cluster_vecs);
     out->vector_ids    = std::move(cluster_ids);
-
     return out;
 }
 #endif

@@ -131,7 +131,7 @@ def _plot(cfg: Dict, root: Path) -> None:
             markersize = 6,
             color      = sty.get("color", None),
         )
-    ax.set_xscale("log", base=10)
+    # ax.set_xscale("log", base=10)
     ax.set_xlabel("Queries per second (log)")
     ax.set_ylabel("Recall@k")
     ax.set_title("QPS vs Recall for different parent levels")

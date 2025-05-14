@@ -232,6 +232,8 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Number of refinement iterations. default = ") + std::to_string(DEFAULT_REFINEMENT_ITERATIONS)).c_str())
         .def_readwrite("min_partition_size", &MaintenancePolicyParams::min_partition_size,
              (std::string("Minimum allowed partition size. default = ") + std::to_string(DEFAULT_MIN_PARTITION_SIZE)).c_str())
+        .def_readwrite("max_partition_size", &MaintenancePolicyParams::max_partition_size,
+            (std::string("Maximum allowed partition size. default = ") + std::to_string(-1)).c_str())
         .def_readwrite("alpha", &MaintenancePolicyParams::alpha,
              (std::string("Alpha parameter. default = ") + std::to_string(DEFAULT_ALPHA)).c_str())
         .def_readwrite("enable_split_rejection", &MaintenancePolicyParams::enable_split_rejection,

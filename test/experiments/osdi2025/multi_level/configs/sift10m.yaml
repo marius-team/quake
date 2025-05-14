@@ -6,7 +6,7 @@ overwrite:
 
 # ─── dataset ──────────────────────────────────────────────────────────────────
 dataset:
-  name: msturing10m  # built-in quake dataset
+  name: sift10m      # built-in quake dataset
   metric: l2
   path: data         # ignored for packaged datasets
   nq: 100           # number of queries to use
@@ -17,12 +17,12 @@ indexes:
     index: Quake
     build_params:
       nc: 5000
-      num_workers: 1
+      num_workers: 8
     search_params:
-      k: 100
+      k: 1
 #      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
       nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-      initial_search_fraction: 0.3
+#      initial_search_fraction: 0.01
 #      batched_scan: true
       batch_size: 1
 
@@ -30,12 +30,12 @@ indexes:
     index: Quake
     build_params:
       nc: 10000
-      num_workers: 1
+      num_workers: 8
     search_params:
-      k: 100
+      k: 1
 #      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
       nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-      initial_search_fraction: 0.25
+#      initial_search_fraction: 0.01
 #      batched_scan: true
       batch_size: 1
 
@@ -43,12 +43,12 @@ indexes:
     index: Quake
     build_params:
       nc: 20000
-      num_workers: 0
+      num_workers: 8
     search_params:
       k: 1
 #      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
       nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-      initial_search_fraction: 0.2
+#      initial_search_fraction: 0.01
 #      batched_scan: true
       batch_size: 1
 
@@ -56,39 +56,39 @@ indexes:
     index: Quake
     build_params:
       nc: 40000
-      num_workers: 0
+      num_workers: 8
     search_params:
       k: 1
-      #      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
+#      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
       nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-      initial_search_fraction: 0.2
-      #      batched_scan: true
+#      initial_search_fraction: 0.01
+#      batched_scan: true
       batch_size: 1
 
   - name: Quake80000
     index: Quake
     build_params:
       nc: 80000
-      num_workers: 0
+      num_workers: 8
     search_params:
       k: 1
-      #      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
+#      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
       nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-      initial_search_fraction: 0.2
-      #      batched_scan: true
+#      initial_search_fraction: 0.01
+#      batched_scan: true
       batch_size: 1
-
+#
   - name: Quake160000
     index: Quake
     build_params:
       nc: 160000
-      num_workers: 0
+      num_workers: 8
     search_params:
       k: 1
-      #      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
+#      recall_targets: [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95, 0.99]
       nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-      initial_search_fraction: 0.2
-      #      batched_scan: true
+      initial_search_fraction: 0.005
+#      batched_scan: true
       batch_size: 1
 #
 #  - name: Quake20000_500           # two-level Quake index

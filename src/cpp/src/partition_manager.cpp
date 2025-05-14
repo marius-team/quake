@@ -201,7 +201,12 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
     // Determine partition assignments for each vector.
     vector<int64_t> partition_ids_for_each(n, -1);
     if (parent_ == nullptr) {
-        partition_ids_for_each.assign(n, 0);
+        // round robin assign
+        int64_t num_parts = nlist();
+        for (int64_t i = 0; i < partition_ids_for_each.size(); i++) {
+            partition_ids_for_each[i] = i % num_parts;
+        }
+
         if (debug_) {
             std::cout << "[PartitionManager] add: No parent index; assigning all vectors to partition 0." << std::endl;
         }
@@ -414,7 +419,7 @@ shared_ptr<Clustering> PartitionManager::split_partitions(const Tensor &partitio
     split_vectors.reserve(total_new_partitions);
     split_ids.reserve(total_new_partitions);
 
-    shared_ptr<Clustering> clustering = select_partitions(partition_ids);
+    shared_ptr<Clustering> clustering = select_partitions(partition_ids, true);
 
     shared_ptr<IndexBuildParams> build_params = make_shared<IndexBuildParams>();
     build_params->nlist = num_splits;

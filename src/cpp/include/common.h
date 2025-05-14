@@ -108,6 +108,9 @@ struct MaintenancePolicyParams {
     float delete_threshold_ns = DEFAULT_DELETE_THRESHOLD_NS;
     float split_threshold_ns = DEFAULT_SPLIT_THRESHOLD_NS;
 
+    // SPFresh Param
+    int max_partition_size = -1; // -1 means default to standard cost-based maintenance, if set then we use size-based thresholding
+
     MaintenancePolicyParams() = default;
 };
 

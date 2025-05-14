@@ -68,7 +68,8 @@ namespace faiss {
     size_t DynamicInvertedLists::list_size(size_t list_no) const {
         auto it = partitions_.find(list_no);
         if (it == partitions_.end()) {
-            throw std::runtime_error("List does not exist in list_size");
+            string err_message = "List " + std::to_string(list_no) + " does not exist in list_size";
+            throw std::runtime_error(err_message);
         }
         return static_cast<size_t>(it->second->num_vectors_);
     }
@@ -278,7 +279,6 @@ void DynamicInvertedLists::batch_update_entries(
     void DynamicInvertedLists::remove_list(size_t list_no) {
         auto it = partitions_.find(list_no);
         if (it == partitions_.end()) {
-            // Already doesn't exist
             return;
         }
 

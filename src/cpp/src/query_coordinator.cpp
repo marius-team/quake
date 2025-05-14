@@ -135,7 +135,27 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         // Retrieve partition data.
         const float *partition_codes = (float *) partition_manager_->partition_store_->get_codes(job.partition_id);
         const int64_t *partition_ids = (int64_t *) partition_manager_->partition_store_->get_ids(job.partition_id);
-        int64_t partition_size = partition_manager_->partition_store_->list_size(job.partition_id);
+
+        // skip partition if it is not found (workaround)
+        int64_t partition_size = 0;
+        try {
+            partition_size = partition_manager_->partition_store_->list_size(job.partition_id);
+        } catch (const std::runtime_error &e) {
+            std::cerr << "[QueryCoordinator::partition_scan_worker_fn] Partition " << job.partition_id << " not found." << std::endl;
+            continue;
+        }
+
+        // skip partition if it is empty
+        if (partition_size == 0) {
+            std::cerr << "[QueryCoordinator::partition_scan_worker_fn] Partition " << job.partition_id << " is empty." << std::endl;
+            // call dummy batch add to decrement topk_buffer jobs counter. #TODO remove jobs counter from topk_buffer
+            for (int64_t q = 0; q < job.num_queries; q++) {
+                int64_t global_q = job.query_ids[q];
+                global_topk_buffer_pool_[global_q]->batch_add(nullptr, nullptr, 0);
+            }
+            continue;
+        }
+
         // Branch for non-batched jobs.
         if (!job.is_batched) {
 
@@ -593,7 +613,6 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             float *list_vectors = (float *) partition_manager_->partition_store_->get_codes(pi);
             int64_t *list_ids = (int64_t *) partition_manager_->partition_store_->get_ids(pi);
             int64_t list_size = partition_manager_->partition_store_->list_size(pi);
-
             scan_list(query_vec,
                       list_vectors,
                       list_ids,

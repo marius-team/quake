@@ -12,6 +12,7 @@ from test.experiments.osdi2025.aps_recall_targets.run import run_experiment as r
 from test.experiments.osdi2025.early_termination.run import run_experiment as run_early_termination
 from test.experiments.osdi2025.multi_level.run import run_experiment as run_multi_level
 from test.experiments.osdi2025.vary_levels.run import run_experiment as run_vary_levels
+from test.experiments.osdi2025.maintenance_ablation.run import run_experiment as run_ablation
 
 EXPERIMENTS = {
     "kick_the_tires":   run_kick_the_tires,
@@ -21,6 +22,7 @@ EXPERIMENTS = {
     "early_termination":   run_early_termination,
     "multi_level":        run_multi_level,
     "vary_levels":        run_vary_levels,
+    "maintenance_ablation": run_ablation,
 }
 
 def main():

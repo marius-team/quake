@@ -160,7 +160,7 @@ def _plot_unified(cfg: Dict, root: Path) -> None:
             color     = sty.get("color", None),
         )
 
-    ax.set_xscale("log", base=10)
+    # ax.set_xscale("log", base=10)
     ax.set_xlabel("Queries per second (log)")
     ax.set_ylabel("Recall@k")
     ax.set_title("Recall curves over varied recall_target")

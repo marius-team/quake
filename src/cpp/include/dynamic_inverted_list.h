@@ -32,6 +32,7 @@ namespace faiss {
         int code_size_;                ///< Size in bytes of each vector code.
         unordered_map<size_t, shared_ptr<IndexPartition>> partitions_; ///< Map of partition ID to IndexPartition.
         unordered_map<int64_t, std::pair<IndexPartition*, int64_t>> id_to_location_;
+        unordered_map<size_t, bool> tombstones_;
 
         /**
          * @brief Constructor for DynamicInvertedLists.
