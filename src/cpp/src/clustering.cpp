@@ -40,7 +40,7 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
     /* ----------  copy to pinned host & (optionally) normalize  ----------- */
     Tensor cpu_pts = vectors.contiguous().pin_memory();
     if (metric == faiss::METRIC_INNER_PRODUCT) {
-        // k-means in RAFT is L2 – approximate cosine by L2 on the unit sphere
+        // cuVS k-means is Euclidean; approximate cosine by L2 on the unit sphere
         cpu_pts = cpu_pts.div(cpu_pts.norm(2, 1, /*keepdim=*/true));
     }
 
@@ -65,19 +65,20 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
                       .contiguous();
 
     /* ----------  fit on the sample  -------------------------------------- */
-    float inertia      = 0.0f;
-    int   actual_iter  = 0;
-
-    cuvs::cluster::kmeans::fit(
-        handle, params,
-        raft::make_device_matrix_view<const float,int>(samp_gpu.data_ptr<float>(),
-                                                       gpu_sample_sz, (int)D),
-        std::nullopt,
-        raft::make_device_matrix_view<float,int>(cent_gpu.data_ptr<float>(),
-                                                 num_clusters, (int)D),
-        raft::make_host_scalar_view(&inertia),
-        raft::make_host_scalar_view(&actual_iter)
-    );
+    {
+        float inertia      = 0.0f;
+        int   actual_iter  = 0;
+        cuvs::cluster::kmeans::fit(
+            handle, params,
+            raft::make_device_matrix_view<const float,int>(samp_gpu.data_ptr<float>(),
+                                                           gpu_sample_sz, (int)D),
+            std::nullopt,
+            raft::make_device_matrix_view<float,int>(cent_gpu.data_ptr<float>(),
+                                                     num_clusters, (int)D),
+            raft::make_host_scalar_view(&inertia),
+            raft::make_host_scalar_view(&actual_iter)
+        );
+    }
 
     /* ----------  predict every point, in order, exactly once  ------------ */
     Tensor all_labels = torch::empty({N}, torch::kLong);               // on CPU
@@ -91,6 +92,7 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
         Tensor lbl_gpu32 = torch::empty({bs},
                               torch::dtype(torch::kInt32).device(torch::kCUDA));
 
+        float dummy_inertia = 0.0f;   // storage required by the API
         cuvs::cluster::kmeans::predict(
             handle, params,
             raft::make_device_matrix_view<const float,int>(batch_gpu.data_ptr<float>(),
@@ -99,8 +101,8 @@ shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
             raft::make_device_matrix_view<float,int>(cent_gpu.data_ptr<float>(),
                                                      num_clusters, (int)D),
             raft::make_device_vector_view<int,int>(lbl_gpu32.data_ptr<int>(), bs),
-            /*verbosity=*/false,
-            raft::make_host_scalar_view(nullptr)      // we don't need the inertia
+            /*verbose=*/false,
+            raft::make_host_scalar_view(&dummy_inertia)
         );
 
         all_labels.narrow(0, dst_off, bs)
