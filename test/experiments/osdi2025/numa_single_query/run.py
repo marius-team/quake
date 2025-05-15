@@ -54,7 +54,7 @@ def run_experiment(cfg_path: str, output_dir: str):
         for n_worker in n_workers:
 
             idx_mode = QuakeWrapper()
-            idx_mode.load(str(idx_file), use_numa=use_numa, same_core=True, n_workers=n_worker)
+            idx_mode.load(str(idx_file), use_numa=use_numa, same_core=True, num_workers=n_worker)
 
             print(f"Threads: {n_worker}")
             # warm‑up

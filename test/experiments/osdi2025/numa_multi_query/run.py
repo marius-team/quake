@@ -70,7 +70,7 @@ def run_experiment(cfg_path: str, output_dir: str):
                     for batch_size in batch_sizes:
                         print(f"NUMA={use_numa}, workers={nw}, batched={bs}, batch={batch_size}")
                         idxm = QuakeWrapper()
-                        idxm.load(str(idx_file), use_numa=use_numa, same_core=True, n_workers=nw)
+                        idxm.load(str(idx_file), use_numa=use_numa, same_core=True, num_workers=nw)
                         n_threads = 16 if nw == 0 else 1
 
                         # Warmup
