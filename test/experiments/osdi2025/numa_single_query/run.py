@@ -176,20 +176,13 @@ def run_experiment(cfg_path: str, output_dir: str):
                     raise RuntimeError(f"No timing info found in search result for {idx_name}")
                 # Collect predicted indices for recall in trial 0
                 if t == 0 and gt is not None:
-                    try:
-                        pred = extract_indices(res)
-                        if isinstance(pred, torch.Tensor):
-                            pred = pred.cpu().numpy()
-                        elif not isinstance(pred, np.ndarray):
-                            pred = np.asarray(pred)
-                        all_preds.append(pred[0] if pred.ndim > 1 else pred)
-                    except Exception:
-                        # Defensive fallback: don't break script if recall fails
-                        all_preds.append(np.full((k,), -1, dtype=np.int64))
+                    pred = extract_indices(res)   # [1, k]
+                    all_preds.append(pred[0])    # get the [k]
             mean_t = float(np.mean(lats))
             trial_means.append(mean_t)
             if t == 0 and gt is not None:
-                preds_arr = np.stack(all_preds, axis=0)
+                preds_arr = np.stack(all_preds, axis=0) # [num_queries, k]
+                print(f"[DEBUG] preds_arr shape: {preds_arr.shape}, gt shape: {gt.shape}")
                 recall = compute_recall_at_k(preds_arr, gt, k)
                 trial_recalls.append(recall)
                 print(f" [trial {t+1}/{trials}] {mean_t:.2f} ms | recall@{k}: {recall:.4f}")
