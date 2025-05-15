@@ -2,7 +2,7 @@
 dataset:
   name: sift1m
   num_queries: 100
-  k: 10
+  k: 100
 
 trials: 5
 warmup: 10

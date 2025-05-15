@@ -17,6 +17,7 @@ import torch
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
+from quake.utils import compute_recall
 
 from quake.datasets.ann_datasets import load_dataset
 from quake.index_wrappers.faiss_ivf import FaissIVF
@@ -44,23 +45,6 @@ INDEX_CLASSES = {
     "DiskANN": DiskANNDynamic,
     "SVS": Vamana,
 }
-
-def compute_recall_at_k(pred, gt, k):
-    """
-    pred: [num_queries, k] predicted indices
-    gt: [num_queries, ...] ground truth indices
-    Returns recall@k
-    """
-    if gt.ndim == 1:
-        gt = gt[:, None]
-    matches = 0
-    num = pred.shape[0]
-    for i in range(num):
-        pred_set = set(pred[i])
-        gt_set = set(gt[i])
-        matches += len(pred_set & gt_set)
-    recall = matches / (num * min(k, gt.shape[1]))
-    return recall
 
 def build_and_save_index(index_class, build_params, base_vecs, index_file):
     idx = index_class()
@@ -167,14 +151,14 @@ def run_experiment(cfg_path: str, output_dir: str):
                     raise RuntimeError(f"No timing info found in search result for {idx_name}")
                 # Collect predicted indices for recall in trial 0
                 if t == 0 and gt is not None:
-                    pred = res.ids.numpy()   # [1, k]
+                    pred = res.ids  # [1, k]
                     all_preds.append(pred[0])    # get the [k]
             mean_t = float(np.mean(lats))
             trial_means.append(mean_t)
             if t == 0 and gt is not None:
-                preds_arr = np.stack(all_preds, axis=0) # [num_queries, k]
+                preds_arr = torch.stack(all_preds) # [num_queries, k]
                 print(f"[DEBUG] preds_arr shape: {preds_arr.shape}, gt shape: {gt.shape}")
-                recall = compute_recall_at_k(preds_arr, gt.numpy(), k)
+                recall = compute_recall(preds_arr, gt, k)
                 trial_recalls.append(recall)
                 print(f" [trial {t+1}/{trials}] {mean_t:.2f} ms | recall@{k}: {recall:.4f}")
             else:
