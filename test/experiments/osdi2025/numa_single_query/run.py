@@ -52,6 +52,8 @@ def compute_recall_at_k(pred, gt, k):
     Returns recall@k
     """
     # Faiss GT may be shape [num_queries, k'] or [num_queries]
+    print(pred)
+    print(gt)
     if gt.ndim == 1:
         gt = gt[:, None]
     matches = 0
