@@ -106,6 +106,9 @@ def run_experiment(cfg_path: str, output_dir: str):
                 load_kwargs["num_workers"] = build_params["num_workers"]
             idx = IndexClass()
             idx.load(str(idx_file), **load_kwargs)
+        elif idx_type == "DiskANN":
+            idx = IndexClass()
+            idx.load(str(idx_file), **build_params)
         else:
             idx = IndexClass()
             idx.load(str(idx_file))
