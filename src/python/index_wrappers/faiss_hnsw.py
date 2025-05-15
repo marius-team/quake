@@ -85,7 +85,7 @@ class FaissHNSW(IndexWrapper):
         distances, indices = self.index.search(query, k)
         end = time.time()
 
-        timing_info.total_time_us = int((end - start) * 1e6)
+        timing_info.total_time_ns = int((end - start) * 1e9)
 
         search_result = SearchResult()
         search_result.ids = to_torch(indices)

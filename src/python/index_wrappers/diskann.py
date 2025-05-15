@@ -105,7 +105,7 @@ class DiskANNDynamic(IndexWrapper):
             query, k_neighbors=k, complexity=complexity, num_threads=num_threads
         )
         end = time.time()
-        timing_info.total_time_us = int((end - start) * 1e6)
+        timing_info.total_time_ns = int((end - start) * 1e9)
         indices = to_torch(indices.astype(np.int64))
         indices = indices - 1  # ids are 1-indexed
         distances = to_torch(distances)
