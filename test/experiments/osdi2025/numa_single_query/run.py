@@ -26,15 +26,15 @@ from quake.index_wrappers.quake import QuakeWrapper
 try:
     from quake.index_wrappers.scann import Scann
 except ImportError:
-    class Scann: pass
+    raise ImportError("SCANN wrapper not available. Please install the required package.")
 try:
     from quake.index_wrappers.diskann import DiskANNDynamic
 except ImportError:
-    class DiskANNDynamic: pass
+    raise ImportError("DiskANN wrapper not available. Please install the required package.")
 try:
     from quake.index_wrappers.vamana import Vamana
 except ImportError:
-    class Vamana: pass
+    raise ImportError("SVS wrapper not available. Please install the required package.")
 
 INDEX_CLASSES = {
     "Quake": QuakeWrapper,
