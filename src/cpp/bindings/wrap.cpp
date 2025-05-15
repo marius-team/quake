@@ -148,6 +148,8 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Number of workers. default = ") + std::to_string(DEFAULT_NUM_WORKERS)).c_str())
         .def_readwrite("parent_params", &IndexBuildParams::parent_params,
              "Parameters for the parent index, if any.")
+        .def_readwrite("use_numa", &IndexBuildParams::use_numa,
+         (std::string("Flag to use NUMA for index building. default = ") + std::to_string(false)).c_str())
         .def_readwrite("use_gpu", &IndexBuildParams::use_gpu,
              (std::string("Flag to use GPU for index building. default = ") + std::to_string(false)).c_str())
         .def_readwrite("gpu_batch_size", &IndexBuildParams::gpu_batch_size,
