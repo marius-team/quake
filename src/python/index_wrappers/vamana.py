@@ -53,9 +53,9 @@ class Vamana(IndexWrapper):
         self.index = svs.DynamicVamana.build(
             parameters=parameters, data=vectors, ids=ids, distance_type=distance, num_threads=num_threads
         )
-        self.index.search_window_size = 128
 
-    def search(self, queries: torch.Tensor, k: int) -> Tuple[np.ndarray, np.ndarray]:
+    def search(self, queries: torch.Tensor, k: int, search_window_size: int) -> Tuple[np.ndarray, np.ndarray]:
+        self.index.search_window_size = search_window_size
         indices, distances = self.index.search(queries=to_numpy(queries).astype(np.float32), n_neighbors=k)
         return to_torch(indices.astype(np.int64)), to_torch(distances)
 

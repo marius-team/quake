@@ -119,7 +119,6 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
         // Shutdown signal: -1 indicates the worker should exit.
         if (job.partition_id == -1) {
-            std::cout << "[QueryCoordinator::partition_scan_worker_fn] Worker " << core_index << " exiting." << std::endl;
             break;
         }
 

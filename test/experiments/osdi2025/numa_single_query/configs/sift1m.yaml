@@ -75,5 +75,40 @@ indexes:
     search_params:
       nprobe: 1000
 
+  - name: SCANN
+    index: SCANN
+    build_params:
+      num_leaves: 1000
+      metric: l2
+    search_params:
+      leaves_to_search: 1000
+
+  - name: FaissHNSW
+    index: HNSW
+    build_params:
+      m: 64
+      ef_construction: 128
+      metric: l2
+    search_params:
+      ef_search: 32
+
+  - name: DiskANN
+    index: DiskANN
+    build_params:
+      complexity: 128,
+      graph_degree: 64
+      metric: l2
+    search_params:
+      complexity: 32
+
+  - name: SVS
+    index: SVS
+    build_params:
+      graph_max_degree: 64
+      window_size: 128
+      metric: l2
+    search_params:
+      search_window_size: 32
+
 output:
   results_csv: numa_single_query_results.csv
