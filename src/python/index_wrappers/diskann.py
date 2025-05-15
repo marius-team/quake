@@ -6,7 +6,7 @@ import diskannpy as dap
 import numpy as np
 import torch
 
-from quake import SearchTimingInfo
+from quake import SearchTimingInfo, SearchResult
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_numpy, to_torch
 
@@ -110,7 +110,12 @@ class DiskANNDynamic(IndexWrapper):
         indices = indices - 1  # ids are 1-indexed
         distances = to_torch(distances)
 
-        return indices, distances, timing_info
+        search_result = SearchResult()
+        search_result.ids = to_torch(indices)
+        search_result.distances = to_torch(distances)
+        search_result.timing_info = timing_info
+
+        return search_result
 
     def save(self, path: str):
         """

@@ -6,7 +6,7 @@ import torch
 
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_numpy, to_path, to_torch
-from quake import SearchTimingInfo
+from quake import SearchTimingInfo, SearchResult
 import time
 
 
@@ -65,7 +65,14 @@ class Vamana(IndexWrapper):
         end_time = time.time()
         timing_info = SearchTimingInfo()
         timing_info.total_time_ns = int((end_time - start_time) * 1e9)
-        return to_torch(indices.astype(np.int64)), to_torch(distances)
+
+        search_result = SearchResult()
+        search_result.ids = to_torch(indices)
+        search_result.distances = to_torch(distances)
+        search_result.timing_info = timing_info
+
+        return search_result
+
 
     def add(self, vectors: torch.Tensor, ids: Optional[torch.Tensor] = None):
         if ids is None:
