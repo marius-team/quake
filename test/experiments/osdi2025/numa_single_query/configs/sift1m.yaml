@@ -1,15 +1,49 @@
-# existing keys...
 dataset:
   name: sift1m
   num_queries: 100
   k: 10
-  nprobe: 100
 
-n_workers: [0,1,2,4,8,16]
-
-# new keys:
 trials: 5
 warmup: 10
+
+indexes:
+  - name: Quake-1worker
+    index: Quake
+    build_params:
+      nc: 4096
+      metric: l2
+      num_workers: 1
+      use_numa: false
+    search_params:
+      nprobe: 100
+
+  - name: Quake-4worker
+    index: Quake
+    build_params:
+      nc: 4096
+      metric: l2
+      num_workers: 4
+      use_numa: false
+    search_params:
+      nprobe: 100
+
+  - name: Quake-16worker
+    index: Quake
+    build_params:
+      nc: 4096
+      metric: l2
+      num_workers: 16
+      use_numa: false
+    search_params:
+      nprobe: 100
+
+  - name: FaissIVF
+    index: IVF
+    build_params:
+      nc: 4096
+      metric: l2
+    search_params:
+      nprobe: 100
 
 output:
   results_csv: numa_single_query_results.csv

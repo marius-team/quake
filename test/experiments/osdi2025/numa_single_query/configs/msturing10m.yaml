@@ -1,0 +1,15 @@
+# existing keys...
+dataset:
+  name: sift1m
+  num_queries: 100
+  k: 10
+  nprobe: 100
+
+n_workers: [0,1,2,4,8,16]
+
+# new keys:
+trials: 5
+warmup: 10
+
+output:
+  results_csv: numa_single_query_results.csv
