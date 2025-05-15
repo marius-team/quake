@@ -25,26 +25,26 @@ from quake.index_wrappers.faiss_ivf import FaissIVF
 from quake.index_wrappers.faiss_hnsw import FaissHNSW
 from quake.index_wrappers.quake import QuakeWrapper
 
-try:
-    from quake.index_wrappers.scann import Scann
-except ImportError:
-    raise ImportError("SCANN wrapper not available. Please install the required package.")
-try:
-    from quake.index_wrappers.diskann import DiskANNDynamic
-except ImportError:
-    raise ImportError("DiskANN wrapper not available. Please install the required package.")
-try:
-    from quake.index_wrappers.vamana import Vamana
-except ImportError:
-    raise ImportError("SVS wrapper not available. Please install the required package.")
+# try:
+#     from quake.index_wrappers.scann import Scann
+# except ImportError:
+#     raise ImportError("SCANN wrapper not available. Please install the required package.")
+# try:
+#     from quake.index_wrappers.diskann import DiskANNDynamic
+# except ImportError:
+#     raise ImportError("DiskANN wrapper not available. Please install the required package.")
+# try:
+#     from quake.index_wrappers.vamana import Vamana
+# except ImportError:
+#     raise ImportError("SVS wrapper not available. Please install the required package.")
 
 INDEX_CLASSES = {
     "Quake": QuakeWrapper,
     "IVF": FaissIVF,
-    "SCANN": Scann,
+    # "SCANN": Scann,
     "HNSW": FaissHNSW,
-    "DiskANN": DiskANNDynamic,
-    "SVS": Vamana,
+    # "DiskANN": DiskANNDynamic,
+    # "SVS": Vamana,
 }
 
 def build_and_save_index(index_class, build_params, base_vecs, index_file):
@@ -87,12 +87,29 @@ def run_experiment(cfg_path: str, output_dir: str):
     queries = queries[:queries_n]
     gt = gt[:queries_n] if gt is not None else None
 
+    # --- Build the Quake base index ONCE ---
+    quake_base_params = None
+    quake_base_index_file = out_dir / "Quake_base_index.bin"
+    # Find the build params for the first Quake config for base index
+    for idx_cfg in indexes_cfg:
+        if idx_cfg["index"] == "Quake":
+            quake_base_params = dict(idx_cfg.get("build_params", {}))
+            # Remove any runtime/load-only params
+            quake_base_params.pop("num_workers", None)
+            quake_base_params.pop("use_numa", None)
+            break
+    if quake_base_params is not None:
+        if not quake_base_index_file.exists():
+            print(f"[BUILD] Quake (shared) base index ...")
+            build_and_save_index(QuakeWrapper, quake_base_params, base_vecs, quake_base_index_file)
+            print(f"[SAVE] Quake base index saved at {quake_base_index_file}")
+
     all_rows = []
 
     for idx_cfg in indexes_cfg:
         idx_name      = idx_cfg["name"]
         idx_type      = idx_cfg["index"]
-        build_params  = idx_cfg.get("build_params", {})
+        build_params  = dict(idx_cfg.get("build_params", {}))
         search_params = idx_cfg.get("search_params", {})
         IndexClass    = INDEX_CLASSES.get(idx_type)
         if IndexClass is None:
@@ -100,7 +117,11 @@ def run_experiment(cfg_path: str, output_dir: str):
             continue
 
         idx_csv = out_dir / f"{idx_name}_results.csv"
-        idx_file = out_dir / f"{idx_name}_index.bin"
+        # Quake uses the shared base index; others get their own file
+        if idx_type == "Quake":
+            idx_file = quake_base_index_file
+        else:
+            idx_file = out_dir / f"{idx_name}_index.bin"
 
         if idx_csv.exists() and not overwrite:
             print(f"[SKIP] {idx_name}: Results exist. Use overwrite: true to rerun.")
@@ -108,7 +129,7 @@ def run_experiment(cfg_path: str, output_dir: str):
             all_rows.append(df_idx.iloc[0].to_dict())
             continue
 
-        if not idx_file.exists():
+        if idx_type != "Quake" and not idx_file.exists():
             print(f"[BUILD] {idx_name} index...")
             build_and_save_index(IndexClass, build_params, base_vecs, idx_file)
             print(f"[SAVE] Index saved at {idx_file}")
@@ -116,12 +137,13 @@ def run_experiment(cfg_path: str, output_dir: str):
         print(f"[RUN] {idx_name} ...")
 
         if idx_type == "Quake":
+            # Only use load-time params for Quake
             load_kwargs = {}
             if "use_numa" in build_params:
                 load_kwargs["use_numa"] = build_params["use_numa"]
             if "num_workers" in build_params:
                 load_kwargs["num_workers"] = build_params["num_workers"]
-            idx = IndexClass()
+            idx = QuakeWrapper()
             idx.load(str(idx_file), **load_kwargs)
         elif idx_type == "DiskANN":
             idx = IndexClass()
@@ -131,27 +153,18 @@ def run_experiment(cfg_path: str, output_dir: str):
             idx = IndexClass()
             idx.load(str(idx_file))
 
-        if idx_type == "SCANN":
-            search_args = {"leaves_to_search": search_params.get("leaves_to_search", 100)}
-        elif idx_type == "HNSW":
-            search_args = {"ef_search": search_params.get("ef_search", 32)}
-        elif idx_type == "DiskANN":
-            search_args = {"complexity": search_params.get("complexity", 32)}
-        elif idx_type == "SVS":
-            search_args = {"search_window_size": search_params.get("search_window_size", 32)}
-        else:  # IVF, Quake, others
-            search_args = {"nprobe": search_params.get("nprobe", 100)}
+        print(search_params)
 
         # Warmup (single batch, no timing)
         for i in range(min(warmup, 1)):
-            idx.search(queries, k, **search_args)
+            idx.search(queries, k, **search_params)
 
         # Benchmark Trials (latency and recall)
         trial_means = []
         trial_recalls = []
         for t in range(trials):
             t0 = time()
-            res = idx.search(queries, k, **search_args)
+            res = idx.search(queries, k, **search_params)
             t1 = time()
             mean_t = ((t1 - t0) * 1e3) / queries.shape[0]  # ms per query
             trial_means.append(mean_t)
@@ -231,10 +244,3 @@ def run_experiment(cfg_path: str, output_dir: str):
         plt.tight_layout()
         plt.savefig(plot_file)
         print(f"[PLOT] Recall plot saved to {plot_file}")
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <config.yaml> <output_dir>")
-        sys.exit(1)
-    run_experiment(sys.argv[1], sys.argv[2])
