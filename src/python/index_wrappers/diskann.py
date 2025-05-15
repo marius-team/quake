@@ -102,9 +102,15 @@ class DiskANNDynamic(IndexWrapper):
         timing_info = SearchTimingInfo()
 
         start = time.time()
-        indices, distances = self.index.batch_search(
-            query, k_neighbors=k, complexity=complexity, num_threads=num_threads
-        )
+        if query.shape[0] == 1:
+            indices, distances = self.index.search(
+                query, k_neighbors=k, complexity=complexity, num_threads=num_threads
+            )
+        else:
+            # batch search
+            indices, distances = self.index.batch_search(
+                query, k_neighbors=k, complexity=complexity, num_threads=num_threads
+            )
         end = time.time()
         timing_info.total_time_ns = int((end - start) * 1e9)
         indices = to_torch(indices.astype(np.int64))
