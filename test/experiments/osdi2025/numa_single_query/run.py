@@ -47,8 +47,6 @@ INDEX_CLASSES = {
 def build_and_save_index(index_class, build_params, base_vecs, index_file):
     idx = index_class()
     params = dict(build_params)
-    if "nc" not in params and "num_leaves" not in params:
-        params["nc"] = int(np.sqrt(base_vecs.shape[0]))
     idx.build(base_vecs, **params)
     idx.save(str(index_file))
 
