@@ -127,7 +127,7 @@ def run_experiment(cfg_path: str, output_dir: str):
         # Warmup
         for i in range(min(warmup, len(queries))):
             q = queries[i].unsqueeze(0).float()
-            idx.search(q, k, batched_scan=False, **search_args)
+            idx.search(q, k, **search_args)
 
         # Benchmark Trials
         trial_means = []
@@ -137,7 +137,6 @@ def run_experiment(cfg_path: str, output_dir: str):
                 q = q_vec.unsqueeze(0).float()
                 res = idx.search(
                     q, k,
-                    batched_scan=False,
                     **search_args
                 )
                 ti = getattr(res, "timing_info", None)
