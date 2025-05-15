@@ -26,15 +26,15 @@ from quake.index_wrappers.quake import QuakeWrapper
 try:
     from quake.index_wrappers.scann import Scann
 except ImportError:
-    class ScannWrapper: pass
+    class Scann: pass
 try:
     from quake.index_wrappers.diskann import DiskANNDynamic
 except ImportError:
-    class DiskANNWrapper: pass
+    class DiskANNDynamic: pass
 try:
     from quake.index_wrappers.vamana import Vamana
 except ImportError:
-    class SVSWrapper: pass
+    class Vamana: pass
 
 INDEX_CLASSES = {
     "Quake": QuakeWrapper,
