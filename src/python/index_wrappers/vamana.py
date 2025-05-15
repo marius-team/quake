@@ -6,6 +6,8 @@ import torch
 
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_numpy, to_path, to_torch
+from quake import SearchTimingInfo
+import time
 
 
 class Vamana(IndexWrapper):
@@ -55,8 +57,14 @@ class Vamana(IndexWrapper):
         )
 
     def search(self, queries: torch.Tensor, k: int, search_window_size: int) -> Tuple[np.ndarray, np.ndarray]:
+
+        start_time = time.time()
         self.index.search_window_size = search_window_size
         indices, distances = self.index.search(queries=to_numpy(queries).astype(np.float32), n_neighbors=k)
+
+        end_time = time.time()
+        timing_info = SearchTimingInfo()
+        timing_info.total_time_ns = int((end_time - start_time) * 1e9)
         return to_torch(indices.astype(np.int64)), to_torch(distances)
 
     def add(self, vectors: torch.Tensor, ids: Optional[torch.Tensor] = None):
