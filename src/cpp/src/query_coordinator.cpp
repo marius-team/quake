@@ -103,8 +103,6 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         std::cout << "[QueryCoordinator::partition_scan_worker_fn] Failed to set thread affinity on core " << core_index << std::endl;
     }
 
-
-
     while (true) {
         ScanJob job;
 
@@ -197,10 +195,11 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 throw std::runtime_error("[partition_scan_worker_fn] Invalid batched job.");
             }
 
-            // Allocate a thread-local query buffer if needed.
             if (res.local_query_buffer.size() < partition_manager_->d() * sizeof(float) * job.num_queries) {
                 res.local_query_buffer.resize(partition_manager_->d() * sizeof(float) * job.num_queries);
             }
+
+            auto s1 = std::chrono::high_resolution_clock::now();
 
             int64_t d = partition_manager_->d();
             std::vector<float> query_subset(job.num_queries * d);
@@ -210,7 +209,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                        job.query_vector + global_q * d,
                        d * sizeof(float));
             }
-            // Then copy query_subset into your local buffer if needed:
+
             if(memcpy(res.local_query_buffer.data(),
                    query_subset.data(),
                    query_subset.size() * sizeof(float)) == nullptr) {
@@ -230,6 +229,8 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 }
             }
 
+            auto s2 = std::chrono::high_resolution_clock::now();
+
             // Process the batched job.
             batched_scan_list((float *) res.local_query_buffer.data(),
                 partition_codes,
@@ -240,18 +241,29 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                               res.topk_buffer_pool,
                               metric_);
 
-            vector<vector<float>> topk_list(job.num_queries);
-            vector<vector<int64_t>> topk_indices_list(job.num_queries);
-            for (int64_t q = 0; q < job.num_queries; q++) {
-                topk_list[q] = res.topk_buffer_pool[q]->get_topk();
-                topk_indices_list[q] = res.topk_buffer_pool[q]->get_topk_indices();
-            }
+            auto s3 = std::chrono::high_resolution_clock::now();
 
             for (int64_t q = 0; q < job.num_queries; q++) {
                 int64_t global_q = job.query_ids[q];
-                int n_results = topk_indices_list[q].size();
-                global_topk_buffer_pool_[global_q]->batch_add(topk_list[q].data(), topk_indices_list[q].data(), n_results);
+
+                vector<float> topk = res.topk_buffer_pool[q]->get_topk();
+                vector<int64_t> topk_indices = res.topk_buffer_pool[q]->get_topk_indices();
+                int n_results = topk_indices.size();
+
+                global_topk_buffer_pool_[global_q]->batch_add(topk.data(), topk_indices.data(), n_results);
             }
+
+            auto s4 = std::chrono::high_resolution_clock::now();
+
+            // print out timings for worker
+            auto wait_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s2 - s1).count();
+            auto process_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s3 - s2).count();
+            auto merge_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s4 - s3).count();
+
+//            std::cout << "[QueryCoordinator::partition_scan_worker_fn] Worker " << core_index
+//                      << " wait_time: " << wait_time / 1e6 << " ms, "
+//                      << "process_time: " << process_time / 1e6 << " ms, "
+//                      << "merge_time: " << merge_time / 1e6 << " ms" << std::endl;
         }
         auto job_process_end = std::chrono::high_resolution_clock::now();
         job_process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(job_process_end - job_process_start).count();
@@ -414,7 +426,12 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         // check if all jobs have been processed
         bool all_done = true;
         for (int64_t q = 0; q < num_queries; q++) {
-            all_done = all_done && (global_topk_buffer_pool_[q]->jobs_left_ == 0);
+            if (global_topk_buffer_pool_[q]->jobs_left_ == 0) {
+                // flush the topk buffer (if needed)
+                global_topk_buffer_pool_[q]->flush();
+            } else {
+                all_done = false;
+            }
         }
 
         if (all_done) {
@@ -456,7 +473,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
             last_flush_time = high_resolution_clock::now();
         }
-        std::this_thread::sleep_for(microseconds(1));
+        std::this_thread::sleep_for(microseconds(5));
     }
     end_time = high_resolution_clock::now();
     timing_info->job_wait_time_ns =
@@ -466,7 +483,10 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     start_time = high_resolution_clock::now();
     auto topk_ids = torch::full({num_queries, k}, -1, torch::kInt64);
     auto topk_dists = torch::full({num_queries, k},
-                                  std::numeric_limits<float>::infinity(), torch::kFloat32);
+                                  (metric_ == faiss::METRIC_INNER_PRODUCT)
+                                      ? -std::numeric_limits<float>::infinity()
+                                      : std::numeric_limits<float>::infinity(),
+                                  torch::kFloat32);
     auto ids_accessor = topk_ids.accessor<int64_t, 2>();
     auto dists_accessor = topk_dists.accessor<float, 2>();
     {

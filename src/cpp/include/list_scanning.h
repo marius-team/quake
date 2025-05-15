@@ -358,8 +358,8 @@ inline void batched_scan_list(
     }
 
     // Wrap raw arrays in torch Tensors, no copy
-    torch::Tensor query = torch::from_blob((void*)query_vecs, {num_queries, dim}, torch::kFloat32);
-    torch::Tensor list  = torch::from_blob((void*)list_vecs,  {list_size, dim}, torch::kFloat32);
+    Tensor query = torch::from_blob((void*)query_vecs, {num_queries, dim}, torch::kFloat32);
+    Tensor list  = torch::from_blob((void*)list_vecs,  {list_size, dim}, torch::kFloat32);
 
     torch::Tensor distances;
     if (metric == faiss::METRIC_L2) {
@@ -373,23 +373,13 @@ inline void batched_scan_list(
     }
 
     // For each query, push all list vectors and their distances into TopkBuffer
+    auto distances_acc = distances.accessor<float,2>();
     for (int i = 0; i < num_queries; ++i) {
-        auto row = distances[i];
         std::vector<float> dists(list_size);
         std::vector<int64_t> ids(list_size);
 
-        if (metric == faiss::METRIC_L2) {
-            // L2: real distances
-            auto row_acc = row.accessor<float,1>();
-            for (int j = 0; j < list_size; ++j) {
-                dists[j] = row_acc[j];
-            }
-        } else {
-            // IP: negative to mimic Faiss's heap convention if your buffer expects minimal distance
-            auto row_acc = row.accessor<float,1>();
-            for (int j = 0; j < list_size; ++j) {
-                dists[j] = row_acc[j];
-            }
+        for (int j = 0; j < list_size; ++j) {
+            dists[j] = distances_acc[i][j];
         }
 
         if (list_ids) {
