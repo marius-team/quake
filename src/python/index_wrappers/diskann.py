@@ -104,7 +104,9 @@ class DiskANNDynamic(IndexWrapper):
         start = time.time()
         if query.shape[0] == 1:
             indices, distances = self.index.search(
-                query, k_neighbors=k, complexity=complexity)
+                query.flatten(), k_neighbors=k, complexity=complexity)
+            indices = indices.reshape(1, -1)
+            distances = distances.reshape(1, -1)
         else:
             # batch search
             indices, distances = self.index.batch_search(
