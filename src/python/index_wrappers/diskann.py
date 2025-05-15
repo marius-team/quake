@@ -130,9 +130,6 @@ class DiskANNDynamic(IndexWrapper):
             Path(path).mkdir(exist_ok=True)
         self.index.save(path)
 
-        # TODO: save/load index
-        raise RuntimeError("DiskANNDynamic.save() not implemented")
-
     def load(
         self,
         path: str,
