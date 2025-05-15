@@ -5,6 +5,7 @@ from typing import Tuple
 import diskannpy as dap
 import numpy as np
 import torch
+from pathlib import Path
 
 from quake import SearchTimingInfo, SearchResult
 from quake.index_wrappers.wrapper import IndexWrapper
@@ -124,10 +125,10 @@ class DiskANNDynamic(IndexWrapper):
         :param path: The path to save the index to.
         :type path: str
         """
-        # assert self.index is not None
-        # if not Path(path).exists():
-        #     Path(path).mkdir(exist_ok=True)
-        # self.index.save(path)
+        assert self.index is not None
+        if not Path(path).exists():
+            Path(path).mkdir(exist_ok=True)
+        self.index.save(path)
 
         # TODO: save/load index
         raise RuntimeError("DiskANNDynamic.save() not implemented")
@@ -146,16 +147,16 @@ class DiskANNDynamic(IndexWrapper):
         :param path: The path to load the index from.
         :type path: str
         """
-        # self.index = dap.DynamicMemoryIndex.from_file(
-        #     index_directory=path,
-        #     max_vectors=max_vectors,
-        #     complexity=complexity,
-        #     graph_degree=graph_degree,
-        #     num_threads=num_threads,
-        # )
+        self.index = dap.DynamicMemoryIndex.from_file(
+            index_directory=path,
+            max_vectors=max_vectors,
+            complexity=complexity,
+            graph_degree=graph_degree,
+            num_threads=num_threads,
+        )
 
-        # TODO: save/load index
-        raise RuntimeError("DiskANNDynamic.save() not implemented")
+        # # TODO: save/load index
+        # raise RuntimeError("DiskANNDynamic.save() not implemented")
 
     def add(self, vectors: torch.Tensor, ids: torch.Tensor, num_threads: int = 0):
         """
