@@ -170,7 +170,7 @@ def run_experiment(cfg_path: str, output_dir: str):
                     raise RuntimeError(f"No timing info found in search result for {idx_name}")
                 # Collect predicted indices for recall in trial 0
                 if t == 0 and gt is not None:
-                    pred = res.ids   # [1, k]
+                    pred = res.ids.numpy()   # [1, k]
                     all_preds.append(pred[0])    # get the [k]
             mean_t = float(np.mean(lats))
             trial_means.append(mean_t)
