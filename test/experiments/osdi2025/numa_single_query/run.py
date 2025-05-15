@@ -177,7 +177,7 @@ def run_experiment(cfg_path: str, output_dir: str):
             if t == 0 and gt is not None:
                 preds_arr = np.stack(all_preds, axis=0) # [num_queries, k]
                 print(f"[DEBUG] preds_arr shape: {preds_arr.shape}, gt shape: {gt.shape}")
-                recall = compute_recall_at_k(preds_arr, gt, k)
+                recall = compute_recall_at_k(preds_arr, gt.numpy(), k)
                 trial_recalls.append(recall)
                 print(f" [trial {t+1}/{trials}] {mean_t:.2f} ms | recall@{k}: {recall:.4f}")
             else:
