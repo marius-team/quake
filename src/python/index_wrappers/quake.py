@@ -69,6 +69,7 @@ class QuakeWrapper(IndexWrapper):
         code_size: int = 8,
         parent=None,
         use_gpu=False,
+        use_numa=False,
         gpu_batch_size=100000,
         gpu_sample_size=1000000
     ):
@@ -93,6 +94,7 @@ class QuakeWrapper(IndexWrapper):
         build_params.metric = metric
         build_params.nlist = nc
         build_params.num_workers = num_workers
+        build_params.use_numa = use_numa
 
         if parent is not None:
             build_params.parent_params = quake.IndexBuildParams()
