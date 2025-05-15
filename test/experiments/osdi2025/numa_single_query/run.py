@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-NUMA Single-Query Latency Benchmark
+NUMA Single-Query Latency and Recall Benchmark
 
-Benchmarks a suite of approximate nearest neighbor (ANN) indexes (Quake, Faiss-IVF, SCANN, HNSW, DiskANN, SVS, etc.)
-for single-query latency under configurable build and search parameters. Results are cached and only recomputed if
-the 'overwrite' flag is set in the configuration. Outputs a unified CSV and a latency plot per index.
+Benchmarks a suite of ANN indexes (Quake, Faiss-IVF, SCANN, HNSW, DiskANN, SVS, etc.)
+for single-query latency and recall@k under configurable build and search parameters.
+Results are cached and only recomputed if the 'overwrite' flag is set in the configuration.
+Outputs a unified CSV and a latency plot per index.
 
 Usage:
     python numa_latency_experiment.py numa_latency_experiment.yaml output_dir
@@ -44,6 +45,32 @@ INDEX_CLASSES = {
     "SVS": Vamana,
 }
 
+def extract_indices(res):
+    """Helper to extract predicted indices from result."""
+    if hasattr(res, "I"):
+        return res.I
+    if hasattr(res, "indices"):
+        return res.indices
+    raise RuntimeError("Cannot extract predicted indices from search result.")
+
+def compute_recall_at_k(pred, gt, k):
+    """
+    pred: [num_queries, k] predicted indices
+    gt: [num_queries, ...] ground truth indices
+    Returns recall@k
+    """
+    # Faiss GT may be shape [num_queries, k'] or [num_queries]
+    if gt.ndim == 1:
+        gt = gt[:, None]
+    matches = 0
+    num = pred.shape[0]
+    for i in range(num):
+        pred_set = set(pred[i])
+        gt_set = set(gt[i])
+        matches += len(pred_set & gt_set)
+    recall = matches / (num * min(k, gt.shape[1]))
+    return recall
+
 def build_and_save_index(index_class, build_params, base_vecs, index_file):
     idx = index_class()
     params = dict(build_params)
@@ -65,8 +92,9 @@ def run_experiment(cfg_path: str, output_dir: str):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[INFO] Loading dataset '{ds['name']}'...")
-    base_vecs, queries, _ = load_dataset(ds["name"])
+    base_vecs, queries, gt = load_dataset(ds["name"])
     queries = queries[:queries_n]
+    gt = gt[:queries_n] if gt is not None else None
 
     all_rows = []
 
@@ -85,7 +113,6 @@ def run_experiment(cfg_path: str, output_dir: str):
 
         if idx_csv.exists() and not overwrite:
             print(f"[SKIP] {idx_name}: Results exist. Use overwrite: true to rerun.")
-            # For plotting, load mean/std for this index
             df_idx = pd.read_csv(idx_csv)
             all_rows.append(df_idx.iloc[0].to_dict())
             continue
@@ -97,7 +124,6 @@ def run_experiment(cfg_path: str, output_dir: str):
 
         print(f"[RUN] {idx_name} ...")
 
-        # Prepare load arguments per index type
         if idx_type == "Quake":
             load_kwargs = {}
             if "use_numa" in build_params:
@@ -115,7 +141,6 @@ def run_experiment(cfg_path: str, output_dir: str):
             idx = IndexClass()
             idx.load(str(idx_file))
 
-        # Dispatch search argument keys by index type
         if idx_type == "SCANN":
             search_args = {"leaves_to_search": search_params.get("leaves_to_search", 100)}
         elif idx_type == "HNSW":
@@ -132,16 +157,16 @@ def run_experiment(cfg_path: str, output_dir: str):
             q = queries[i].unsqueeze(0).float()
             idx.search(q, k, **search_args)
 
-        # Benchmark Trials
+        # Benchmark Trials (and collect recall for first trial)
         trial_means = []
+        trial_recalls = []
         for t in range(trials):
             lats = []
-            for q_vec in queries:
+            if t == 0 and gt is not None:
+                all_preds = []
+            for qi, q_vec in enumerate(queries):
                 q = q_vec.unsqueeze(0).float()
-                res = idx.search(
-                    q, k,
-                    **search_args
-                )
+                res = idx.search(q, k, **search_args)
                 ti = getattr(res, "timing_info", None)
                 if ti and hasattr(ti, "total_time_ns"):
                     lats.append(ti.total_time_ns / 1e6)
@@ -149,18 +174,38 @@ def run_experiment(cfg_path: str, output_dir: str):
                     lats.append(res.latency_ms)
                 else:
                     raise RuntimeError(f"No timing info found in search result for {idx_name}")
+                # Collect predicted indices for recall in trial 0
+                if t == 0 and gt is not None:
+                    try:
+                        pred = extract_indices(res)
+                        if isinstance(pred, torch.Tensor):
+                            pred = pred.cpu().numpy()
+                        elif not isinstance(pred, np.ndarray):
+                            pred = np.asarray(pred)
+                        all_preds.append(pred[0] if pred.ndim > 1 else pred)
+                    except Exception:
+                        # Defensive fallback: don't break script if recall fails
+                        all_preds.append(np.full((k,), -1, dtype=np.int64))
             mean_t = float(np.mean(lats))
             trial_means.append(mean_t)
-            print(f" [trial {t+1}/{trials}] {mean_t:.2f} ms")
+            if t == 0 and gt is not None:
+                preds_arr = np.stack(all_preds, axis=0)
+                recall = compute_recall_at_k(preds_arr, gt, k)
+                trial_recalls.append(recall)
+                print(f" [trial {t+1}/{trials}] {mean_t:.2f} ms | recall@{k}: {recall:.4f}")
+            else:
+                print(f" [trial {t+1}/{trials}] {mean_t:.2f} ms")
 
         mean_lat = float(np.mean(trial_means))
         std_lat  = float(np.std(trial_means))
+        mean_recall = float(trial_recalls[0]) if trial_recalls else np.nan
         n_workers_val = build_params.get("num_workers", None)
         row = {
             "index": idx_name,
             "n_workers": n_workers_val,
             "mean_latency_ms": mean_lat,
             "std_latency_ms":  std_lat,
+            f"recall_at_{k}": mean_recall,
         }
         all_rows.append(row)
         pd.DataFrame([row]).to_csv(idx_csv, index=False)
@@ -171,7 +216,7 @@ def run_experiment(cfg_path: str, output_dir: str):
     df.to_csv(out_csv, index=False)
     print(f"\n[RESULT] Results written to {out_csv}")
 
-    # Plot
+    # Plot Latency
     plt.figure()
     for idx_name in df["index"].unique():
         subset = df[df["index"] == idx_name]
@@ -193,3 +238,25 @@ def run_experiment(cfg_path: str, output_dir: str):
     plt.tight_layout()
     plt.savefig(plot_file)
     print(f"[PLOT] Saved to {plot_file}")
+
+    # Plot Recall
+    if f"recall_at_{k}" in df.columns:
+        plt.figure()
+        for idx_name in df["index"].unique():
+            subset = df[df["index"] == idx_name]
+            label = f"{idx_name}" if subset["n_workers"].isnull().all() else f"{idx_name} (n_workers={subset['n_workers'].iloc[0]})"
+            plt.plot(
+                subset["n_workers"] if "n_workers" in subset else subset.index,
+                subset[f"recall_at_{k}"],
+                marker="o",
+                label=label
+            )
+        plt.xscale("symlog", base=2)
+        plt.xlabel("Num Workers")
+        plt.ylabel(f"Recall@{k}")
+        plt.title(f"Recall@{k} (per-index)")
+        plt.legend()
+        plot_file = out_dir / f"{out_csv.stem}_recall.png"
+        plt.tight_layout()
+        plt.savefig(plot_file)
+        print(f"[PLOT] Recall plot saved to {plot_file}")
