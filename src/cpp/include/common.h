@@ -184,6 +184,8 @@ struct SearchParams {
     float recompute_threshold = DEFAULT_RECOMPUTE_THRESHOLD;
     float initial_search_fraction = DEFAULT_INITIAL_SEARCH_FRACTION;
     int aps_flush_period_us = DEFAULT_APS_FLUSH_PERIOD_US;
+    int sample_prefix = 0;
+    int sample_stride = 10;
 
     // Auncel params
     bool use_auncel = false;
@@ -238,6 +240,8 @@ struct SearchTimingInfo {
     int64_t buffer_init_time_ns; ///< Time spent on initializing buffers in nanoseconds.
     int64_t job_enqueue_time_ns; ///< Time spent on creating jobs in nanoseconds.
     int64_t boundary_distance_time_ns; ///< Time spent on computing boundary distances in nanoseconds.
+    int64_t aps_time_ns; ///< Time spent on APS in nanoseconds.
+    int64_t scan_time_ns; ///< Time spent on scanning in nanoseconds.
     int64_t job_wait_time_ns; ///< Time spent waiting for jobs to complete in nanoseconds.
     int64_t result_aggregate_time_ns; ///< Time spent on aggregating results in nanoseconds.
     int64_t total_time_ns; ///< Total time spent in nanoseconds.

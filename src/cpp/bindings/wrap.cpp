@@ -201,6 +201,10 @@ PYBIND11_MODULE(_bindings, m) {
                 "Flag to use SPANN for search.")
         .def_readwrite("spann_eps", &SearchParams::spann_eps,
                 "SPANN parameter epsilon for search.")
+        .def_readwrite("sample_prefix", &SearchParams::sample_prefix,
+                "Prefix length for APS sampling.")
+        .def_readwrite("sample_stride", &SearchParams::sample_stride,
+                "Stride length for APS sampling.")
 
         .def_readwrite("parent_params", &SearchParams::parent_params,
              "Search parameters for the parent index, if any.")
@@ -336,6 +340,10 @@ PYBIND11_MODULE(_bindings, m) {
              "Parameters used for the search operation.")
          .def_readwrite("parent_info", &SearchTimingInfo::parent_info,
              "Search info for the parent index.")
+        .def_readwrite("aps_time_ns", &SearchTimingInfo::aps_time_ns,
+            "Time spent on APS in nanoseconds.")
+        .def_readwrite("scan_time_ns", &SearchTimingInfo::scan_time_ns,
+            "Time spent on scanning in nanoseconds.")
          .def("__repr__", [](const SearchTimingInfo &s) {
              std::ostringstream oss;
              oss << "{";

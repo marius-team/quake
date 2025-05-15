@@ -18,30 +18,34 @@ workload_generator:
   query_cluster_sample_distribution: uniform
   seed: 9299
 indexes:
-  - name: Quake
+  - name: Quake10000
     index: Quake
     build_params:
-      nc: 1000
+      nc: 10000
+      num_workers: 0
+    search_params:
+      k: 10
+#      nprobe: 10
+      recall_target: .9
+      initial_search_fraction: 0.25
+  - name: Quake10000_sample
+    index: Quake
+    build_params:
+      nc: 10000
       num_workers: 0
     search_params:
       k: 10
       recall_target: .9
-  - name: IVF
-    index: IVF
-    build_params:
-      nc: 1000
-    search_params:
-      nprobe: 15
-      k: 10
+      initial_search_fraction: 0.1
 plot:
   x_axis: operation_number      # any column from the results CSV
   metrics: [latency_ms, recall] # any subset of stored metrics
   styles:                       # one entry per index name
-    Quake:
+    Quake10000:
       color: "#1f77b4"          # default Matplotlib hex’s are fine
       linestyle: "-"            # see plt.Line2D docs
       marker: "o"
-    Quake2:
+    Quake10000_sample:
       color: "#ff7f0e"          # default Matplotlib hex’s are fine
       linestyle: "-"            # see plt.Line2D docs
       marker: "o"
@@ -52,4 +56,4 @@ plot:
 overwrite:
   workload: false
   index: false
-  results: true
+  results: false

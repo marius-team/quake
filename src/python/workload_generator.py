@@ -479,17 +479,43 @@ class WorkloadEvaluator:
             elif op_type == "query":
                 qs = queries[ids]
                 t0 = time.perf_counter()
+                t_infos = []
                 if batch:
                     sr = index.search(qs, **search_params)
                     pred_ids = sr.ids
                 else:
-                    pred_ids = torch.cat([
-                        index.search(q.unsqueeze(0), **search_params).ids
-                        for q in qs
-                    ])
+                    p = []
+                    for q in qs:
+                        sr = index.search(q.unsqueeze(0), **search_params)
+                        p.append(sr.ids)
+                        t_infos.append(sr.timing_info)
+                    pred_ids = torch.cat(p)
+                    # pred_ids = torch.cat([
+                    #     index.search(q.unsqueeze(0), **search_params).ids
+                    #     for q in qs
+                    # ])
                 latency_ms = (time.perf_counter() - t0) * 1e3
                 gt_ids = torch.load(self.ops_dir / f"{op_id}_gt_ids.pt",
                                     weights_only=True)
+
+                total_parent_time = 0
+                total_time = 0
+                total_boundary_time = 0
+                total_aps_time = 0
+                total_scan_time = 0
+
+                for t_info in t_infos:
+                    total_parent_time += t_info.parent_info.total_time_ns / 1e6
+                    total_time += t_info.total_time_ns / 1e6
+                    total_boundary_time += t_info.boundary_distance_time_ns / 1e6
+                    total_aps_time += t_info.aps_time_ns / 1e6
+                    total_scan_time += t_info.scan_time_ns / 1e6
+
+                print(f" | parent {total_parent_time:.2f} ms"
+                      f" | total {total_time:.2f} ms"
+                      f" | boundary {total_boundary_time:.2f} ms"
+                      f" | aps {total_aps_time:.2f} ms"
+                      f" | scan {total_scan_time:.2f} ms")
                 recall = compute_recall(pred_ids, gt_ids,
                                         search_params["k"]).mean().item()
                 op["recall"] = recall

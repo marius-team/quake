@@ -149,6 +149,8 @@ class QuakeWrapper(IndexWrapper):
         aps_flush_period_us=50,
         n_threads=1,
         parent=None,
+        sample_prefix=0,
+        sample_stride=5
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Find the k-nearest neighbors of the query vectors.
@@ -169,6 +171,8 @@ class QuakeWrapper(IndexWrapper):
         search_params.aps_flush_period_us = aps_flush_period_us
         search_params.k = k
         search_params.num_threads = n_threads
+        search_params.sample_prefix = sample_prefix
+        search_params.sample_stride = sample_stride
 
         if parent is not None:
             search_params.parent_params = quake.SearchParams()

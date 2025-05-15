@@ -10,6 +10,9 @@
 #include <common.h>
 #include "faiss/utils/Heap.h"
 #include "faiss/utils/distances.h"
+#include "sorting/pdqsort.h"
+#include "sorting/floyd_rivest_select.h"
+#include "sorting/heap_select.h"
 
 inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     Tensor num_correct = torch::zeros(ids.size(0), torch::kInt64);
@@ -36,7 +39,7 @@ inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     return recall;
 }
 
-#define TOP_K_BUFFER_CAPACITY (8 * 1024)
+#define TOP_K_BUFFER_CAPACITY (16 * 1024)
 
 template<typename DistanceType = float, typename IdType = int>
 class TypedTopKBuffer {
@@ -51,7 +54,7 @@ public:
     std::atomic<int> partitions_scanned_;
 
     TypedTopKBuffer(int k, bool is_descending, int buffer_capacity = TOP_K_BUFFER_CAPACITY)
-        : k_(k), is_descending_(is_descending), topk_(buffer_capacity), processing_query_(true), partitions_scanned_(0) {
+            : k_(k), is_descending_(is_descending), topk_(buffer_capacity), processing_query_(true), partitions_scanned_(0) {
         assert(k <= buffer_capacity); // Ensure k is smaller than or equal to buffer size
 
         for (int i = 0; i < topk_.size(); i++) {
@@ -151,22 +154,47 @@ public:
     DistanceType flush() {
         std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
         if (curr_offset_ > k_) {
-            if (is_descending_) {
-                std::partial_sort(topk_.begin(), topk_.begin() + k_, topk_.begin() + curr_offset_,
-                                  [](const auto &a, const auto &b) { return a.first > b.first; });
+
+            // for k < 10 use heap select
+            if (k_ < 10) {
+                if (is_descending_) {
+                    miniselect::heap_select(topk_.begin(), topk_.begin() + k_,
+                                            topk_.begin() + curr_offset_,
+                                            [](const auto &a, const auto &b) { return a.first > b.first; });
+                } else {
+                    miniselect::heap_select(topk_.begin(), topk_.begin() + k_,
+                                            topk_.begin() + curr_offset_,
+                                            [](const auto &a, const auto &b) { return a.first < b.first; });
+                }
+            } else if (k_ < curr_offset_ * .001) {
+                if (is_descending_) {
+                    miniselect::floyd_rivest_select(topk_.begin(), topk_.begin() + k_,
+                                                    topk_.begin() + curr_offset_,
+                                                    [](const auto &a, const auto &b) { return a.first > b.first; });
+                } else {
+                    miniselect::floyd_rivest_select(topk_.begin(), topk_.begin() + k_,
+                                                    topk_.begin() + curr_offset_,
+                                                    [](const auto &a, const auto &b) { return a.first < b.first; });
+                }
             } else {
-                std::partial_sort(topk_.begin(), topk_.begin() + k_, topk_.begin() + curr_offset_,
-                                  [](const auto &a, const auto &b) { return a.first < b.first; });
+                if (is_descending_) {
+                    miniselect::pdqpartial_sort_branchless(topk_.begin(), topk_.begin() + k_,
+                                                           topk_.begin() + curr_offset_,
+                                                           [](const auto &a, const auto &b) { return a.first > b.first; });
+                } else {
+                    miniselect::pdqpartial_sort_branchless(topk_.begin(), topk_.begin() + k_,
+                                                           topk_.begin() + curr_offset_,
+                                                           [](const auto &a, const auto &b) { return a.first < b.first; });
+                }
             }
             curr_offset_ = k_; // After flush, retain only the top-k elements
         } else {
-            // sort the curr_offset_ elements
             if (is_descending_) {
-                std::sort(topk_.begin(), topk_.begin() + curr_offset_,
-                          [](const auto &a, const auto &b) { return a.first > b.first; });
+                miniselect::pdqsort_branchless(topk_.begin(), topk_.begin() + curr_offset_,
+                                              [](const auto &a, const auto &b) { return a.first > b.first; });
             } else {
-                std::sort(topk_.begin(), topk_.begin() + curr_offset_,
-                          [](const auto &a, const auto &b) { return a.first < b.first; });
+                miniselect::pdqsort_branchless(topk_.begin(), topk_.begin() + curr_offset_,
+                                              [](const auto &a, const auto &b) { return a.first < b.first; });
             }
         }
         return topk_[std::min(curr_offset_, k_ - 1)].first;
@@ -195,7 +223,7 @@ public:
         return topk_[std::min(curr_offset_, k_ - 1)].first;
     }
 
-    // Get the current top-k indices (after final flush)
+// Get the current top-k indices (after final flush)
     std::vector<IdType> get_topk_indices() {
         std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
         flush(); // Ensure the buffer is properly flushed
