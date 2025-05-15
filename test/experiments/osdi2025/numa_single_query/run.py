@@ -108,6 +108,8 @@ def run_experiment(cfg_path: str, output_dir: str):
             idx.load(str(idx_file), **load_kwargs)
         elif idx_type == "DiskANN":
             idx = IndexClass()
+            # remove metric from build_params
+            build_params.pop("metric", None)
             idx.load(str(idx_file), **build_params)
         else:
             idx = IndexClass()
