@@ -1,3 +1,4 @@
+# numa_latency_experiment.yaml
 dataset:
   name: sift1m
   num_queries: 100
@@ -5,6 +6,7 @@ dataset:
 
 trials: 5
 warmup: 10
+overwrite: false  # Set to true to force all indexes to rerun
 
 indexes:
   - name: Quake_1
@@ -95,7 +97,7 @@ indexes:
   - name: DiskANN
     index: DiskANN
     build_params:
-      complexity: 128,
+      complexity: 128
       graph_degree: 64
       metric: l2
     search_params:

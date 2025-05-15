@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+"""
+NUMA Single-Query Latency Benchmark
+
+Benchmarks a suite of approximate nearest neighbor (ANN) indexes (Quake, Faiss-IVF, SCANN, HNSW, DiskANN, SVS, etc.)
+for single-query latency under configurable build and search parameters. Results are cached and only recomputed if
+the 'overwrite' flag is set in the configuration. Outputs a unified CSV and a latency plot per index.
+
+Usage:
+    python numa_latency_experiment.py numa_latency_experiment.yaml output_dir
+"""
+
 import yaml
 import numpy as np
 import torch
@@ -8,18 +19,36 @@ from pathlib import Path
 
 from quake.datasets.ann_datasets import load_dataset
 from quake.index_wrappers.faiss_ivf import FaissIVF
+from quake.index_wrappers.faiss_hnsw import FaissHNSW
 from quake.index_wrappers.quake import QuakeWrapper
+
+# Placeholder index wrappers. Replace these with real implementations.
+try:
+    from quake.index_wrappers.scann import Scann
+except ImportError:
+    class ScannWrapper: pass
+try:
+    from quake.index_wrappers.diskann import DiskANNDynamic
+except ImportError:
+    class DiskANNWrapper: pass
+try:
+    from quake.index_wrappers.vamana import Vamana
+except ImportError:
+    class SVSWrapper: pass
 
 INDEX_CLASSES = {
     "Quake": QuakeWrapper,
     "IVF": FaissIVF,
-    # Extend as needed
+    "SCANN": Scann,
+    "HNSW": FaissHNSW,
+    "DiskANN": DiskANNDynamic,
+    "SVS": Vamana,
 }
 
 def build_and_save_index(index_class, build_params, base_vecs, index_file):
     idx = index_class()
     params = dict(build_params)
-    if "nc" not in params:
+    if "nc" not in params and "num_leaves" not in params:
         params["nc"] = int(np.sqrt(base_vecs.shape[0]))
     idx.build(base_vecs, **params)
     idx.save(str(index_file))
@@ -33,10 +62,12 @@ def run_experiment(cfg_path: str, output_dir: str):
     warmup       = cfg.get("warmup", 10)
     indexes_cfg  = cfg["indexes"]
     csv_name     = cfg.get("output", {}).get("results_csv", "numa_results.csv")
+    overwrite    = cfg.get("overwrite", False)
 
-    out_dir = Path(output_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Loading dataset '{ds['name']}'...")
+    print(f"[INFO] Loading dataset '{ds['name']}'...")
     base_vecs, queries, _ = load_dataset(ds["name"])
     queries = queries[:queries_n]
 
@@ -49,16 +80,25 @@ def run_experiment(cfg_path: str, output_dir: str):
         search_params = idx_cfg.get("search_params", {})
         IndexClass    = INDEX_CLASSES.get(idx_type)
         if IndexClass is None:
-            print(f"Unknown index type: {idx_type}")
+            print(f"[WARN] Unknown index type: {idx_type}. Skipping.")
             continue
 
+        idx_csv = out_dir / f"{idx_name}_results.csv"
         idx_file = out_dir / f"{idx_name}_index.bin"
-        if not idx_file.exists():
-            print(f"Building {idx_name} index...")
-            build_and_save_index(IndexClass, build_params, base_vecs, idx_file)
-            print(f"Index saved at {idx_file}")
 
-        print(f"\n--- {idx_name} ---")
+        if idx_csv.exists() and not overwrite:
+            print(f"[SKIP] {idx_name}: Results exist. Use overwrite: true to rerun.")
+            # For plotting, load mean/std for this index
+            df_idx = pd.read_csv(idx_csv)
+            all_rows.append(df_idx.iloc[0].to_dict())
+            continue
+
+        if not idx_file.exists():
+            print(f"[BUILD] {idx_name} index...")
+            build_and_save_index(IndexClass, build_params, base_vecs, idx_file)
+            print(f"[SAVE] Index saved at {idx_file}")
+
+        print(f"[RUN] {idx_name} ...")
 
         # Prepare load arguments per index type
         if idx_type == "Quake":
@@ -73,13 +113,24 @@ def run_experiment(cfg_path: str, output_dir: str):
             idx = IndexClass()
             idx.load(str(idx_file))
 
-        nprobe = search_params.get("nprobe", 100)
+        # Dispatch search argument keys by index type
+        if idx_type == "SCANN":
+            search_args = {"leaves_to_search": search_params.get("leaves_to_search", 100)}
+        elif idx_type == "HNSW":
+            search_args = {"ef_search": search_params.get("ef_search", 32)}
+        elif idx_type == "DiskANN":
+            search_args = {"complexity": search_params.get("complexity", 32)}
+        elif idx_type == "SVS":
+            search_args = {"search_window_size": search_params.get("search_window_size", 32)}
+        else:  # IVF, Quake, others
+            search_args = {"nprobe": search_params.get("nprobe", 100)}
 
-        # warm-up
+        # Warmup
         for i in range(min(warmup, len(queries))):
             q = queries[i].unsqueeze(0).float()
-            idx.search(q, k, batched_scan=False, nprobe=nprobe)
+            idx.search(q, k, batched_scan=False, **search_args)
 
+        # Benchmark Trials
         trial_means = []
         for t in range(trials):
             lats = []
@@ -88,7 +139,7 @@ def run_experiment(cfg_path: str, output_dir: str):
                 res = idx.search(
                     q, k,
                     batched_scan=False,
-                    nprobe=nprobe
+                    **search_args
                 )
                 ti = getattr(res, "timing_info", None)
                 if ti and hasattr(ti, "total_time_ns"):
@@ -96,27 +147,28 @@ def run_experiment(cfg_path: str, output_dir: str):
                 elif hasattr(res, "latency_ms"):
                     lats.append(res.latency_ms)
                 else:
-                    raise RuntimeError("No timing info found in search result")
+                    raise RuntimeError(f"No timing info found in search result for {idx_name}")
             mean_t = float(np.mean(lats))
             trial_means.append(mean_t)
-            print(f" Trial {t+1}/{trials}: {mean_t:.2f} ms")
+            print(f" [trial {t+1}/{trials}] {mean_t:.2f} ms")
 
         mean_lat = float(np.mean(trial_means))
         std_lat  = float(np.std(trial_means))
-        # Pull out n_workers for grouping if present, else use name
         n_workers_val = build_params.get("num_workers", None)
-        all_rows.append({
+        row = {
             "index": idx_name,
             "n_workers": n_workers_val,
             "mean_latency_ms": mean_lat,
             "std_latency_ms":  std_lat,
-        })
+        }
+        all_rows.append(row)
+        pd.DataFrame([row]).to_csv(idx_csv, index=False)
 
-    # Save CSV
+    # Save Unified CSV
     df = pd.DataFrame(all_rows)
     out_csv = out_dir / csv_name
     df.to_csv(out_csv, index=False)
-    print(f"\nResults written to {out_csv}")
+    print(f"\n[RESULT] Results written to {out_csv}")
 
     # Plot
     plt.figure()
@@ -134,9 +186,9 @@ def run_experiment(cfg_path: str, output_dir: str):
     plt.xscale("symlog", base=2)
     plt.xlabel("Num Workers")
     plt.ylabel("Mean Latency (ms)")
-    plt.title("Single‑Query Latency (per-index)")
+    plt.title("Single-Query Latency (per-index)")
     plt.legend()
     plot_file = out_dir / f"{out_csv.stem}_latency.png"
     plt.tight_layout()
     plt.savefig(plot_file)
-    print(f"Plot saved to {plot_file}")
+    print(f"[PLOT] Saved to {plot_file}")
