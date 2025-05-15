@@ -81,7 +81,7 @@ indexes:
     index: SCANN
     build_params:
       num_leaves: 1000
-      metric: l2
+      metric: squared_l2
     search_params:
       leaves_to_search: 1000
 
