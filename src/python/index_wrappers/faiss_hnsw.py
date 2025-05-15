@@ -130,3 +130,9 @@ class FaissHNSW(IndexWrapper):
         """
         # throw a runtime error
         raise RuntimeError("Faiss HNSW does not support removal of vectors.")
+
+    def index_state(self) -> str:
+        return ""
+
+    def maintenance(self):
+        pass

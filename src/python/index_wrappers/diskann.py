@@ -190,3 +190,9 @@ class DiskANNDynamic(IndexWrapper):
 
     def centroids(self) -> torch.Tensor | None:
         return super().centroids()
+
+    def index_state(self) -> str:
+        return ""
+
+    def maintenance(self):
+        pass

@@ -22,7 +22,6 @@ from quake.index_wrappers.faiss_ivf import FaissIVF
 from quake.index_wrappers.faiss_hnsw import FaissHNSW
 from quake.index_wrappers.quake import QuakeWrapper
 
-# Placeholder index wrappers. Replace these with real implementations.
 try:
     from quake.index_wrappers.scann import Scann
 except ImportError:

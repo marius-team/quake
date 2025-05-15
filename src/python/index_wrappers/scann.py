@@ -187,5 +187,11 @@ class Scann(IndexWrapper):
         """
         self.index = scann.scann_ops_pybind.load_searcher(str(filename))
 
+    def index_state(self) -> str:
+        return self.index.config()
+
+    def maintenance(self):
+        pass
+
     def centroids(self) -> torch.Tensor | None:
         return super().centroids()
