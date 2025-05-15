@@ -107,6 +107,7 @@ indexes:
     index: SVS
     build_params:
       graph_max_degree: 64
+      alpha: 1.1
       window_size: 128
       metric: l2
     search_params:
