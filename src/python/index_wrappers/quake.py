@@ -220,7 +220,7 @@ class QuakeWrapper(IndexWrapper):
             f"verify_numa={verify_numa}, same_core={same_core}, use_centroid_workers={use_centroid_workers}"
         )
         self.index = QuakeIndex()
-        self.index.load(str(filename), num_workers)
+        self.index.load(str(filename), num_workers, use_numa)
 
     def centroids(self) -> torch.Tensor:
         """

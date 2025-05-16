@@ -16,7 +16,8 @@ QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
                                    shared_ptr<PartitionManager> partition_manager,
                                    shared_ptr<MaintenancePolicy> maintenance_policy,
                                    MetricType metric,
-                                   int num_workers)
+                                   int num_workers,
+                                   bool use_numa)
     : parent_(parent),
       partition_manager_(partition_manager),
       maintenance_policy_(maintenance_policy),
@@ -25,7 +26,7 @@ QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
       workers_initialized_(false) {
 
     if (num_workers_ > 0) {
-        initialize_workers(num_workers_);
+        initialize_workers(num_workers_, use_numa);
     }
 }
 
@@ -47,7 +48,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, in
 }
 
 // Initialize Worker Threads
-void QueryCoordinator::initialize_workers(int num_cores) {
+void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
     if (workers_initialized_) {
         std::cerr << "[QueryCoordinator::initialize_workers] Workers already initialized." << std::endl;
         return;
@@ -56,7 +57,7 @@ void QueryCoordinator::initialize_workers(int num_cores) {
     std::cout << "[QueryCoordinator::initialize_workers] Initializing " << num_cores << " worker threads." <<
             std::endl;
 
-    partition_manager_->distribute_partitions(num_cores);
+    partition_manager_->distribute_partitions(num_cores, use_numa);
 
     core_resources_.resize(num_cores);
     worker_threads_.resize(num_cores);

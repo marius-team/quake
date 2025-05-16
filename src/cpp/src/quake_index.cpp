@@ -84,7 +84,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
     initialize_maintenance_policy(default_params);
 
     // create query coordinator
-    query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, build_params_->num_workers);
+    query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, build_params_->num_workers, build_params_->use_numa);
 
     auto end = std::chrono::high_resolution_clock::now();
     timing_info->total_time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -236,7 +236,7 @@ void QuakeIndex::save(const std::string& dir_path) {
     std::cout << "[QuakeIndex::save] Index saved to directory: " << dir_path << "\n";
 }
 
-void QuakeIndex::load(const std::string& dir_path, int n_workers) {
+void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa) {
     namespace fs = std::filesystem;
 
     if (!fs::exists(dir_path) || !fs::is_directory(dir_path)) {
@@ -293,7 +293,7 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers) {
 
     // 5. Create query coordinator
     std::cout << "Loading coordinator with n_workers=" << n_workers << '\n';
-    query_coordinator_ = std::make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, n_workers);
+    query_coordinator_ = std::make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, n_workers, use_numa);
     std::cout << "Loaded coordinator\n";
 }
 

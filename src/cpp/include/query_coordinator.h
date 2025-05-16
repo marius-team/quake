@@ -85,7 +85,8 @@ public:
         shared_ptr<PartitionManager> partition_manager,
         shared_ptr<MaintenancePolicy> maintenance_policy,
         MetricType metric,
-        int num_workers=0);
+        int num_workers=0,
+        bool use_numa=false);
 
     /**
     * @brief Destructor for QueryCoordinator.
@@ -148,7 +149,7 @@ public:
      *
      * @param num_workers Number of worker threads to initialize.
      */
-    void initialize_workers(int num_workers);
+    void initialize_workers(int num_workers, bool use_numa=false);
 
     /**
      * @brief Shuts down all worker threads.
