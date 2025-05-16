@@ -63,6 +63,7 @@ indexes:
     search_params:
       nprobe: 20
       batched_scan: false
+      n_threads: 16
 
   - name: Quake_1_numa
     index: Quake

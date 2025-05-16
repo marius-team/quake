@@ -5,10 +5,10 @@ dataset:
   name: sift1m
   path: data
 experiment:
-  nq: 100
-  k: 1
+  nq: 10000
+  k: 100
   n_workers: 0
-  recall_targets: [.2, .3, .4, .5, .6, 0.7, .75, 0.8, .85, 0.9, 0.95, 0.99, .999]
+  recall_targets: [0.8, 0.9, 0.99]
   recompute_ratio: 0.0001
   use_precompute: true
   initial_search_fraction: .1
@@ -18,7 +18,8 @@ index:
 overwrite:
   index: false
   results: true
-methods: ['LAET', 'Auncel', 'Oracle', 'FixedNProbe', 'APS', 'SPANN']
+#methods: ['LAET', 'Auncel', 'Oracle', 'FixedNProbe', 'APS', 'SPANN']
+methods: ['Auncel']
 
 paths:
   index_dir: data/sift1m/indexes

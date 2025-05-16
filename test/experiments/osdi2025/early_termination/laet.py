@@ -233,7 +233,7 @@ class LAETPipeline:
 
     def run_inference_for_quake_experiment(self, quake_idx, queries_torch, gt_torch,
                                            target_recall, k_search, base_quake_sp,
-                                           num_bs_steps=20, multiplier_range=(0.1, 5.0)):
+                                           num_bs_steps=20, multiplier_range=(0.1, 50.0)):
         if not self.gbdt_model:
             print("LAET Inference Error: GBDT model not loaded.")
             return np.nan, np.nan, np.nan
@@ -249,7 +249,7 @@ class LAETPipeline:
         quake_nlist_cap = quake_idx.nlist() if callable(getattr(quake_idx, 'nlist', None)) else getattr(quake_idx, 'nlist', 2048)
 
         # --- Log GBDT base_p predictions sample ---
-        sample_size_for_log = min(nq, 100)
+        sample_size_for_log = nq
         sample_base_p_preds = [self._predict_base_search_param(queries_np[i]) for i in range(sample_size_for_log)]
         if sample_base_p_preds:
             print(f"LAET INFERENCE (TargetRecall={target_recall:.2f}): Sample GBDT base_p predictions (first {sample_size_for_log}): "

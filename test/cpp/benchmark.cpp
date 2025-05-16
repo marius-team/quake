@@ -30,7 +30,7 @@ static const int64_t DIM = 128;
 static const int64_t NUM_VECTORS = 1000000;   // number of database vectors
 static const int64_t N_LIST = 1000;           // number of clusters for IVF
 static const int64_t NUM_QUERIES = 10000;     // number of queries for search benchmark
-static const int64_t K = 100;                  // top-K neighbors
+static const int64_t K = 10;                  // top-K neighbors
 static const int64_t N_PROBE = 20;             // number of probes for IVF
 static const int64_t N_WORKERS = 12;           // number of workers for parallel query coordinator
 
@@ -314,6 +314,14 @@ TEST_F(QuakeWorkerIVFBenchmark, SearchBatch) {
     auto elapsed = duration_cast<milliseconds>(end - start).count();
 
     std::cout << "[Quake IVF Worker] Batched search time: " << elapsed << " ms" << std::endl;
+
+    // print out timing info
+    auto timing_info = result->timing_info;
+    std::cout << "Total time: " << timing_info->total_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "Parent search time: " << timing_info->parent_info->total_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "Job enqueue time: " << timing_info->job_enqueue_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "Result aggregate time: " << timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "Job Wait time: " << timing_info->job_wait_time_ns / 1e6 << " ms" << std::endl;
     ASSERT_GT(elapsed, 0);
 }
 

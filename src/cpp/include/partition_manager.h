@@ -114,13 +114,13 @@ public:
      * @brief Distribute the partitions across multiple workers.
      * @param num_workers The number of workers to distribute the partitions across.
      */
-    void distribute_partitions(int num_workers);
+    void distribute_partitions(int num_workers, bool use_numa = false);
 
     /**
      * @brief Set the core ID for a given partition.
      * @param partition_id The ID of the partition.
      */
-    void set_partition_core_id(int64_t partition_id, int core_id);
+    void set_partition_core_id(int64_t partition_id, int core_id, bool use_numa = false);
 
     /**
      * @brief Return the core ID for a given partition.

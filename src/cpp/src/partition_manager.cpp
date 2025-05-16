@@ -574,7 +574,7 @@ void PartitionManager::delete_partitions(const Tensor &partition_ids, bool reass
 }
 
 
-void PartitionManager::distribute_partitions(int num_workers) {
+void PartitionManager::distribute_partitions(int num_workers, bool use_numa) {
     if (debug_) {
         std::cout << "[PartitionManager] distribute_partitions: Attempting to distribute partitions across "
                   << num_workers << " workers." << std::endl;
@@ -625,8 +625,15 @@ void PartitionManager::distribute_partitions(int num_workers) {
     }
 }
 
-void PartitionManager::set_partition_core_id(int64_t partition_id, int core_id) {
+void PartitionManager::set_partition_core_id(int64_t partition_id, int core_id, bool use_numa) {
     partition_store_->partitions_[partition_id]->set_core_id(core_id);
+
+    #ifdef QUAKE_USE_NUMA
+    if (use_numa) {
+        int node = numa_node_of_cpu(core_id);    // <-- single call
+        partition_store_->partitions_[partition_id]->set_numa_node(core_id);
+    }
+    #endif
 }
 
 int PartitionManager::get_partition_core_id(int64_t partition_id) {
