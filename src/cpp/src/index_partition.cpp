@@ -255,7 +255,7 @@ T* IndexPartition::allocate_memory(size_t num_elements, int numa_node) {
         std::cout << "Calling malloc with total_bytes=" << total_bytes << ", numa_node=" << numa_node << '\n';
         ptr = reinterpret_cast<T*>(std::malloc(total_bytes));
     } else {
-        std::cout << "Calling numa_alloc_onnode with total_bytes=" << total_bytes << "", numa_node=" << numa_node << '\n';
+        std::cout << "Calling numa_alloc_onnode with total_bytes=" << total_bytes << ", numa_node=" << numa_node << '\n';
         ptr = reinterpret_cast<T*>(numa_alloc_onnode(total_bytes, numa_node));
     }
 #else
