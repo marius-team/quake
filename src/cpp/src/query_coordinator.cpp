@@ -45,7 +45,6 @@ void QueryCoordinator::allocate_core_resources(int c, int nq, int k, int d)
     r.local_query_buffer.resize(nq * d * sizeof(float));
     numa_tonode_memory(r.local_query_buffer.data(),
                        r.local_query_buffer.size(), node);
-    prefault_range(r.local_query_buffer.data(), r.local_query_buffer.size());
 #else
     r.local_query_buffer.resize(nq * d * sizeof(float));
 #endif
