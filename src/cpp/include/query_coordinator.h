@@ -47,6 +47,10 @@ struct PartitionScanResult {
             : query_id_global(q_id), original_partition_id(p_id), distances(std::move(dists)), indices(std::move(idxs)), is_valid(true) {}
 };
 
+struct AggregatedResultItem {
+    int64_t query_global_id; // The global ID of the query this result pertains to
+    PartitionScanResult result;    // The actual result data from the worker
+};
 
 // Structure to hold resources per core/worker
 struct CoreResources {
@@ -86,13 +90,7 @@ public:
     std::vector<std::shared_ptr<TopkBuffer>> global_topk_buffer_pool_;
     std::mutex global_pool_mutex_; // Protects resizing of global_topk_buffer_pool_
 
-    // Non-blocking queue for workers to push results to the coordinator thread.
-    // One such queue is needed if worker_scan handles multiple queries in one call,
-    // or a single queue if worker_scan is only ever for one query's results.
-    // For a single query (num_queries_total = 1 in worker_scan), one queue is enough.
-    // If worker_scan can handle batches of queries, then a vector of these might be needed.
-    // Let's assume for now worker_scan might process a batch of queries, so a vector of queues.
-    std::vector<moodycamel::ConcurrentQueue<PartitionScanResult>> query_result_queues_;
+    moodycamel::ConcurrentQueue<AggregatedResultItem> aggregated_results_queue_;
     std::mutex result_queues_mutex_; // Protects resizing of query_result_queues_
 
 

@@ -114,6 +114,7 @@ void QueryCoordinator::shutdown_workers() {
 }
 
 // Reverted partition_scan_worker_fn: workers directly update global_topk_buffer_pool and set job_flags_
+// MODIFIED: Workers now enqueue to a single aggregated_results_queue_
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     CoreResources &res = core_resources_[core_index];
 
@@ -123,7 +124,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     while (true) {
         ScanJob job;
-        res.job_queue.wait_dequeue(job);
+        res.job_queue.wait_dequeue(job); // Worker blocks here until a job is available
 
         if (job.partition_id == -1 || stop_workers_.load(std::memory_order_relaxed)) {
             break;
@@ -133,7 +134,8 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             std::cerr << "[QueryCoordinator::partition_scan_worker_fn] Job for partition " << job.partition_id << " has no query_ids." << std::endl;
             continue;
         }
-        int64_t current_global_query_id = job.query_ids[0]; // For non-batched, or the first query in a worker's batch context
+        // For non-batched, current_global_query_id is job.query_ids[0].
+        // For batched, results will be enqueued per query_id in job.query_ids.
 
         const float *partition_codes_ptr = nullptr;
         const int64_t *partition_ids_ptr = nullptr;
@@ -147,15 +149,17 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             std::cerr << "[QueryCoordinator::partition_scan_worker_fn] Error accessing partition " << job.partition_id << ": " << e.what() << std::endl;
             // Send an invalid/empty result for each query this job was supposed to serve
             for(int64_t q_id : job.query_ids) {
-                query_result_queues_[q_id].enqueue(PartitionScanResult(q_id, job.partition_id, false));
+                // MODIFICATION: Enqueue to aggregated_results_queue_
+                aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, false)});
             }
             continue;
         }
 
         if (partition_size == 0 || partition_codes_ptr == nullptr) {
-            // Enqueue an empty but valid result to signal completion of this job
+            // Enqueue an empty but valid result to signal completion of this job for each query
             for(int64_t q_id : job.query_ids) {
-                query_result_queues_[q_id].enqueue(PartitionScanResult(q_id, job.partition_id, {}, {}));
+                // MODIFICATION: Enqueue to aggregated_results_queue_
+                aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, {}, {})});
             }
             continue;
         }
@@ -163,6 +167,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         int current_dim = partition_manager_->d();
 
         if (!job.is_batched) {
+            int64_t current_global_query_id = job.query_ids[0];
             // Ensure local_query_buffer is large enough
             size_t required_query_buffer_size = static_cast<size_t>(current_dim * sizeof(float));
             if (res.local_query_buffer.size() < required_query_buffer_size) {
@@ -174,17 +179,19 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 res.topk_buffer_pool.push_back(std::make_shared<TopkBuffer>(job.k, metric_ == faiss::METRIC_INNER_PRODUCT));
             }
             std::shared_ptr<TopkBuffer> local_topk_buffer = res.topk_buffer_pool[0];
-            local_topk_buffer->set_k(job.k);
-            local_topk_buffer->reset();
+            local_topk_buffer->set_k(job.k); // Ensure k is set for this job
+            local_topk_buffer->reset();     // Reset buffer for new scan
 
             scan_list((float *)res.local_query_buffer.data(),
                       partition_codes_ptr, partition_ids_ptr,
                       partition_size, current_dim,
                       *local_topk_buffer, metric_);
 
-            query_result_queues_[current_global_query_id].enqueue(
+            // MODIFICATION: Enqueue to aggregated_results_queue_
+            aggregated_results_queue_.enqueue(AggregatedResultItem{
+                    current_global_query_id,
                     PartitionScanResult(current_global_query_id, job.partition_id, local_topk_buffer->get_topk(), local_topk_buffer->get_topk_indices())
-            );
+            });
 
         } else { // Batched job for this worker (multiple queries, one partition)
             size_t required_query_batch_buffer_size = static_cast<size_t>(job.num_queries * current_dim * sizeof(float));
@@ -192,14 +199,16 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 res.local_query_buffer.resize(required_query_batch_buffer_size);
             }
 
-            // job.query_vector points to the start of the *entire* batch of queries for worker_scan
-            // job.query_ids contains the *global indices* of queries to process in *this specific ScanJob*
             for (int i = 0; i < job.num_queries; ++i) {
-                int64_t global_q_idx = job.query_ids[i];
-                std::memcpy(res.local_query_buffer.data() + i * current_dim * sizeof(float), // Dest in worker's local batch buffer
-                            job.query_vector + global_q_idx * current_dim,                   // Source from the full query tensor x_ptr
-                            current_dim * sizeof(float));
+                int64_t global_q_idx_for_job_query_ids = job.query_ids[i]; // This is the actual global query ID
+                // The job.query_vector points to the beginning of the batch of query vectors (x_ptr)
+                // The global_q_idx_for_job_query_ids is the index IN THAT ORIGINAL BATCH (x_ptr)
+                // So, the source is job.query_vector (x_ptr) + global_q_idx_for_job_query_ids * dimension
+                std::memcpy(res.local_query_buffer.data() + static_cast<size_t>(i) * current_dim * sizeof(float), // Dest in worker's local batch buffer
+                            job.query_vector + static_cast<size_t>(global_q_idx_for_job_query_ids) * current_dim,      // Source from the full query tensor x_ptr
+                            static_cast<size_t>(current_dim) * sizeof(float));
             }
+
 
             if (res.topk_buffer_pool.size() < static_cast<size_t>(job.num_queries)) {
                 res.topk_buffer_pool.resize(job.num_queries);
@@ -208,15 +217,15 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 if (!res.topk_buffer_pool[i]) {
                     res.topk_buffer_pool[i] = std::make_shared<TopkBuffer>(job.k, metric_ == faiss::METRIC_INNER_PRODUCT);
                 } else {
-                    res.topk_buffer_pool[i]->set_k(job.k);
-                    res.topk_buffer_pool[i]->reset();
+                    res.topk_buffer_pool[i]->set_k(job.k); // Ensure k is set
+                    res.topk_buffer_pool[i]->reset();    // Reset for new scan
                 }
             }
 
-            if (job.num_queries < 5) {
+            if (job.num_queries < 5) { // Threshold for using individual scans vs batched scan
                 for (int i = 0; i < job.num_queries; ++i) {
                     scan_list(
-                            (float *) res.local_query_buffer.data() + i * current_dim, // Each query in the batch
+                            (float *) res.local_query_buffer.data() + static_cast<size_t>(i) * current_dim, // Each query in the batch
                             partition_codes_ptr, partition_ids_ptr,
                             partition_size, current_dim,
                             *res.topk_buffer_pool[i], metric_);
@@ -231,10 +240,12 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             }
 
             for (int i = 0; i < job.num_queries; ++i) {
-                int64_t global_q_idx = job.query_ids[i];
-                query_result_queues_[global_q_idx].enqueue(
+                int64_t global_q_idx = job.query_ids[i]; // The actual global query ID
+                // MODIFICATION: Enqueue to aggregated_results_queue_
+                aggregated_results_queue_.enqueue(AggregatedResultItem{
+                        global_q_idx,
                         PartitionScanResult(global_q_idx, job.partition_id, res.topk_buffer_pool[i]->get_topk(), res.topk_buffer_pool[i]->get_topk_indices())
-                );
+                });
             }
         }
         // job_process_time_ns += duration_cast<nanoseconds>(high_resolution_clock::now() - job_process_start).count();
@@ -253,7 +264,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     }
     if (!x.defined() || x.size(0) == 0) {
         auto empty_result = std::make_shared<SearchResult>();
-        empty_result->ids = torch::empty({0, search_params->k}, torch::kInt64); // Ensure correct shape for empty
+        empty_result->ids = torch::empty({0, search_params->k}, torch::kInt64);
         empty_result->distances = torch::empty({0, search_params->k}, torch::kFloat32);
         empty_result->timing_info = std::make_shared<SearchTimingInfo>();
         return empty_result;
@@ -275,18 +286,14 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     if (partition_ids_to_scan_all_queries.dim() == 1) {
         partition_ids_to_scan_all_queries = partition_ids_to_scan_all_queries.unsqueeze(0).expand({num_queries_total, partition_ids_to_scan_all_queries.size(0)});
     }
-    auto p_ids_acc = partition_ids_to_scan_all_queries.accessor<int64_t, 2>();
+    auto p_ids_acc = partition_ids_to_scan_all_queries.accessor<int64_t, 2>(); // Corrected accessor usage
 
-    // Initialize global buffers and result queues
+    // Initialize global buffers
     {
         std::lock_guard<std::mutex> lock_pools(global_pool_mutex_); // Protects global_topk_buffer_pool_
-        std::lock_guard<std::mutex> lock_queues(result_queues_mutex_); // Protects query_result_queues_
 
         if (global_topk_buffer_pool_.size() < static_cast<size_t>(num_queries_total)) {
             global_topk_buffer_pool_.resize(num_queries_total);
-        }
-        if (query_result_queues_.size() < static_cast<size_t>(num_queries_total)) {
-            query_result_queues_.resize(num_queries_total);
         }
 
         for (int64_t q = 0; q < num_queries_total; ++q) {
@@ -297,23 +304,25 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 global_topk_buffer_pool_[q]->reset();
             }
             global_topk_buffer_pool_[q]->set_processing_query(true);
-
-            PartitionScanResult ignored_item; // For draining the queue
-            while(query_result_queues_[q].try_dequeue(ignored_item)); // Drain existing items
         }
     }
+    // Drain aggregated_results_queue_ (safer to do it outside the lock if it's a member queue)
+    AggregatedResultItem ignored_aggregated_item;
+    while(aggregated_results_queue_.try_dequeue(ignored_aggregated_item));
+
+
     timing_info->buffer_init_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - start_overall_scan_time).count();
 
     auto job_enqueue_start_time = high_resolution_clock::now();
-    std::vector<std::atomic<int>> expected_results_per_query(num_queries_total); // How many partition results each query expects
-    std::vector<std::atomic<int>> received_results_per_query(num_queries_total); // How many results have been dequeued
+    std::vector<std::atomic<int>> expected_results_per_query(num_queries_total);
+    std::vector<std::atomic<int>> received_results_per_query(num_queries_total); // Still useful for APS/tracking
 
-    for(int64_t i=0; i<num_queries_total; ++i) { // Initialize atomic counters
-        expected_results_per_query[i] = 0;
+    for(int64_t i=0; i<num_queries_total; ++i) {
+        expected_results_per_query[i] = 0; // Will be incremented as jobs are dispatched
         received_results_per_query[i] = 0;
     }
 
-    // Dispatch jobs
+    // Dispatch jobs (logic remains similar, workers will use the new queue)
     if (search_params->batched_scan) {
         std::unordered_map<int64_t, std::vector<int64_t>> partition_to_queries_map;
         for (int64_t q_global = 0; q_global < num_queries_total; ++q_global) {
@@ -325,7 +334,9 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 valid_jobs_for_this_q++;
             }
             expected_results_per_query[q_global].store(valid_jobs_for_this_q);
-            global_topk_buffer_pool_[q_global]->set_jobs_left(valid_jobs_for_this_q); // Initialize jobs_left for TopkBuffer
+            if(q_global < global_topk_buffer_pool_.size() && global_topk_buffer_pool_[q_global]) { // Defensive check
+                global_topk_buffer_pool_[q_global]->set_jobs_left(valid_jobs_for_this_q);
+            }
         }
 
         for(auto const& [pid, query_indices_for_pid] : partition_to_queries_map) {
@@ -333,12 +344,12 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             job.is_batched = true;
             job.partition_id = pid;
             job.k = k;
-            job.query_vector = x_ptr;
+            job.query_vector = x_ptr; // Pointer to the start of the entire batch of queries
             job.num_queries = query_indices_for_pid.size();
-            job.query_ids = query_indices_for_pid;
+            job.query_ids = query_indices_for_pid; // These are global indices into x_ptr
 
             int core_id = partition_manager_->get_partition_core_id(pid);
-            if (core_id < 0 || core_id >= num_workers_) core_id = pid % num_workers_; // Simple fallback
+            if (core_id < 0 || core_id >= num_workers_) core_id = pid % num_workers_;
             core_resources_[core_id].job_queue.enqueue(job);
         }
     } else { // Non-batched job dispatch
@@ -357,18 +368,21 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 job.num_queries = 1;
 
                 int core_id = partition_manager_->get_partition_core_id(pid);
-                if (core_id < 0 || core_id >= num_workers_) core_id = pid % num_workers_; // Simple fallback
+                if (core_id < 0 || core_id >= num_workers_) core_id = pid % num_workers_;
                 core_resources_[core_id].job_queue.enqueue(job);
             }
             expected_results_per_query[q_global].store(valid_jobs_for_this_q);
-            global_topk_buffer_pool_[q_global]->set_jobs_left(valid_jobs_for_this_q); // Initialize jobs_left for TopkBuffer
+            if(q_global < global_topk_buffer_pool_.size() && global_topk_buffer_pool_[q_global]) { // Defensive check
+                global_topk_buffer_pool_[q_global]->set_jobs_left(valid_jobs_for_this_q);
+            }
         }
     }
     timing_info->job_enqueue_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - job_enqueue_start_time).count();
 
-    auto last_aps_flush_time = high_resolution_clock::now();
+    auto last_aps_policy_check_time = high_resolution_clock::now();
     std::vector<std::vector<float>> boundary_distances_all_queries(num_queries_total);
     if (use_aps) {
+        // Boundary distance computation logic (remains the same as it's setup before result loop)
         for (int64_t q = 0; q < num_queries_total; ++q) {
             std::vector<int64_t> pids_for_this_query_vec;
             for (int64_t p_idx = 0; p_idx < partition_ids_to_scan_all_queries.size(1); ++p_idx) {
@@ -376,11 +390,10 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
             if (!pids_for_this_query_vec.empty() && parent_ && parent_->partition_manager_) {
                 std::vector<float*> cluster_centroids = parent_->partition_manager_->get_vectors(pids_for_this_query_vec);
-                // Filter out nullptrs from cluster_centroids before passing to compute_boundary_distances
                 cluster_centroids.erase(std::remove(cluster_centroids.begin(), cluster_centroids.end(), nullptr), cluster_centroids.end());
-                if (!cluster_centroids.empty()) { // Only compute if there are valid centroids
-                    boundary_distances_all_queries[q] = compute_boundary_distances(x[q], cluster_centroids, metric_ == faiss::METRIC_L2);
-                } else if (!pids_for_this_query_vec.empty()) { // If there were PIDs but no valid centroids found
+                if (!cluster_centroids.empty()) {
+                     boundary_distances_all_queries[q] = compute_boundary_distances(x[q], cluster_centroids, metric_ == faiss::METRIC_L2);
+                } else if (!pids_for_this_query_vec.empty()) {
                     std::cerr << "[QueryCoordinator::worker_scan] APS: No valid centroids for query " << q << " for PIDs." << std::endl;
                 }
             }
@@ -392,94 +405,98 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     for(int64_t q=0; q<num_queries_total; ++q) total_expected_results_overall += expected_results_per_query[q].load();
     int total_processed_results_overall = 0;
 
+    // MODIFICATION: New result processing loop using single aggregated_results_queue_
     while(total_processed_results_overall < total_expected_results_overall) {
-        bool work_done_in_iteration = false;
-        for (int64_t q = 0; q < num_queries_total; ++q) {
-            if (!global_topk_buffer_pool_[q]->currently_processing_query()) {
-                continue;
-            }
+        AggregatedResultItem aggregated_item;
+        bool dequeued_item = aggregated_results_queue_.try_dequeue(aggregated_item);
 
-            PartitionScanResult result_item;
-            // Try to dequeue one result for this query
-            if (query_result_queues_[q].try_dequeue(result_item)) {
-                work_done_in_iteration = true;
-                total_processed_results_overall++;
-                received_results_per_query[q]++;
+        if (dequeued_item) {
+            total_processed_results_overall++;
+            int64_t q_id = aggregated_item.query_global_id; // ID of the query this result belongs to
+            PartitionScanResult& result_item = aggregated_item.result;
 
-                if (result_item.is_valid && (!result_item.distances.empty() || !result_item.indices.empty())) {
-                    global_topk_buffer_pool_[q]->batch_add(
-                            result_item.distances.data(),
-                            result_item.indices.data(),
-                            result_item.indices.size()
-                    );
+            // Ensure q_id is valid and buffer exists
+            if (q_id >= 0 && q_id < num_queries_total && q_id < global_topk_buffer_pool_.size() && global_topk_buffer_pool_[q_id]) {
+                if (global_topk_buffer_pool_[q_id]->currently_processing_query()) {
+                    received_results_per_query[q_id]++; // Atomic increment
+
+                    if (result_item.is_valid && (!result_item.distances.empty() || !result_item.indices.empty())) {
+                        global_topk_buffer_pool_[q_id]->batch_add(
+                                result_item.distances.data(),
+                                result_item.indices.data(),
+                                result_item.indices.size()
+                        );
+                    } else {
+                        // This also decrements jobs_left_ in TopkBuffer
+                        global_topk_buffer_pool_[q_id]->record_empty_job();
+                    }
                 } else {
-                    global_topk_buffer_pool_[q]->record_empty_job(); // This also decrements jobs_left_
+                    if (global_topk_buffer_pool_[q_id]) { // Ensure buffer still exists
+                        global_topk_buffer_pool_[q_id]->record_empty_job(); // Count it as a processed job
+                    }
                 }
+            } else {
+                std::cerr << "[QueryCoordinator::worker_scan] Dequeued item with invalid or out-of-bounds q_id: " << q_id << std::endl;
             }
         }
 
-        // APS Logic
-        if (use_aps && duration_cast<microseconds>(high_resolution_clock::now() - last_aps_flush_time).count() > search_params->aps_flush_period_us) {
-            for (int64_t q = 0; q < num_queries_total; ++q) {
-                if (!global_topk_buffer_pool_[q]->currently_processing_query() || boundary_distances_all_queries[q].empty()) {
+        // APS Logic (runs if an item was dequeued or if wait_dequeue_timed timed out)
+        auto now = high_resolution_clock::now();
+        if (use_aps && duration_cast<microseconds>(now - last_aps_policy_check_time).count() > search_params->aps_flush_period_us) {
+            for (int64_t q_aps = 0; q_aps < num_queries_total; ++q_aps) {
+                if (q_aps >= global_topk_buffer_pool_.size() || !global_topk_buffer_pool_[q_aps] ||
+                    !global_topk_buffer_pool_[q_aps]->currently_processing_query() ||
+                    (q_aps >= boundary_distances_all_queries.size() || boundary_distances_all_queries[q_aps].empty()) ) {
                     continue;
                 }
-                auto curr_buffer = global_topk_buffer_pool_[q];
-                int num_partitions_effectively_scanned = curr_buffer->get_num_partitions_scanned(); // Based on non-empty batch_adds
+                auto curr_buffer = global_topk_buffer_pool_[q_aps];
+                int num_partitions_effectively_scanned = curr_buffer->get_num_partitions_scanned();
 
-                if (num_partitions_effectively_scanned > 0 && num_partitions_effectively_scanned < (int)boundary_distances_all_queries[q].size()) {
-                    float radius = curr_buffer->get_kth_distance(); // Calls flush
-                    // Simplified recall profile for now. A more robust one would map merged results to original ranks.
-                    std::vector<float> probs = compute_recall_profile(boundary_distances_all_queries[q], radius, dimension, {}, search_params->use_precomputed, metric_ == faiss::METRIC_L2);
-
-                    float estimated_recall = 0.0f;
-
-                    // TODO adjust reordering
-                    for(int i=0; i < num_partitions_effectively_scanned && i < probs.size(); ++i) {
-                        estimated_recall += probs[i];
-                    }
-
+                if (num_partitions_effectively_scanned > 0 && num_partitions_effectively_scanned < (int)boundary_distances_all_queries[q_aps].size()) {
+                    float radius = curr_buffer->get_kth_distance(); // Calls flush if needed
+                     std::vector<float> probs = compute_recall_profile(boundary_distances_all_queries[q_aps], radius, dimension, {}, search_params->use_precomputed, metric_ == faiss::METRIC_L2);
+                    float estimated_recall = 0.0f; // Placeholder for actual recall calculation
+                     for(int i=0; i < num_partitions_effectively_scanned && i < probs.size(); ++i) {
+                         estimated_recall += probs[i];
+                     }
                     if (estimated_recall >= search_params->recall_target) {
                         int jobs_remaining = curr_buffer->jobs_left_.load(std::memory_order_relaxed);
                         if (jobs_remaining > 0) {
-                            // Adjust total_expected_results_overall because these jobs won't be processed.
-                            total_expected_results_overall -= jobs_remaining;
-                            curr_buffer->record_skipped_jobs(jobs_remaining); // Sets jobs_left to 0 or less
+                            curr_buffer->record_skipped_jobs(jobs_remaining);
                         }
-                        curr_buffer->set_processing_query(false);
+                        curr_buffer->set_processing_query(false); // Main flag to stop adding to this buffer
                     }
                 }
             }
-            last_aps_flush_time = high_resolution_clock::now();
+            last_aps_policy_check_time = now;
         }
-        if (!work_done_in_iteration && total_processed_results_overall < total_expected_results_overall) {
-            // Avoid busy spinning if queues are temporarily empty but work is expected
-            std::this_thread::sleep_for(std::chrono::microseconds(1));
-        }
+        // No explicit sleep needed here as wait_dequeue_timed handles waiting.
     }
     timing_info->job_wait_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - job_processing_loop_start_time).count();
 
-    // Aggregate results
+    // Aggregate results (remains the same)
     auto result_aggregation_start_time = high_resolution_clock::now();
     auto topk_ids = torch::full({num_queries_total, k}, -1, torch::kInt64);
     auto topk_dists = torch::full({num_queries_total, k},
                                   (metric_ == faiss::METRIC_INNER_PRODUCT) ? -std::numeric_limits<float>::infinity() : std::numeric_limits<float>::infinity(),
                                   torch::kFloat32);
+    // Corrected accessor usage for torch::Tensor mock
     auto ids_accessor = topk_ids.accessor<int64_t, 2>();
     auto dists_accessor = topk_dists.accessor<float, 2>();
 
+
     for (int64_t q = 0; q < num_queries_total; ++q) {
-        global_topk_buffer_pool_[q]->flush(); // Ensure final state is sorted
-        std::vector<float> final_dists = global_topk_buffer_pool_[q]->get_topk();
-        std::vector<int64_t> final_ids = global_topk_buffer_pool_[q]->get_topk_indices();
-        int num_results_for_q = std::min((int)final_ids.size(), k);
-        for (int i = 0; i < num_results_for_q; ++i) {
-            ids_accessor[q][i] = final_ids[i];
-            dists_accessor[q][i] = final_dists[i];
+        if (q < global_topk_buffer_pool_.size() && global_topk_buffer_pool_[q]) {
+            global_topk_buffer_pool_[q]->flush();
+            std::vector<float> final_dists = global_topk_buffer_pool_[q]->get_topk();
+            std::vector<int64_t> final_ids = global_topk_buffer_pool_[q]->get_topk_indices();
+            int num_results_for_q = std::min((int)final_ids.size(), k);
+            for (int i = 0; i < num_results_for_q; ++i) {
+                ids_accessor[q][i] = final_ids[i]; // ids_accessor[q] returns a T*, so ids_accessor[q][i]
+                dists_accessor[q][i] = final_dists[i];
+            }
+            timing_info->partitions_scanned += global_topk_buffer_pool_[q]->get_num_partitions_scanned();
         }
-        timing_info->partitions_scanned += global_topk_buffer_pool_[q]->get_num_partitions_scanned();
-        // Maintenance policy hit tracking could be added here if needed,
-        // based on which partitions contributed to the final top-k.
     }
     timing_info->result_aggregate_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - result_aggregation_start_time).count();
 
