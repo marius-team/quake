@@ -1,19 +1,21 @@
-//
-// Created by Jason on 12/23/24.
-// Prompt for GitHub Copilot:
-// - Conform to the google style guide
-// - Use descriptive variable names
+// query_coordinator.h
 
 #ifndef QUERY_COORDINATOR_H
 #define QUERY_COORDINATOR_H
 
-#include <common.h>
-#include <list_scanning.h>
-#include <maintenance_policies.h>
-#include <blockingconcurrentqueue.h>
+#include <vector>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <condition_variable> // Not strictly used in this iteration, but good for future wait schemes
+#include "common.h" // For Tensor, MetricType, SearchResult, SearchParams, TopkBuffer etc.
+#include "blockingconcurrentqueue.h"
+#include "list_scanning.h"
 
+// Forward declarations
 class QuakeIndex;
 class PartitionManager;
+class MaintenancePolicy;
 
 /**
  * @brief Structure representing a scan job.
@@ -21,176 +23,92 @@ class PartitionManager;
  * A ScanJob encapsulates all parameters required to perform a scan on a given index partition.
  */
 struct ScanJob {
- int64_t partition_id;         ///< The identifier of the partition to be scanned.
- int k;                        ///< The number of neighbors (Top-K) to return.
- const float* query_vector;    ///< Pointer to the query vector.
- vector<int64_t> query_ids;    ///< Global query IDs; used in batched mode.
- bool is_batched = false;      ///< Indicates whether this is a batched query job.
- int64_t num_queries = 0;      ///< The number of queries in batched mode.
- int rank = 0;                 ///< Rank of the partition
+    int64_t partition_id;         ///< The identifier of the partition to be scanned.
+    int k;                        ///< The number of neighbors (Top-K) to return.
+    const float* query_vector;    ///< Pointer to the query vector.
+    vector<int64_t> query_ids;    ///< Global query IDs; used in batched mode.
+    bool is_batched = false;      ///< Indicates whether this is a batched query job.
+    int64_t num_queries = 0;      ///< The number of queries in batched mode.
+    int rank = 0;                 ///< Rank of the partition
 };
 
-/**
- * @brief The QueryCoordinator class.
- *
- * Distributes query scanning work across worker threads, aggregates results,
- * and supports both parallel and serial scan modes.
- */
+// Structure to hold individual partition scan results from workers
+struct PartitionScanResult {
+    int64_t query_id_global; // Global index of the query this result belongs to
+    int64_t original_partition_id; // The ID of the partition that was scanned
+    std::vector<float> distances;
+    std::vector<int64_t> indices;
+    bool is_valid; // Indicates if the scan was successful and produced data
+
+    PartitionScanResult(int64_t q_id = -1, int64_t p_id = -1, bool valid = false)
+            : query_id_global(q_id), original_partition_id(p_id), is_valid(valid) {}
+
+    PartitionScanResult(int64_t q_id, int64_t p_id, std::vector<float>&& dists, std::vector<int64_t>&& idxs)
+            : query_id_global(q_id), original_partition_id(p_id), distances(std::move(dists)), indices(std::move(idxs)), is_valid(true) {}
+};
+
+
+// Structure to hold resources per core/worker
+struct CoreResources {
+    int core_id = -1;
+    std::vector<uint8_t> local_query_buffer;
+    std::vector<std::shared_ptr<TopkBuffer>> topk_buffer_pool; // Local buffers for workers
+    moodycamel::BlockingConcurrentQueue<ScanJob> job_queue;
+};
+
 class QueryCoordinator {
 public:
-    // Public member variables (for internal use)
-    shared_ptr<PartitionManager> partition_manager_; ///< Manager for partition assignments.
-    shared_ptr<MaintenancePolicy> maintenance_policy_; ///< Policy for index maintenance.
-    shared_ptr<QuakeIndex> parent_;                    ///< Pointer to the parent index.
-    MetricType metric_;                                ///< Distance metric for search queries.
+    QueryCoordinator(std::shared_ptr<QuakeIndex> parent,
+                     std::shared_ptr<PartitionManager> partition_manager,
+                     std::shared_ptr<MaintenancePolicy> maintenance_policy,
+                     MetricType metric,
+                     int num_workers = 0,
+                     bool use_numa = false);
 
-    /**
-     * @brief Structure representing per-core resources.
-     *
-     * Each core maintains its own pool of Top‑K buffers, a local query buffer, and a dedicated job queue.
-     */
-    struct CoreResources {
-     int core_id; ///< Logical identifier of the core.
-     vector<shared_ptr<TopkBuffer>> topk_buffer_pool; ///< Preallocated Top‑K buffers.
-     vector<std::byte> local_query_buffer;            ///< Local aggregator for query results.
-     moodycamel::BlockingConcurrentQueue<ScanJob> job_queue; ///< Job queue for scan jobs.
-    };
-
-    vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.
-    bool workers_initialized_ = false;                 ///< Flag indicating if worker threads are initialized.
-    int num_workers_;                                  ///< Total number of worker threads.
-    vector<std::thread> worker_threads_;               ///< Container for worker threads.
-    vector<int64_t> worker_job_counter_;               ///< Job counters for each worker.
-    vector<shared_ptr<TopkBuffer>> global_topk_buffer_pool_; ///< Global aggregator buffers.
-    std::mutex global_mutex_;                          ///< Mutex for global synchronization.
-    std::condition_variable global_cv_;                ///< Condition variable for thread coordination.
-    std::atomic<int> stop_workers_;                    ///< Flag to signal workers to terminate.
-    bool debug_ = false;                               ///< Debug mode flag.
-
-    vector<vector<std::atomic<bool>>> job_flags_; ///< Flags to track job completion
-    std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.
-    std::atomic<int64_t> job_process_time_ns = 0; ///< Time spent processing jobs.
-
-
-    /**
-    * @brief Constructs a QueryCoordinator.
-    *
-    * @param parent Shared pointer to the parent QuakeIndex.
-    * @param partition_manager Shared pointer to the PartitionManager.
-    * @param maintenance_policy Shared pointer to the MaintenancePolicy.
-    * @param metric Distance metric used in search operations.
-    * @param num_workers Number of worker threads to initialize (default is 0, where 0 means no parallelism).
-    */
-    QueryCoordinator(shared_ptr<QuakeIndex> parent,
-        shared_ptr<PartitionManager> partition_manager,
-        shared_ptr<MaintenancePolicy> maintenance_policy,
-        MetricType metric,
-        int num_workers=0,
-        bool use_numa=false);
-
-    /**
-    * @brief Destructor for QueryCoordinator.
-    *
-    * Cleans up resources and shuts down worker threads.
-    */
     ~QueryCoordinator();
 
-    /**
-    * @brief Initiates a search operation.
-    *
-    * Searches the parent first to determine the partitions to scan. Then calls scan_partitions to perform the scan.
-    *
-    * @param x Tensor containing the query vector(s).
-    * @param search_params Shared pointer to search parameters.
-    * @return Shared pointer to the final SearchResult.
-    */
-    shared_ptr<SearchResult> search(Tensor x, shared_ptr<SearchParams> search_params);
-
-    /**
-     * @brief Performs a scan on the specified partitions.
-     *
-     * Selects the appropriate scan method based on the search parameters and coordinator configuration.
-     *
-     * @param x Tensor containing the query vector(s).
-     * @param partition_ids Tensor with the list of partition IDs to scan.
-     * @param search_params Shared pointer to search parameters.
-     * @return Shared pointer to the aggregated SearchResult.
-     */
-    shared_ptr<SearchResult> scan_partitions(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
-
-    /**
-     * @brief Executes a serial scan over the provided partitions.
-     *
-     * Performs a non-parallel scan, processing partitions sequentially.
-     *
-     * @param x Tensor containing the query vector(s).
-     * @param partition_ids Tensor with the list of partition IDs to scan.
-     * @param search_params Shared pointer to search parameters.
-     * @return Shared pointer to the SearchResult.
-     */
-    shared_ptr<SearchResult> serial_scan(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
-
-    /**
-     * @brief Executes a batched serial scan for multiple queries.
-     *
-     * Groups queries by the partitions they need to scan and processes them in batches.
-     *
-     * @param x Tensor containing the query vector(s).
-     * @param partition_ids Tensor with the list of partition IDs to scan.
-     * @param search_params Shared pointer to search parameters.
-     * @return Shared pointer to the SearchResult.
-     */
-    shared_ptr<SearchResult> batched_serial_scan(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
-
-    /**
-     * @brief Initializes worker threads for parallel scanning.
-     *
-     * Spawns worker threads and allocates per-core resources for processing scan jobs.
-     *
-     * @param num_workers Number of worker threads to initialize.
-     */
-    void initialize_workers(int num_workers, bool use_numa=false);
-
-    /**
-     * @brief Shuts down all worker threads.
-     *
-     * Signals each worker to terminate and waits for their completion.
-     */
+    std::shared_ptr<SearchResult> search(Tensor x, std::shared_ptr<SearchParams> search_params);
+    void initialize_workers(int num_cores, bool use_numa = false);
     void shutdown_workers();
 
-    /**
-     * @brief Function executed by each worker thread.
-     *
-     * Processes scan jobs from the worker's job queue
-     *
-     * @param worker_id Identifier for the worker thread.
-     */
-    void partition_scan_worker_fn(int worker_id);
+    std::shared_ptr<PartitionManager> partition_manager_;
+    std::shared_ptr<MaintenancePolicy> maintenance_policy_;
 
-    /**
-     * @brief Worker thread function to perform partition scanning.
-     *
-     * Processes scan jobs and returns the aggregated search result.
-     *
-     * @param x Tensor containing the query vector(s).
-     * @param partition_ids Tensor with the list of partition IDs to scan.
-     * @param search_params Shared pointer to search parameters.
-     * @return Shared pointer to the SearchResult.
-     */
-    shared_ptr<SearchResult> worker_scan(Tensor x, Tensor partition_ids, shared_ptr<SearchParams> search_params);
+    std::shared_ptr<QuakeIndex> parent_;
+    MetricType metric_;
+    int num_workers_;
+    bool workers_initialized_;
+    std::atomic<bool> stop_workers_{false};
 
-private:
-    /**
-     * @brief Allocates per-core resources.
-     *
-     * Sets up necessary buffers and job queues for a specific core.
-     *
-     * @param core_idx The index of the core.
-     * @param num_queries Number of queries to support.
-     * @param k Number of nearest neighbors (Top-K) to retrieve.
-     * @param d Dimensionality of the query vectors.
-     */
-    void allocate_core_resources(int core_idx, int num_queries, int k, int d);
-    };
+    std::vector<std::thread> worker_threads_;
+    std::vector<CoreResources> core_resources_;
 
-#endif //QUERY_COORDINATOR_H
+    std::vector<std::shared_ptr<TopkBuffer>> global_topk_buffer_pool_;
+    std::mutex global_pool_mutex_; // Protects resizing of global_topk_buffer_pool_
+
+    // Non-blocking queue for workers to push results to the coordinator thread.
+    // One such queue is needed if worker_scan handles multiple queries in one call,
+    // or a single queue if worker_scan is only ever for one query's results.
+    // For a single query (num_queries_total = 1 in worker_scan), one queue is enough.
+    // If worker_scan can handle batches of queries, then a vector of these might be needed.
+    // Let's assume for now worker_scan might process a batch of queries, so a vector of queues.
+    std::vector<moodycamel::ConcurrentQueue<PartitionScanResult>> query_result_queues_;
+    std::mutex result_queues_mutex_; // Protects resizing of query_result_queues_
+
+
+    void partition_scan_worker_fn(int core_index);
+
+    std::shared_ptr<SearchResult> worker_scan(Tensor x, Tensor partition_ids_to_scan_all_queries, std::shared_ptr<SearchParams> search_params);
+    std::shared_ptr<SearchResult> serial_scan(Tensor x, Tensor partition_ids, std::shared_ptr<SearchParams> search_params);
+    std::shared_ptr<SearchResult> batched_serial_scan(Tensor x, Tensor partition_ids, std::shared_ptr<SearchParams> search_params);
+
+    std::shared_ptr<SearchResult> scan_partitions(Tensor x, Tensor partition_ids_to_scan, std::shared_ptr<SearchParams> search_params);
+    void allocate_core_resources(int core_idx, int k_default, int d_default);
+
+
+    bool debug_ = false;
+    std::atomic<long long> job_pull_time_ns{0};
+    std::atomic<long long> job_process_time_ns{0};
+};
+
+#endif // QUERY_COORDINATOR_H
