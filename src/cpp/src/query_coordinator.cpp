@@ -213,7 +213,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 }
             }
 
-            if (job.num_queries > 10) {
+            if (job.num_queries < 10) {
                 for (int i = 0; i < job.num_queries; ++i) {
                     scan_list(
                             (float *) res.local_query_buffer.data() + i * current_dim, // Each query in the batch
