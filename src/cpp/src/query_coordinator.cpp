@@ -35,23 +35,14 @@ QueryCoordinator::~QueryCoordinator() {
     shutdown_workers();
 }
 
-void QueryCoordinator::allocate_core_resources(int c, int nq, int k, int d)
-{
-    CoreResources &r = core_resources_[c];
-    r.core_id = c;
-
-#ifdef QUAKE_USE_NUMA
-    int node = numa_node_of_cpu(c);
-    r.local_query_buffer.resize(nq * d * sizeof(float));
-    numa_tonode_memory(r.local_query_buffer.data(),
-                       r.local_query_buffer.size(), node);
-#else
-    r.local_query_buffer.resize(nq * d * sizeof(float));
-#endif
-    r.topk_buffer_pool.resize(nq);
-    for (int q = 0; q < nq; ++q) {
-        r.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
-        r.job_queue = moodycamel::BlockingConcurrentQueue<ScanJob>();
+void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, int k, int d) {
+    CoreResources &res = core_resources_[core_idx];
+    res.core_id = core_idx;
+    res.local_query_buffer.resize(num_queries * d * sizeof(float));
+    res.topk_buffer_pool.resize(num_queries);
+    for (int q = 0; q < num_queries; ++q) {
+        res.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
+        res.job_queue = moodycamel::BlockingConcurrentQueue<ScanJob>();
     }
 }
 
