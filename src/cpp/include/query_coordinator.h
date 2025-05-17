@@ -53,7 +53,7 @@ struct CoreResources {
     int core_id = -1;
     std::vector<uint8_t> local_query_buffer;
     std::vector<std::shared_ptr<TopkBuffer>> topk_buffer_pool; // Local buffers for workers
-    moodycamel::ConcurrentQueue<ScanJob> job_queue;
+    moodycamel::BlockingConcurrentQueue<ScanJob> job_queue;
 };
 
 class QueryCoordinator {
