@@ -621,7 +621,7 @@ void PartitionManager::distribute_partitions(int num_workers, bool use_numa) {
     Tensor partition_ids = get_partition_ids();
     auto partition_ids_accessor = partition_ids.accessor<int64_t, 1>();
     for (int i = 0; i < partition_ids.size(0); i++) {
-        set_partition_core_id(partition_ids_accessor[i], i % num_workers);
+        set_partition_core_id(partition_ids_accessor[i], i % num_workers, use_numa);
     }
 }
 
