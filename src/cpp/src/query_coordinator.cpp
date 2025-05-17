@@ -11,13 +11,6 @@
 #include <geometry.h>
 #include <parallel.h>
 
-static inline void prefault_range(void* p, size_t bytes) {
-    // Touch one byte per page; compiler will not optimise this away.
-    const size_t page = 4096;
-    for (size_t off = 0; off < bytes; off += page)
-        *(volatile char*)((char*)p + off);
-}
-
 // Constructor
 QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
                                    shared_ptr<PartitionManager> partition_manager,
@@ -42,16 +35,25 @@ QueryCoordinator::~QueryCoordinator() {
     shutdown_workers();
 }
 
-void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, int k, int d) {
-    CoreResources &res = core_resources_[core_idx];
-    res.core_id = core_idx;
-    res.local_query_buffer.resize(num_queries * d * sizeof(float));
-    res.topk_buffer_pool.resize(num_queries);
-    for (int q = 0; q < num_queries; ++q) {
-        res.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
-        res.job_queue = moodycamel::BlockingConcurrentQueue<ScanJob>();
-    }
+void QueryCoordinator::allocate_core_resources(int c, int nq, int k, int d)
+{
+    CoreResources &r = core_resources_[c];
+    r.core_id = c;
 
+#ifdef QUAKE_USE_NUMA
+    int node = numa_node_of_cpu(c);
+    r.local_query_buffer.resize(nq * d * sizeof(float));
+    numa_tonode_memory(r.local_query_buffer.data(),
+                       r.local_query_buffer.size(), node);
+    prefault_range(r.local_query_buffer.data(), r.local_query_buffer.size());
+#else
+    r.local_query_buffer.resize(nq * d * sizeof(float));
+#endif
+    r.topk_buffer_pool.resize(nq);
+    for (int q = 0; q < nq; ++q) {
+        r.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
+        r.job_queue = moodycamel::BlockingConcurrentQueue<ScanJob>();
+    }
 }
 
 // Initialize Worker Threads
@@ -106,14 +108,6 @@ void QueryCoordinator::shutdown_workers() {
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     CoreResources &res = core_resources_[core_index];
-
-    // Prefault the partitions this core owns
-    for (auto& kv : partition_manager_->partition_store_->partitions_) {
-        if (kv.second->core_id_ == core_index) {
-            prefault_range(kv.second->codes_,
-                           size_t(kv.second->num_vectors_) * kv.second->code_size_);
-        }
-    }
 
     if (!set_thread_affinity(core_index)) {
         std::cout << "[QueryCoordinator::partition_scan_worker_fn] Failed to set thread affinity on core " << core_index << std::endl;
