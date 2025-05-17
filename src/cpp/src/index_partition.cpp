@@ -254,6 +254,7 @@ T* IndexPartition::allocate_memory(size_t num_elements, int numa_node) {
     if (numa_node == -1) {
         ptr = reinterpret_cast<T*>(std::malloc(total_bytes));
     } else {
+        std::cout << numa_alloc_onnode << '\n';
         ptr = reinterpret_cast<T*>(numa_alloc_onnode(total_bytes, numa_node));
     }
 #else
