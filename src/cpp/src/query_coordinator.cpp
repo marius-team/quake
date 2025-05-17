@@ -11,6 +11,13 @@
 #include <geometry.h>
 #include <parallel.h>
 
+static inline void prefault_range(void* p, size_t bytes) {
+    // Touch one byte per page; compiler will not optimise this away.
+    const size_t page = 4096;
+    for (size_t off = 0; off < bytes; off += page)
+        *(volatile char*)((char*)p + off);
+}
+
 // Constructor
 QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
                                    shared_ptr<PartitionManager> partition_manager,
@@ -99,6 +106,14 @@ void QueryCoordinator::shutdown_workers() {
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     CoreResources &res = core_resources_[core_index];
+
+    // Prefault the partitions this core owns
+    for (auto& kv : partition_manager_->partition_store_->partitions_) {
+        if (kv.second->core_id_ == core_index) {
+            prefault_range(kv.second->codes_,
+                           size_t(kv.second->num_vectors_) * kv.second->code_size_);
+        }
+    }
 
     if (!set_thread_affinity(core_index)) {
         std::cout << "[QueryCoordinator::partition_scan_worker_fn] Failed to set thread affinity on core " << core_index << std::endl;
