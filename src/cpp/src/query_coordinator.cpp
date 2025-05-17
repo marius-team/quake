@@ -54,7 +54,7 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
         return;
     }
 
-    std::cout << "[QueryCoordinator::initialize_workers] Initializing " << num_cores << " worker threads." <<
+    std::cout << "[QueryCoordinator::initialize_workers] Initializing " << num_cores << " worker threads with use_numa=" << use_numa <<
             std::endl;
 
     partition_manager_->distribute_partitions(num_cores, use_numa);

@@ -292,7 +292,7 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa)
     initialize_maintenance_policy(default_params);
 
     // 5. Create query coordinator
-    std::cout << "Loading coordinator with n_workers=" << n_workers << '\n';
+    std::cout << "Loading coordinator with n_workers=" << n_workers << " and use_numa=" << use_numa << '\n';
     query_coordinator_ = std::make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, n_workers, use_numa);
     std::cout << "Loaded coordinator\n";
 }
