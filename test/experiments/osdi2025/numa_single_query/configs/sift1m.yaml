@@ -17,7 +17,7 @@ indexes:
       num_workers: 1
       use_numa: false
     search_params:
-      nprobe: 1000
+      nprobe: 20
 
   - name: Quake_1
     index: Quake
@@ -27,7 +27,7 @@ indexes:
       num_workers: 1
       use_numa: false
     search_params:
-      nprobe: 1000
+      nprobe: 20
 
   - name: Quake_4
     index: Quake
@@ -37,7 +37,7 @@ indexes:
       num_workers: 4
       use_numa: false
     search_params:
-      nprobe: 1000
+      nprobe: 20
 
   - name: Quake_16
     index: Quake
@@ -47,7 +47,7 @@ indexes:
       num_workers: 16
       use_numa: false
     search_params:
-      nprobe: 1000
+      nprobe: 20
 
   - name: Quake_1_numa
     index: Quake
@@ -57,7 +57,7 @@ indexes:
       num_workers: 1
       use_numa: true
     search_params:
-      nprobe: 1000
+      nprobe: 20
 
   - name: Quake_4_numa
     index: Quake
@@ -67,7 +67,7 @@ indexes:
       num_workers: 4
       use_numa: true
     search_params:
-      nprobe: 1000
+      nprobe: 20
 
   - name: Quake_16_numa
     index: Quake
@@ -77,7 +77,7 @@ indexes:
       num_workers: 16
       use_numa: true
     search_params:
-      nprobe: 1000
+      nprobe: 20
 
 #  - name: FaissIVF
 #    index: IVF
