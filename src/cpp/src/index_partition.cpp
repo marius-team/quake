@@ -148,8 +148,6 @@ void IndexPartition::set_numa_node(int new_numa_node) {
     bool is_valid_numa = (new_numa_node == -1) ||
                          (numa_available() != -1 && new_numa_node <= numa_max_node());
 
-    std::cout << "new_numa_node=" << new_numa_node << ", numa_available()=" << numa_available() << ", numa_max_node()=" << numa_max_node() << '\n';
-
     if (!is_valid_numa) {
         throw std::runtime_error("Invalid numa node specified");
     }
