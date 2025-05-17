@@ -213,12 +213,24 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 }
             }
 
-            batched_scan_list((float*)res.local_query_buffer.data(), // This is the worker's prepared batch of queries
-                              partition_codes_ptr, partition_ids_ptr,
-                              job.num_queries, // Number of queries in *this ScanJob's batch*
-                              partition_size, current_dim,
-                              res.topk_buffer_pool, // Pass the pool of local buffers for this worker
-                              metric_);
+            if (job.num_queries > 10) {
+                for (int i = 0; i < job.num_queries; ++i) {
+                    scan_list(
+                            (float *) res.local_query_buffer.data() + i * current_dim, // Each query in the batch
+                            partition_codes_ptr, partition_ids_ptr,
+                            partition_size, current_dim,
+                            *res.topk_buffer_pool[i], metric_);
+                }
+            } else {
+                batched_scan_list((float*)res.local_query_buffer.data(), // This is the worker's prepared batch of queries
+                                  partition_codes_ptr, partition_ids_ptr,
+                                  job.num_queries, // Number of queries in *this ScanJob's batch*
+                                  partition_size, current_dim,
+                                  res.topk_buffer_pool, // Pass the pool of local buffers for this worker
+                                  metric_);
+            }
+
+
 
             for (int i = 0; i < job.num_queries; ++i) {
                 int64_t global_q_idx = job.query_ids[i];
