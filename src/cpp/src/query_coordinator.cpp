@@ -56,7 +56,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int k_default, int 
     int target_numa_node = -1;
     if (attempt_numa_for_buffer) {
 #ifdef QUAKE_USE_NUMA
-        target_numa_nodes = numa_node_of_cpu(core_id);
+        target_numa_node = numa_node_of_cpu(core_idx);
 #endif
     }
 
