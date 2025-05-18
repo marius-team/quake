@@ -310,6 +310,10 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         Tensor partition_ids_to_scan_all_queries, // Partition IDs for each query [num_queries_total, nprobe_max]
         std::shared_ptr<SearchParams> search_params) {
 
+    auto overall_worker_scan_start_time = std::chrono::high_resolution_clock::now();
+
+    auto buffer_init_start_time = std::chrono::high_resolution_clock::now();
+
     if (!partition_manager_) {
         throw std::runtime_error("[QueryCoordinator::worker_scan] partition_manager_ is null.");
     }
@@ -372,6 +376,10 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         received_results_per_query[i] = 0;
     }
 
+    timing_info->buffer_init_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - buffer_init_start_time).count();
+
+    auto job_dispatch_start_time = std::chrono::high_resolution_clock::now();
+
     // Dispatch jobs (logic remains similar, workers will use the new queue)
     if (search_params->batched_scan) {
         std::unordered_map<int64_t, std::vector<int64_t>> partition_to_queries_map;
@@ -429,6 +437,8 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     }
     timing_info->job_enqueue_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - job_enqueue_start_time).count();
 
+    auto boundary_dist_compute_start_time = std::chrono::high_resolution_clock::now();
+
     auto last_aps_policy_check_time = high_resolution_clock::now();
     std::vector<std::vector<float>> boundary_distances_all_queries(num_queries_total);
     if (use_aps) {
@@ -454,6 +464,8 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     int total_expected_results_overall = 0;
     for(int64_t q=0; q<num_queries_total; ++q) total_expected_results_overall += expected_results_per_query[q].load();
     int total_processed_results_overall = 0;
+
+    timing_info->boundary_distance_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - boundary_dist_compute_start_time).count();
 
     // MODIFICATION: New result processing loop using single aggregated_results_queue_
     while(total_processed_results_overall < total_expected_results_overall) {
@@ -550,6 +562,15 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     }
     timing_info->result_aggregate_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - result_aggregation_start_time).count();
 
+    // Print out timing info in ms with a single indent
+    std::cout << "[QueryCoordinator::worker_scan] Worker scan timing info:" << std::endl;
+    std::cout << "  Buffer init time: " << timing_info->buffer_init_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "  Job enqueue time: " << timing_info->job_enqueue_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "  Job wait time: " << timing_info->job_wait_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "  Result aggregate time: " << timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "  Total worker scan time: " << timing_info->job_wait_time_ns / 1e6 + timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
+    auto overall_worker_scan_end_time = high_resolution_clock::now();
+
     auto search_result = std::make_shared<SearchResult>();
     search_result->ids = topk_ids;
     search_result->distances = topk_dists;
@@ -558,6 +579,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 }
 
 std::shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, std::shared_ptr<SearchParams> search_params) {
+    auto function_entry_time = std::chrono::high_resolution_clock::now();
     if (!partition_manager_) {
         throw std::runtime_error("[QueryCoordinator::search] partition_manager_ is null.");
     }
@@ -571,6 +593,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, std::shared_ptr
 
     bool use_aps = search_params->recall_target > 0.0 && !search_params->batched_scan && parent_ != nullptr;
 
+    auto parent_search_start_time = std::chrono::high_resolution_clock::now();
     if (parent_ == nullptr) {
         // Flat index or top level: scan all (or a subset of) partitions
         partition_ids_to_scan = partition_manager_->get_partition_ids(); // Gets all PIDs
@@ -613,12 +636,16 @@ std::shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, std::shared_ptr
         }
     }
 
-    auto scan_result = scan_partitions(x, partition_ids_to_scan, search_params);
+    auto parent_search_end_time = std::chrono::high_resolution_clock::now();
 
-    if (parent_timing_info) { // Check if parent_timing_info was populated
-        scan_result->timing_info->parent_info = parent_timing_info;
-    }
-    scan_result->timing_info->total_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - overall_search_start_time).count();
+    auto scan_partitions_call_start_time = std::chrono::high_resolution_clock::now();
+    auto scan_result = scan_partitions(x, partition_ids_to_scan, search_params);
+    auto scan_partitions_call_end_time = std::chrono::high_resolution_clock::now();
+
+    // print out timing info in ms
+    std::cout << "[QueryCoordinator::search] Scan Partition time: " << std::chrono::duration_cast<std::chrono::milliseconds>(scan_partitions_call_end_time - scan_partitions_call_start_time).count() << " ms" << std::endl;
+    std::cout << "[QueryCoordinator::search] Parent search time: " << std::chrono::duration_cast<std::chrono::milliseconds>(parent_search_end_time - parent_search_start_time).count() << " ms" << std::endl;
+    std::cout << "[QueryCoordinator::search] Overall search time: " << std::chrono::duration_cast<std::chrono::milliseconds>(scan_partitions_call_end_time - overall_search_start_time).count() << " ms" << std::endl;
 
     return scan_result;
 }
