@@ -52,12 +52,92 @@ struct AggregatedResultItem {
     PartitionScanResult result;    // The actual result data from the worker
 };
 
-// Structure to hold resources per core/worker
+//// Structure to hold resources per core/worker
+//struct CoreResources {
+//    int core_id = -1;
+//    std::vector<uint8_t> local_query_buffer;
+//    std::vector<std::shared_ptr<TopkBuffer>> topk_buffer_pool; // Local buffers for workers
+//    moodycamel::BlockingConcurrentQueue<ScanJob> job_queue;
+//};
+
+// Forward declare QueryCoordinator if CoreResources is in a separate header used by it.
+// class QueryCoordinator; // If needed
+
 struct CoreResources {
     int core_id = -1;
-    std::vector<uint8_t> local_query_buffer;
-    std::vector<std::shared_ptr<TopkBuffer>> topk_buffer_pool; // Local buffers for workers
     moodycamel::BlockingConcurrentQueue<ScanJob> job_queue;
+    std::vector<std::shared_ptr<TopkBuffer>> topk_buffer_pool; // Pool of TopkBuffers for this core
+
+    // NUMA-aware local buffer for query data
+    uint8_t* local_query_data_ = nullptr;
+    size_t local_query_buffer_capacity_bytes_ = 0;
+    int allocated_on_numa_node_ = -1; // NUMA node this buffer is allocated on, -1 for default/unknown
+
+    CoreResources() = default; // Keep default constructor
+
+    // Proper cleanup in destructor
+    ~CoreResources() {
+        if (local_query_data_) {
+            // Use a static helper from QueryCoordinator or a common utility to free
+            // This avoids making QueryCoordinator a friend or complex dependencies
+            // For now, conceptual: QueryCoordinator::free_buffer_for_core(this);
+            // Or, more directly if the static free function is accessible:
+#ifdef QUAKE_USE_NUMA
+            if (allocated_on_numa_node_ != -1 && numa_available() != -1) {
+                numa_free(local_query_data_, local_query_buffer_capacity_bytes_);
+            } else {
+                std::free(local_query_data_);
+            }
+#else
+            std::free(local_query_data_);
+#endif
+            local_query_data_ = nullptr;
+        }
+    }
+
+    // Disable copy constructor and copy assignment operator
+    CoreResources(const CoreResources&) = delete;
+    CoreResources& operator=(const CoreResources&) = delete;
+
+    // Enable move constructor and move assignment operator (optional but good practice)
+    CoreResources(CoreResources&& other) noexcept
+            : core_id(other.core_id),
+              job_queue(std::move(other.job_queue)), // Requires moodycamel queue to be movable or handle manually
+              topk_buffer_pool(std::move(other.topk_buffer_pool)),
+              local_query_data_(other.local_query_data_),
+              local_query_buffer_capacity_bytes_(other.local_query_buffer_capacity_bytes_),
+              allocated_on_numa_node_(other.allocated_on_numa_node_) {
+        other.local_query_data_ = nullptr; // Nullify moved-from raw pointer
+        other.local_query_buffer_capacity_bytes_ = 0;
+        other.allocated_on_numa_node_ = -1;
+    }
+
+    CoreResources& operator=(CoreResources&& other) noexcept {
+        if (this != &other) {
+            // Cleanup existing resources
+            if (local_query_data_) {
+#ifdef QUAKE_USE_NUMA
+                if (allocated_on_numa_node_ != -1 && numa_available() != -1) {
+                    numa_free(local_query_data_, local_query_buffer_capacity_bytes_);
+                } else { std::free(local_query_data_); }
+#else
+                std::free(local_query_data_);
+#endif
+            }
+
+            core_id = other.core_id;
+            job_queue = std::move(other.job_queue); // Requires moodycamel queue to be movable
+            topk_buffer_pool = std::move(other.topk_buffer_pool);
+            local_query_data_ = other.local_query_data_;
+            local_query_buffer_capacity_bytes_ = other.local_query_buffer_capacity_bytes_;
+            allocated_on_numa_node_ = other.allocated_on_numa_node_;
+
+            other.local_query_data_ = nullptr;
+            other.local_query_buffer_capacity_bytes_ = 0;
+            other.allocated_on_numa_node_ = -1;
+        }
+        return *this;
+    }
 };
 
 class QueryCoordinator {
@@ -92,6 +172,7 @@ public:
 
     moodycamel::ConcurrentQueue<AggregatedResultItem> aggregated_results_queue_;
     std::mutex result_queues_mutex_; // Protects resizing of query_result_queues_
+    bool use_numa_ = false;
 
 
     void partition_scan_worker_fn(int core_index);
@@ -101,7 +182,7 @@ public:
     std::shared_ptr<SearchResult> batched_serial_scan(Tensor x, Tensor partition_ids, std::shared_ptr<SearchParams> search_params);
 
     std::shared_ptr<SearchResult> scan_partitions(Tensor x, Tensor partition_ids_to_scan, std::shared_ptr<SearchParams> search_params);
-    void allocate_core_resources(int core_idx, int k_default, int d_default);
+    void allocate_core_resources(int core_idx, int k_default, int d_default, bool attempt_numa_for_buffer);
 
 
     bool debug_ = false;

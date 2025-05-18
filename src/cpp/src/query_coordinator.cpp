@@ -32,6 +32,8 @@ QueryCoordinator::QueryCoordinator(std::shared_ptr<QuakeIndex> parent,
           num_workers_(num_workers),
           workers_initialized_(false) {
 
+    use_numa_ = use_numa;
+
     if (num_workers_ > 0) {
         initialize_workers(num_workers_, use_numa);
     }
@@ -46,18 +48,37 @@ const int DEFAULT_K_FOR_RESOURCES = 10;
 const int DEFAULT_DIM_FOR_RESOURCES = 128;
 
 
-void QueryCoordinator::allocate_core_resources(int core_idx, int k_default, int d_default) {
+void QueryCoordinator::allocate_core_resources(int core_idx, int k_default, int d_default, bool attempt_numa_for_buffer) {
     CoreResources &res = core_resources_[core_idx];
     res.core_id = core_idx;
+    size_t initial_capacity_bytes = static_cast<size_t>(d_default * sizeof(float) * 1); // e.g., for 1 query, extend if common batch size known
 
-    if (res.local_query_buffer.empty()) {
-        res.local_query_buffer.resize(static_cast<size_t>(d_default * sizeof(float)));
+    int target_numa_node = -1;
+    if (attempt_numa_for_buffer) {
+#ifdef QUAKE_USE_NUMA
+        target_numa_nodes = numa_node_of_cpu(core_id);
+#endif
     }
 
+
+    if (res.local_query_data_) { // Should not happen if properly destructed/moved
+        free_numa_buffer(res.local_query_data_, res.local_query_buffer_capacity_bytes_, res.allocated_on_numa_node_, (res.allocated_on_numa_node_ != -1));
+    }
+
+    res.local_query_data_ = allocate_numa_buffer(initial_capacity_bytes, target_numa_node, attempt_numa_for_buffer);
+    res.local_query_buffer_capacity_bytes_ = initial_capacity_bytes;
+    res.allocated_on_numa_node_ = (attempt_numa_for_buffer && target_numa_node != -1) ? target_numa_node : -1;
+
+    // Initialize TopK buffer pool (existing logic)
     if (res.topk_buffer_pool.empty()) {
         res.topk_buffer_pool.push_back(std::make_shared<TopkBuffer>(k_default, metric_ == faiss::METRIC_INNER_PRODUCT));
     } else {
-        res.topk_buffer_pool[0]->set_k(k_default);
+        // Ensure the first buffer in pool (if used as primary) is correctly configured
+        if (!res.topk_buffer_pool[0]) {
+            res.topk_buffer_pool[0] = std::make_shared<TopkBuffer>(k_default, metric_ == faiss::METRIC_INNER_PRODUCT);
+        } else {
+            res.topk_buffer_pool[0]->set_k(k_default);
+        }
     }
 }
 
@@ -83,7 +104,8 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
         if (!set_thread_affinity(i)) {
             // std::cout << "[QueryCoordinator::initialize_workers] Failed to set thread affinity on core " << i << std::endl;
         }
-        allocate_core_resources(i, DEFAULT_K_FOR_RESOURCES, dim_for_alloc);
+
+        allocate_core_resources(i, DEFAULT_K_FOR_RESOURCES, dim_for_alloc, use_numa);
         worker_threads_[i] = std::thread(&QueryCoordinator::partition_scan_worker_fn, this, i);
     }
     workers_initialized_ = true;
@@ -113,143 +135,172 @@ void QueryCoordinator::shutdown_workers() {
     workers_initialized_ = false;
 }
 
-// Reverted partition_scan_worker_fn: workers directly update global_topk_buffer_pool and set job_flags_
-// MODIFIED: Workers now enqueue to a single aggregated_results_queue_
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
-    CoreResources &res = core_resources_[core_index];
-
+    // Ensure thread affinity is set for this worker.
+    // set_thread_affinity is a hypothetical function you'd implement.
     if (!set_thread_affinity(core_index)) {
-        // std::cout << "[QueryCoordinator::partition_scan_worker_fn] Failed to set thread affinity on core " << core_index << std::endl;
+        // std::cerr << "[Worker " << core_index << "] Failed to set thread affinity." << std::endl;
+        // Depending on desired behavior, you might throw, log, or continue.
     }
+
+    // Worker determines its own NUMA node after affinity is set.
+    int worker_actual_numa_node = -1;
+#ifdef QUAKE_USE_NUMA
+    if (this->use_numa_ && numa_available() != -1) {
+        int current_cpu = sched_getcpu();
+        if (current_cpu != -1) {
+            worker_actual_numa_node = numa_node_of_cpu(current_cpu);
+            if (worker_actual_numa_node < 0 || worker_actual_numa_node > numa_max_node()) {
+                // std::cerr << "[Worker " << core_index << "] Warning: Got invalid NUMA node "
+                //           << worker_actual_numa_node << " for CPU " << current_cpu << ". Defaulting buffer allocation." << std::endl;
+                worker_actual_numa_node = -1; // Invalid node, will use default allocation.
+            }
+        } else {
+            // std::cerr << "[Worker " << core_index << "] Warning: sched_getcpu() failed. Cannot determine NUMA node for buffer." << std::endl;
+        }
+    }
+#endif
+
+    CoreResources &res_ref = core_resources_[core_index]; // Get a reference to this worker's resources
 
     while (true) {
         ScanJob job;
-        res.job_queue.wait_dequeue(job); // Worker blocks here until a job is available
+        // Corrected usage: wait_dequeue takes a reference to the item.
+        res_ref.job_queue.wait_dequeue(job);
 
         if (job.partition_id == -1 || stop_workers_.load(std::memory_order_relaxed)) {
-            break;
+            break; // Exit signal or global stop signal
         }
 
         if (job.query_ids.empty()) {
-            std::cerr << "[QueryCoordinator::partition_scan_worker_fn] Job for partition " << job.partition_id << " has no query_ids." << std::endl;
+            // std::cerr << "[Worker " << core_index << "] Job for partition " << job.partition_id << " has no query_ids. Skipping." << std::endl;
             continue;
         }
-        // For non-batched, current_global_query_id is job.query_ids[0].
-        // For batched, results will be enqueued per query_id in job.query_ids.
 
         const float *partition_codes_ptr = nullptr;
         const int64_t *partition_ids_ptr = nullptr;
         int64_t partition_size = 0;
+        int current_dim = 0;
 
         try {
+            if (!partition_manager_ || !partition_manager_->partition_store_) {
+                // std::cerr << "[Worker " << core_index << "] Partition manager or store not available. Skipping job for partition " << job.partition_id << std::endl;
+                // Send empty/failure results for affected queries
+                for(int64_t q_id : job.query_ids) {
+                    aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, false)});
+                }
+                continue;
+            }
+            current_dim = partition_manager_->d();
             partition_codes_ptr = (float *)partition_manager_->partition_store_->get_codes(job.partition_id);
             partition_ids_ptr = (int64_t *)partition_manager_->partition_store_->get_ids(job.partition_id);
             partition_size = partition_manager_->partition_store_->list_size(job.partition_id);
         } catch (const std::runtime_error &e) {
-            std::cerr << "[QueryCoordinator::partition_scan_worker_fn] Error accessing partition " << job.partition_id << ": " << e.what() << std::endl;
-            // Send an invalid/empty result for each query this job was supposed to serve
+            // std::cerr << "[Worker " << core_index << "] Error accessing partition " << job.partition_id << ": " << e.what() << std::endl;
             for(int64_t q_id : job.query_ids) {
-                // MODIFICATION: Enqueue to aggregated_results_queue_
                 aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, false)});
             }
             continue;
         }
 
         if (partition_size == 0 || partition_codes_ptr == nullptr) {
-            // Enqueue an empty but valid result to signal completion of this job for each query
             for(int64_t q_id : job.query_ids) {
-                // MODIFICATION: Enqueue to aggregated_results_queue_
-                aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, {}, {})});
+                aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, {}, {})}); // Empty but valid
             }
             continue;
         }
 
-        int current_dim = partition_manager_->d();
+        // --- Buffer Management by Worker ---
+        size_t required_capacity_bytes = 0;
+        if (!job.is_batched) {
+            required_capacity_bytes = static_cast<size_t>(current_dim * sizeof(float));
+        } else {
+            required_capacity_bytes = static_cast<size_t>(job.num_queries * current_dim * sizeof(float));
+        }
+
+        if (res_ref.local_query_data_ == nullptr ||
+            res_ref.local_query_buffer_capacity_bytes_ < required_capacity_bytes ||
+            (this->use_numa_ && res_ref.allocated_on_numa_node_ != worker_actual_numa_node && worker_actual_numa_node != -1) ) {
+
+            if (res_ref.local_query_data_) {
+                // Use the static free function, assuming it's QueryCoordinator::free_numa_buffer
+                // or a globally accessible static one.
+                free_numa_buffer(res_ref.local_query_data_, res_ref.local_query_buffer_capacity_bytes_, res_ref.allocated_on_numa_node_, (res_ref.allocated_on_numa_node_ != -1 && this->use_numa_));
+                res_ref.local_query_data_ = nullptr;
+            }
+
+            size_t new_capacity_bytes = std::max(required_capacity_bytes, res_ref.local_query_buffer_capacity_bytes_);
+            if (new_capacity_bytes < required_capacity_bytes) new_capacity_bytes = required_capacity_bytes; // Ensure it's at least required size
+
+            // Use the static allocate function
+            res_ref.local_query_data_ = allocate_numa_buffer(new_capacity_bytes, worker_actual_numa_node, this->use_numa_);
+            res_ref.local_query_buffer_capacity_bytes_ = new_capacity_bytes;
+            res_ref.allocated_on_numa_node_ = (this->use_numa_ && worker_actual_numa_node != -1) ? worker_actual_numa_node : -1;
+        }
+        // --- End Buffer Management ---
 
         if (!job.is_batched) {
             int64_t current_global_query_id = job.query_ids[0];
-            // Ensure local_query_buffer is large enough
-            size_t required_query_buffer_size = static_cast<size_t>(current_dim * sizeof(float));
-            if (res.local_query_buffer.size() < required_query_buffer_size) {
-                res.local_query_buffer.resize(required_query_buffer_size);
-            }
-            std::memcpy(res.local_query_buffer.data(), job.query_vector, required_query_buffer_size);
+            std::memcpy(res_ref.local_query_data_, job.query_vector, required_capacity_bytes);
 
-            if (res.topk_buffer_pool.empty()) { // Should be pre-allocated
-                res.topk_buffer_pool.push_back(std::make_shared<TopkBuffer>(job.k, metric_ == faiss::METRIC_INNER_PRODUCT));
+            if (res_ref.topk_buffer_pool.empty() || !res_ref.topk_buffer_pool[0]) {
+                // Should be pre-allocated by allocate_core_resources, this is an error or recovery
+                // std::cerr << "[Worker " << core_index << "] Error: TopK buffer pool not initialized for single scan." << std::endl;
+                res_ref.topk_buffer_pool.push_back(std::make_shared<TopkBuffer>(job.k, metric_ == faiss::METRIC_INNER_PRODUCT));
             }
-            std::shared_ptr<TopkBuffer> local_topk_buffer = res.topk_buffer_pool[0];
-            local_topk_buffer->set_k(job.k); // Ensure k is set for this job
-            local_topk_buffer->reset();     // Reset buffer for new scan
+            std::shared_ptr<TopkBuffer> local_topk_buffer = res_ref.topk_buffer_pool[0];
+            local_topk_buffer->set_k(job.k);
+            local_topk_buffer->reset();
 
-            scan_list((float *)res.local_query_buffer.data(),
+            scan_list((float *)res_ref.local_query_data_,
                       partition_codes_ptr, partition_ids_ptr,
                       partition_size, current_dim,
                       *local_topk_buffer, metric_);
 
-            // MODIFICATION: Enqueue to aggregated_results_queue_
             aggregated_results_queue_.enqueue(AggregatedResultItem{
                     current_global_query_id,
                     PartitionScanResult(current_global_query_id, job.partition_id, local_topk_buffer->get_topk(), local_topk_buffer->get_topk_indices())
             });
 
-        } else { // Batched job for this worker (multiple queries, one partition)
-            size_t required_query_batch_buffer_size = static_cast<size_t>(job.num_queries * current_dim * sizeof(float));
-            if (res.local_query_buffer.size() < required_query_batch_buffer_size) {
-                res.local_query_buffer.resize(required_query_batch_buffer_size);
-            }
+        } else { // Batched job for this worker
+            uint8_t* current_write_ptr = res_ref.local_query_data_;
+            size_t single_query_bytes = static_cast<size_t>(current_dim * sizeof(float));
 
             for (int i = 0; i < job.num_queries; ++i) {
-                int64_t global_q_idx_for_job_query_ids = job.query_ids[i]; // This is the actual global query ID
-                // The job.query_vector points to the beginning of the batch of query vectors (x_ptr)
-                // The global_q_idx_for_job_query_ids is the index IN THAT ORIGINAL BATCH (x_ptr)
-                // So, the source is job.query_vector (x_ptr) + global_q_idx_for_job_query_ids * dimension
-                std::memcpy(res.local_query_buffer.data() + static_cast<size_t>(i) * current_dim * sizeof(float), // Dest in worker's local batch buffer
-                            job.query_vector + static_cast<size_t>(global_q_idx_for_job_query_ids) * current_dim,      // Source from the full query tensor x_ptr
-                            static_cast<size_t>(current_dim) * sizeof(float));
+                int64_t global_q_idx_in_original_batch = job.query_ids[i];
+                const float* source_query_ptr = job.query_vector + global_q_idx_in_original_batch * current_dim;
+                std::memcpy(current_write_ptr, source_query_ptr, single_query_bytes);
+                current_write_ptr += single_query_bytes;
             }
 
-
-            if (res.topk_buffer_pool.size() < static_cast<size_t>(job.num_queries)) {
-                res.topk_buffer_pool.resize(job.num_queries);
+            if (res_ref.topk_buffer_pool.size() < static_cast<size_t>(job.num_queries)) {
+                res_ref.topk_buffer_pool.resize(job.num_queries);
             }
             for (int i = 0; i < job.num_queries; ++i) {
-                if (!res.topk_buffer_pool[i]) {
-                    res.topk_buffer_pool[i] = std::make_shared<TopkBuffer>(job.k, metric_ == faiss::METRIC_INNER_PRODUCT);
+                if (!res_ref.topk_buffer_pool[i]) {
+                    res_ref.topk_buffer_pool[i] = std::make_shared<TopkBuffer>(job.k, metric_ == faiss::METRIC_INNER_PRODUCT);
                 } else {
-                    res.topk_buffer_pool[i]->set_k(job.k); // Ensure k is set
-                    res.topk_buffer_pool[i]->reset();    // Reset for new scan
+                    res_ref.topk_buffer_pool[i]->set_k(job.k);
+                    res_ref.topk_buffer_pool[i]->reset();
                 }
             }
 
-            if (job.num_queries < 5) { // Threshold for using individual scans vs batched scan
-                for (int i = 0; i < job.num_queries; ++i) {
-                    scan_list(
-                            (float *) res.local_query_buffer.data() + static_cast<size_t>(i) * current_dim, // Each query in the batch
-                            partition_codes_ptr, partition_ids_ptr,
-                            partition_size, current_dim,
-                            *res.topk_buffer_pool[i], metric_);
-                }
-            } else {
-                batched_scan_list((float*)res.local_query_buffer.data(), // This is the worker's prepared batch of queries
-                                  partition_codes_ptr, partition_ids_ptr,
-                                  job.num_queries, // Number of queries in *this ScanJob's batch*
-                                  partition_size, current_dim,
-                                  res.topk_buffer_pool, // Pass the pool of local buffers for this worker
-                                  metric_);
-            }
+            batched_scan_list((float*)res_ref.local_query_data_,
+                              partition_codes_ptr, partition_ids_ptr,
+                              job.num_queries,
+                              partition_size, current_dim,
+                              res_ref.topk_buffer_pool,
+                              metric_);
 
             for (int i = 0; i < job.num_queries; ++i) {
-                int64_t global_q_idx = job.query_ids[i]; // The actual global query ID
-                // MODIFICATION: Enqueue to aggregated_results_queue_
+                int64_t global_q_idx = job.query_ids[i];
                 aggregated_results_queue_.enqueue(AggregatedResultItem{
                         global_q_idx,
-                        PartitionScanResult(global_q_idx, job.partition_id, res.topk_buffer_pool[i]->get_topk(), res.topk_buffer_pool[i]->get_topk_indices())
+                        PartitionScanResult(global_q_idx, job.partition_id, res_ref.topk_buffer_pool[i]->get_topk(), res_ref.topk_buffer_pool[i]->get_topk_indices())
                 });
             }
         }
-        // job_process_time_ns += duration_cast<nanoseconds>(high_resolution_clock::now() - job_process_start).count();
-    }
+    } // End while(true)
 }
 
 
@@ -309,7 +360,6 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     // Drain aggregated_results_queue_ (safer to do it outside the lock if it's a member queue)
     AggregatedResultItem ignored_aggregated_item;
     while(aggregated_results_queue_.try_dequeue(ignored_aggregated_item));
-
 
     timing_info->buffer_init_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - start_overall_scan_time).count();
 
