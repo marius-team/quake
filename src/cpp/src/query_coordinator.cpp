@@ -215,12 +215,6 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 local_topk_buffer->reset();
             }
 
-            int d = partition_manager_->d();
-            std::memcpy(numa_res.local_query_buffer,
-                        job.query_vector,
-                        size_t(d) * sizeof(float));
-
-
             auto s2 = std::chrono::high_resolution_clock::now();
             // Perform the scan on the partition.
             scan_list(numa_res.local_query_buffer,
@@ -421,6 +415,12 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         duration_cast<nanoseconds>(end_time - start_time).count();
 
     start_time = high_resolution_clock::now();
+
+    for (auto &nr : numa_resources_) {
+        std::memcpy(nr.local_query_buffer,
+                    x_ptr,            // q == 0
+                    size_t(dimension) * sizeof(float));
+    }
 
     if (search_params->batched_scan) {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
