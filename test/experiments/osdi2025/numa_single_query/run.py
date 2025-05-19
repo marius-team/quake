@@ -108,8 +108,6 @@ def run_experiment(cfg_path: str, output_dir: str) -> None:
 
     quake_base_path = out_dir / "Quake_base_index.bin"
     if quake_base_params:
-        if overwrite and quake_base_path.exists():
-            os.remove(quake_base_path)
         if not quake_base_path.exists():
             print("[BUILD] Quake (shared) base index …")
             build_and_save(QuakeWrapper, quake_base_params, base_vecs, quake_base_path)
