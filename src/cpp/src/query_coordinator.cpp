@@ -110,7 +110,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         auto job_wait_start = std::chrono::high_resolution_clock::now();
         int64_t job_id;
         while (!res.job_queue.try_dequeue(job_id)) {
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
 
         auto job_wait_end = std::chrono::high_resolution_clock::now();
