@@ -54,6 +54,7 @@ public:
      vector<shared_ptr<TopkBuffer>> topk_buffer_pool; ///< Preallocated Top‑K buffers.
      vector<std::byte> local_query_buffer;            ///< Local aggregator for query results.
      moodycamel::BlockingConcurrentQueue<int64_t> job_queue; ///< Job queue for scan jobs.
+     std::unique_ptr<moodycamel::ProducerToken> producer_token;
     };
 
     vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.

@@ -69,6 +69,10 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
         worker_threads_[i] = std::thread(&QueryCoordinator::partition_scan_worker_fn, this, i);
         worker_job_counter_[i] = 0;
     }
+    for (int i = 0; i < num_workers_; i++) {
+        core_resources_[i].producer_token =
+                std::make_unique<moodycamel::ProducerToken>(core_resources_[i].job_queue);
+    }
     workers_initialized_ = true;
 }
 
@@ -455,12 +459,20 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 //                core_resources_[core_id].job_queue.enqueue((int64_t) jid);
             }
         }
-        end_time = high_resolution_clock::now();
         for (int i = 0; i < num_workers_; i++) {
-            core_resources_[i].job_queue.enqueue_bulk(per_worker_job_ids[i].begin(), per_worker_job_ids[i].size());
+            auto &ids = per_worker_job_ids[i];
+            auto &pt  = *core_resources_[i].producer_token;
+            core_resources_[i].job_queue.enqueue_bulk(
+                    pt,
+                    ids.data(),
+                    ids.size()
+            );
         }
+//        for (int i = 0; i < num_workers_; i++) {
+//            core_resources_[i].job_queue.enqueue_bulk(per_worker_job_ids[i].begin(), per_worker_job_ids[i].size());
+//        }
     }
-//    end_time = high_resolution_clock::now();
+    end_time = high_resolution_clock::now();
     timing_info->job_enqueue_time_ns = duration_cast<nanoseconds>(end_time - start_time).count();
 
     auto last_flush_time = high_resolution_clock::now();
