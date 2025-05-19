@@ -1,16 +1,15 @@
-#!/usr/bin/env python3
 """
-NUMA Single-Query Latency and Recall Benchmark (detailed timers, aggregated)
+NUMA Single-Query Latency and Recall Benchmark (detailed timers + parent)
 
-For each query we extract:
+Tracks these phases, for both the worker_scan and its parent search:
   - buffer_init_time_ns
   - job_enqueue_time_ns
   - job_wait_time_ns
   - result_aggregate_time_ns
   - total_time_ns
 
-We average each timer across queries in a trial, then average across trials,
-and emit those means (in ms) alongside recall and latency.
+Averages per‐query timers within each trial, then across trials,
+and writes them (in ms) to the per‐index CSV.
 """
 import sys
 from pathlib import Path
@@ -48,13 +47,13 @@ INDEX_CLASSES = {
 }
 
 def build_and_save(index_cls, params, vecs, path):
-    """Builds and persists an index to disk."""
+    """Build and persist an index."""
     idx = index_cls()
     idx.build(vecs, **params)
     idx.save(str(path))
 
 def extract_ids(res):
-    """Normalize the returned IDs array."""
+    """Normalize returned IDs array."""
     if hasattr(res, "ids"):
         arr = res.ids
     elif hasattr(res, "I"):
@@ -81,20 +80,20 @@ def run_experiment(cfg_path: str, output_dir: str) -> None:
     out_dir = Path(output_dir).expanduser().absolute()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load data
+    # Load dataset
     print(f"[INFO] loading dataset {ds_cfg['name']} …")
     base_vecs, queries, gt = load_dataset(ds_cfg["name"])
     queries = queries[:q_n]
     gt      = gt[:q_n] if gt is not None else None
 
-    # Build shared Quake base index if needed
+    # Build shared Quake base index once
     quake_base_params = None
     for c in idx_cfgs:
         if c["index"] == "Quake":
-            earthquake = dict(c.get("build_params", {}))
-            earthquake.pop("num_workers", None)
-            earthquake.pop("use_numa", None)
-            quake_base_params = earthquake
+            p = dict(c.get("build_params", {}))
+            p.pop("num_workers", None)
+            p.pop("use_numa", None)
+            quake_base_params = p
             break
 
     quake_base_path = out_dir / "Quake_base_index.bin"
@@ -115,16 +114,14 @@ def run_experiment(cfg_path: str, output_dir: str) -> None:
             continue
 
         idx_csv  = out_dir / f"{name}_results.csv"
-        idx_path = (quake_base_path if typ == "Quake"
-                    else out_dir / f"{name}_index.bin")
+        idx_path = quake_base_path if typ == "Quake" else out_dir / f"{name}_index.bin"
 
-        # Skip if done
         if idx_csv.exists() and not overwrite:
             print(f"[SKIP] {name} – results exist.")
             results.append(pd.read_csv(idx_csv).iloc[0].to_dict())
             continue
 
-        # Build non-Quake if missing
+        # Build non-Quake if needed
         if typ != "Quake" and not idx_path.exists():
             print(f"[BUILD] {name} index …")
             build_and_save(cls, b_params, base_vecs, idx_path)
@@ -132,16 +129,14 @@ def run_experiment(cfg_path: str, output_dir: str) -> None:
 
         # Load index
         if typ == "Quake":
-            load_kw = {k: b_params[k]
-                       for k in ("use_numa", "num_workers")
-                       if k in b_params}
+            load_kw = {k: b_params[k] for k in ("use_numa", "num_workers") if k in b_params}
             idx = QuakeWrapper(); idx.load(str(idx_path), **load_kw)
         elif typ == "DiskANN":
             idx = cls(); b_params.pop("metric", None); idx.load(str(idx_path), **b_params)
         else:
             idx = cls(); idx.load(str(idx_path))
 
-        # Dispatch search params
+        # Dispatch search parameters
         if typ == "SCANN":
             search_kw = {"leaves_to_search": s_params.get("leaves_to_search", 100)}
         elif typ == "HNSW":
@@ -157,72 +152,111 @@ def run_experiment(cfg_path: str, output_dir: str) -> None:
         for q in queries[:min(warmup_n, len(queries))]:
             idx.search(q.unsqueeze(0).float(), k, **search_kw)
 
-        # Collect per-trial means
-        all_trial_latencies = []
-        all_trial_recalls   = []
-        # for each timer: list of trial-means
-        buf_init_trials = []
-        enqueue_trials  = []
-        wait_trials     = []
-        agg_trials      = []
-        total_trials    = []
+        # Prepare accumulators
+        child_lat_trials = []
+        parent_lat_trials = []
+        child_buf_init_trials = []
+        child_enq_trials      = []
+        child_wait_trials     = []
+        child_agg_trials      = []
+        child_total_trials    = []
+        parent_buf_init_trials = []
+        parent_enq_trials      = []
+        parent_wait_trials     = []
+        parent_agg_trials      = []
+        parent_total_trials    = []
+        first_trial_recalls    = []
 
         for t in range(trials):
-            latencies = []
-            recalls   = []
-            buf_init_q = []
-            enq_q      = []
-            wait_q     = []
-            agg_q      = []
-            total_q    = []
+            # per-query lists
+            child_lats = []
+            parent_lats = []
+            child_buf_init = []
+            child_enq      = []
+            child_wait     = []
+            child_agg      = []
+            child_total    = []
+            parent_buf_init = []
+            parent_enq      = []
+            parent_wait     = []
+            parent_agg      = []
+            parent_total    = []
+            recalls = []
 
             for qi, q in enumerate(queries):
                 res = idx.search(q.unsqueeze(0).float(), k, **search_kw)
                 ti  = res.timing_info
-                # latency
-                if hasattr(ti, "total_time_ns"):
-                    latencies.append(ti.total_time_ns / 1e6)
+
+                # child latency
+                child_lats.append(ti.total_time_ns / 1e6)
+                child_buf_init.append(ti.buffer_init_time_ns)
+                child_enq.append(   ti.job_enqueue_time_ns)
+                child_wait.append(  ti.job_wait_time_ns)
+                child_agg.append(   ti.result_aggregate_time_ns)
+                child_total.append( ti.total_time_ns)
+
+                # parent latency (if exists)
+                pi = getattr(ti, "parent_info", None)
+                if pi and hasattr(pi, "total_time_ns"):
+                    parent_lats.append(pi.total_time_ns / 1e6)
+                    parent_buf_init.append(pi.buffer_init_time_ns)
+                    parent_enq.append(   pi.job_enqueue_time_ns)
+                    parent_wait.append(  pi.job_wait_time_ns)
+                    parent_agg.append(   pi.result_aggregate_time_ns)
+                    parent_total.append( pi.total_time_ns)
                 else:
-                    raise RuntimeError("missing total_time_ns")
+                    parent_lats.append(0.0)
+                    parent_buf_init.append(0)
+                    parent_enq.append(0)
+                    parent_wait.append(0)
+                    parent_agg.append(0)
+                    parent_total.append(0)
+
                 # recall on first trial only
                 if t == 0 and gt is not None:
                     preds = extract_ids(res)[0]
                     recalls.append(float(compute_recall(torch.tensor([preds]), gt[qi:qi+1], k).item()))
 
-                # collect timers (ns)
-                buf_init_q.append(ti.buffer_init_time_ns)
-                enq_q.append    (ti.job_enqueue_time_ns)
-                wait_q.append   (ti.job_wait_time_ns)
-                agg_q.append    (ti.result_aggregate_time_ns)
-                total_q.append  (ti.total_time_ns)
-
-            # trial means in ms
-            all_trial_latencies.append(np.mean(latencies))
-            buf_init_trials.append(np.mean(buf_init_q) / 1e6)
-            enqueue_trials .append(np.mean(enq_q)    / 1e6)
-            wait_trials    .append(np.mean(wait_q)   / 1e6)
-            agg_trials     .append(np.mean(agg_q)    / 1e6)
-            total_trials   .append(np.mean(total_q)  / 1e6)
+            # compute trial means
+            child_lat_trials.append(np.mean(child_lats))
+            parent_lat_trials.append(np.mean(parent_lats))
+            child_buf_init_trials.append(np.mean(child_buf_init)/1e6)
+            child_enq_trials     .append(np.mean(child_enq)     /1e6)
+            child_wait_trials    .append(np.mean(child_wait)    /1e6)
+            child_agg_trials     .append(np.mean(child_agg)     /1e6)
+            child_total_trials   .append(np.mean(child_total)   /1e6)
+            parent_buf_init_trials.append(np.mean(parent_buf_init)/1e6)
+            parent_enq_trials     .append(np.mean(parent_enq)     /1e6)
+            parent_wait_trials    .append(np.mean(parent_wait)    /1e6)
+            parent_agg_trials     .append(np.mean(parent_agg)     /1e6)
+            parent_total_trials   .append(np.mean(parent_total)   /1e6)
 
             if t == 0 and recalls:
-                all_trial_recalls.append(np.mean(recalls))
+                first_trial_recalls.append(np.mean(recalls))
 
             print(f" [{name} trial {t+1}/{trials}] "
-                  f"{all_trial_latencies[-1]:.2f} ms"
-                  + (f" | R@{k} {all_trial_recalls[-1]:.4f}" if recalls else ""))
+                  f"child {child_lat_trials[-1]:.2f} ms, "
+                  f"parent {parent_lat_trials[-1]:.2f} ms"
+                  + (f" | R@{k} {first_trial_recalls[-1]:.4f}" if recalls else ""))
 
-        # final averages across trials
+        # assemble final row
         row = {
             "index":             name,
             "n_workers":         b_params.get("num_workers", np.nan),
-            "mean_latency_ms":   float(np.mean(all_trial_latencies)),
-            "std_latency_ms":    float(np.std(all_trial_latencies)),
-            f"recall_at_{k}":    (float(all_trial_recalls[0]) if all_trial_recalls else np.nan),
-            "buffer_init_ms":    float(np.mean(buf_init_trials)),
-            "enqueue_ms":        float(np.mean(enqueue_trials)),
-            "wait_ms":           float(np.mean(wait_trials)),
-            "aggregate_ms":      float(np.mean(agg_trials)),
-            "total_time_ms":     float(np.mean(total_trials)),
+            "child_mean_latency_ms": float(np.mean(child_lat_trials)),
+            "child_std_latency_ms":  float(np.std(child_lat_trials)),
+            f"recall_at_{k}":        (float(first_trial_recalls[0]) if first_trial_recalls else np.nan),
+            "child_buffer_init_ms":  float(np.mean(child_buf_init_trials)),
+            "child_enqueue_ms":      float(np.mean(child_enq_trials)),
+            "child_wait_ms":         float(np.mean(child_wait_trials)),
+            "child_aggregate_ms":    float(np.mean(child_agg_trials)),
+            "child_total_time_ms":   float(np.mean(child_total_trials)),
+            "parent_mean_latency_ms":float(np.mean(parent_lat_trials)),
+            "parent_buffer_init_ms": float(np.mean(parent_buf_init_trials)),
+            "parent_enqueue_ms":     float(np.mean(parent_enq_trials)),
+            "parent_wait_ms":        float(np.mean(parent_wait_trials)),
+            "parent_aggregate_ms":   float(np.mean(parent_agg_trials)),
+            "parent_total_time_ms":  float(np.mean(parent_total_trials)),
         }
         results.append(row)
         pd.DataFrame([row]).to_csv(idx_csv, index=False)
@@ -233,7 +267,7 @@ def run_experiment(cfg_path: str, output_dir: str) -> None:
     df.to_csv(out_csv, index=False)
     print(f"\n[RESULT] aggregated CSV → {out_csv}")
 
-    # latency plot
+    # latency plot (child only for clarity)
     plt.figure()
     for nm in df["index"].unique():
         sub = df[df["index"] == nm]
@@ -241,16 +275,16 @@ def run_experiment(cfg_path: str, output_dir: str) -> None:
                else f"{nm} (nw={int(sub['n_workers'].iloc[0])})")
         plt.errorbar(
             sub["n_workers"] if "n_workers" in sub else sub.index,
-            sub["mean_latency_ms"],
-            yerr=sub["std_latency_ms"],
+            sub["child_mean_latency_ms"],
+            yerr=sub["child_std_latency_ms"],
             marker="o", capsize=5, label=lbl
         )
     plt.xscale("symlog", base=2)
-    plt.xlabel("Num Workers"); plt.ylabel("Mean Latency (ms)")
-    plt.title("Single-Query Latency"); plt.legend(); plt.tight_layout()
-    lat_path = Path(output_dir) / f"{out_csv.stem}_latency.png"
+    plt.xlabel("Num Workers"); plt.ylabel("Mean Child Latency (ms)")
+    plt.title("Single-Query Child Latency"); plt.legend(); plt.tight_layout()
+    lat_path = Path(output_dir) / f"{out_csv.stem}_child_latency.png"
     plt.savefig(lat_path)
-    print(f"[PLOT] latency plot → {lat_path}")
+    print(f"[PLOT] child latency plot → {lat_path}")
 
     # recall plot
     if f"recall_at_{k}" in df.columns:

@@ -403,7 +403,9 @@ inline void batched_scan_list(const float *query_vecs,
                               int list_size,
                               int dim,
                               vector<shared_ptr<TopkBuffer>> &topk_buffers,
-                              MetricType metric = faiss::METRIC_L2) {
+                              MetricType metric = faiss::METRIC_L2,
+                              float *distances = nullptr,
+                              int64_t *labels = nullptr) {
     if (list_size == 0 || list_vecs == nullptr) {
         // No list vectors to process;
         return;
@@ -413,8 +415,12 @@ inline void batched_scan_list(const float *query_vecs,
     int k = topk_buffers[0]->k_;
     int k_max = std::min(k, list_size);
 
-    int64_t *labels = (int64_t *) malloc(num_queries * k_max * sizeof(int64_t));
-    float *distances = (float *) malloc(num_queries * k_max * sizeof(float));
+    bool alloc_results = false;
+    if (distances == nullptr) {
+        alloc_results = true;
+        (int64_t *) malloc(num_queries * k_max * sizeof(int64_t));
+        (float *) malloc(num_queries * k_max * sizeof(float));
+    }
 
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
@@ -447,8 +453,10 @@ inline void batched_scan_list(const float *query_vecs,
         topk_buffers[i]->batch_add(distances + i * k_max, labels + i * k_max, k_max);
     }
 
-    free(labels);
-    free(distances);
+    if (alloc_results) {
+        free(distances);
+        free(labels);
+    }
 }
 
 // }
