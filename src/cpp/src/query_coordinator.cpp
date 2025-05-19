@@ -461,11 +461,12 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 }
                 size_t jid = next_job_id_.fetch_add(1, std::memory_order_acq_rel);
                 job_buffer_[jid] = job;
+                end_time = high_resolution_clock::now();
                 core_resources_[core_id].job_queue.enqueue((int64_t) jid);
             }
         }
     }
-    end_time = high_resolution_clock::now();
+
     timing_info->job_enqueue_time_ns = duration_cast<nanoseconds>(end_time - start_time).count();
 
     auto last_flush_time = high_resolution_clock::now();
