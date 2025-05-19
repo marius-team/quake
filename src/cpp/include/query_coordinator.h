@@ -25,12 +25,21 @@ class MaintenancePolicy;
 struct ScanJob {
     int64_t partition_id;         ///< The identifier of the partition to be scanned.
     int k;                        ///< The number of neighbors (Top-K) to return.
-    const float* query_vector;    ///< Pointer to the query vector.
-    vector<int64_t> query_ids;    ///< Global query IDs; used in batched mode.
+    const float* query_vector;    ///< Pointer to the query vector (s)
     int64_t single_query_global_id = -1;
     bool is_batched = false;      ///< Indicates whether this is a batched query job.
     int64_t num_queries = 0;      ///< The number of queries in batched mode.
     int rank = 0;                 ///< Rank of the partition
+
+    std::vector<int64_t> query_ids_for_batch_job;
+
+    ScanJob() :
+            is_batched(false),
+            partition_id(-1),
+            k(0),
+            query_vector(nullptr),
+            num_queries(0),
+            single_query_global_id(-1) {}
 };
 
 // Structure to hold individual partition scan results from workers
@@ -66,7 +75,7 @@ struct AggregatedResultItem {
 
 struct CoreResources {
     int core_id = -1;
-    moodycamel::BlockingConcurrentQueue<ScanJob> job_queue;
+    moodycamel::BlockingConcurrentQueue<int64_t> job_queue;
     std::vector<std::shared_ptr<TopkBuffer>> topk_buffer_pool; // Pool of TopkBuffers for this core
 
     // NUMA-aware local buffer for query data
@@ -174,6 +183,7 @@ public:
     moodycamel::ConcurrentQueue<AggregatedResultItem> aggregated_results_queue_;
     std::mutex result_queues_mutex_; // Protects resizing of query_result_queues_
     bool use_numa_ = false;
+    std::vector<ScanJob> job_details_store_;
 
 
     void partition_scan_worker_fn(int core_index);
