@@ -602,12 +602,12 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     timing_info->result_aggregate_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - result_aggregation_start_time).count();
 
     // Print out timing info in ms with a single indent
-//    std::cout << "[QueryCoordinator::worker_scan] Worker scan timing info:" << std::endl;
-//    std::cout << "  Buffer init time: " << timing_info->buffer_init_time_ns / 1e6 << " ms" << std::endl;
-//    std::cout << "  Job enqueue time: " << timing_info->job_enqueue_time_ns / 1e6 << " ms" << std::endl;
-//    std::cout << "  Job wait time: " << timing_info->job_wait_time_ns / 1e6 << " ms" << std::endl;
-//    std::cout << "  Result aggregate time: " << timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
-//    std::cout << "  Total worker scan time: " << timing_info->job_wait_time_ns / 1e6 + timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "[QueryCoordinator::worker_scan] Worker scan timing info:" << std::endl;
+    std::cout << "  Buffer init time: " << timing_info->buffer_init_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "  Job enqueue time: " << timing_info->job_enqueue_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "  Job wait time: " << timing_info->job_wait_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "  Result aggregate time: " << timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "  Total worker scan time: " << timing_info->job_wait_time_ns / 1e6 + timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
     auto overall_worker_scan_end_time = high_resolution_clock::now();
 
     auto search_result = std::make_shared<SearchResult>();
