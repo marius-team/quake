@@ -42,7 +42,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, in
     res.topk_buffer_pool.resize(num_queries);
     for (int q = 0; q < num_queries; ++q) {
         res.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
-        res.job_queue = moodycamel::ConcurrentQueue<int64_t>();
+        res.job_queue = moodycamel::BlockingReaderWriterQueue<int64_t>();
     }
 }
 
@@ -109,9 +109,10 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
         auto job_wait_start = std::chrono::high_resolution_clock::now();
         int64_t job_id;
-        while (!res.job_queue.try_dequeue(job_id)) {
-            std::this_thread::sleep_for(std::chrono::microseconds(5));
-        }
+        res.job_queue.wait_dequeue(job_id);
+//        while (!res.job_queue.try_dequeue(job_id)) {
+//            std::this_thread::sleep_for(std::chrono::microseconds(5));
+//        }
 
         auto job_wait_end = std::chrono::high_resolution_clock::now();
 
