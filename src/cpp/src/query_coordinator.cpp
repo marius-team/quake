@@ -286,7 +286,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         job_process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(job_process_end - job_process_start).count();
     }
 
-    std::cout << "Worker=" << core_index << ": total_pull_time=" << total_pull_time / 1000 << ", total_scan_time=" << total_scan_time / 1000 << ", merge_time=" << total_merge_time / 1000 << '\n';
+//    std::cout << "Worker=" << core_index << ": total_pull_time=" << total_pull_time / 1000 << ", total_scan_time=" << total_scan_time / 1000 << ", merge_time=" << total_merge_time / 1000 << '\n';
 }
 
 // Worker-Based Scan Implementation
