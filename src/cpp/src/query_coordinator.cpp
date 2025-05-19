@@ -47,7 +47,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, in
 
     int num_numa_nodes = 1;
     #ifdef QUAKE_USE_NUMA
-    num_numa_nodes = numa_max_node();
+    num_numa_nodes = numa_max_node() + 1;
     #endif
     numa_resources_.resize(num_numa_nodes);
 
@@ -214,6 +214,13 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 local_topk_buffer->set_k(job.k);
                 local_topk_buffer->reset();
             }
+
+            int d = partition_manager_->d();
+            std::memcpy(numa_res.local_query_buffer,
+                        job.query_vector,
+                        size_t(d) * sizeof(float));
+
+
             auto s2 = std::chrono::high_resolution_clock::now();
             // Perform the scan on the partition.
             scan_list(numa_res.local_query_buffer,
