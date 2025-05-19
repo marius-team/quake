@@ -42,7 +42,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, in
     res.topk_buffer_pool.resize(num_queries);
     for (int q = 0; q < num_queries; ++q) {
         res.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
-        res.job_queue = moodycamel::BlockingConcurrentQueue<int64_t>();
+        res.job_queue = moodycamel::ConcurrentQueue<int64_t>();
     }
 }
 
@@ -68,10 +68,6 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
         allocate_core_resources(i, 1, 10, partition_manager_->d());
         worker_threads_[i] = std::thread(&QueryCoordinator::partition_scan_worker_fn, this, i);
         worker_job_counter_[i] = 0;
-    }
-    for (int i = 0; i < num_workers_; i++) {
-        core_resources_[i].producer_token =
-                std::make_unique<moodycamel::ProducerToken>(core_resources_[i].job_queue);
     }
     workers_initialized_ = true;
 }
@@ -113,7 +109,10 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
         auto job_wait_start = std::chrono::high_resolution_clock::now();
         int64_t job_id;
-        res.job_queue.wait_dequeue(job_id);
+        while (!res.job_queue.try_dequeue(job_id)) {
+            std::this_thread::yield();
+        }
+
         auto job_wait_end = std::chrono::high_resolution_clock::now();
 
         job_pull_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(job_wait_end - job_wait_start).count();
@@ -461,9 +460,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         }
         for (int i = 0; i < num_workers_; i++) {
             auto &ids = per_worker_job_ids[i];
-            auto &pt  = *core_resources_[i].producer_token;
             core_resources_[i].job_queue.enqueue_bulk(
-                    pt,
                     ids.data(),
                     ids.size()
             );
