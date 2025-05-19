@@ -343,113 +343,113 @@ inline void scan_list(const float *query_vec,
     }
 }
 
-inline void batched_scan_list(
-        const float *query_vecs,
-        const float *list_vecs,
-        const int64_t *list_ids,
-        int num_queries,
-        int list_size,
-        int dim,
-        vector<shared_ptr<TopkBuffer>> &topk_buffers,
-        MetricType metric = faiss::METRIC_L2)
-{
-    if (list_size == 0 || list_vecs == nullptr) {
-        return;
-    }
-
-    // Wrap raw arrays in torch Tensors, no copy
-    Tensor query = torch::from_blob((void*)query_vecs, {num_queries, dim}, torch::kFloat32);
-    Tensor list  = torch::from_blob((void*)list_vecs,  {list_size, dim}, torch::kFloat32);
-
-    torch::Tensor distances;
-    if (metric == faiss::METRIC_L2) {
-        // Returns [num_queries, list_size], each entry is the Euclidean distance
-        distances = torch::cdist(query, list, 2.0);
-    } else if (metric == faiss::METRIC_INNER_PRODUCT) {
-        // [num_queries, list_size], each entry is dot product
-        distances = torch::matmul(query, list.t());
-    } else {
-        throw std::runtime_error("Metric type not supported");
-    }
-
-    // For each query, push all list vectors and their distances into TopkBuffer
-    auto distances_acc = distances.accessor<float,2>();
-    for (int i = 0; i < num_queries; ++i) {
-        std::vector<float> dists(list_size);
-        std::vector<int64_t> ids(list_size);
-
-        for (int j = 0; j < list_size; ++j) {
-            dists[j] = distances_acc[i][j];
-        }
-
-        if (list_ids) {
-            for (int j = 0; j < list_size; ++j) {
-                ids[j] = list_ids[j];
-            }
-        } else {
-            for (int j = 0; j < list_size; ++j) {
-                ids[j] = j;
-            }
-        }
-
-        topk_buffers[i]->batch_add(dists.data(), ids.data(), list_size);
-    }
-}
-
-//inline void batched_scan_list(const float *query_vecs,
-//                              const float *list_vecs,
-//                              const int64_t *list_ids,
-//                              int num_queries,
-//                              int list_size,
-//                              int dim,
-//                              vector<shared_ptr<TopkBuffer>> &topk_buffers,
-//                              MetricType metric = faiss::METRIC_L2) {
+//inline void batched_scan_list(
+//        const float *query_vecs,
+//        const float *list_vecs,
+//        const int64_t *list_ids,
+//        int num_queries,
+//        int list_size,
+//        int dim,
+//        vector<shared_ptr<TopkBuffer>> &topk_buffers,
+//        MetricType metric = faiss::METRIC_L2)
+//{
 //    if (list_size == 0 || list_vecs == nullptr) {
-//        // No list vectors to process;
 //        return;
 //    }
 //
-//    // Ensure k does not exceed list_size
-//    int k = topk_buffers[0]->k_;
-//    int k_max = std::min(k, list_size);
+//    // Wrap raw arrays in torch Tensors, no copy
+//    Tensor query = torch::from_blob((void*)query_vecs, {num_queries, dim}, torch::kFloat32);
+//    Tensor list  = torch::from_blob((void*)list_vecs,  {list_size, dim}, torch::kFloat32);
 //
-//    int64_t *labels = (int64_t *) malloc(num_queries * k_max * sizeof(int64_t));
-//    float *distances = (float *) malloc(num_queries * k_max * sizeof(float));
-//
-//    if (metric == faiss::METRIC_INNER_PRODUCT) {
-//        faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
-//        faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
-//    } else if (metric == faiss::METRIC_L2) {
-//        faiss::float_maxheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
-//        faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
+//    torch::Tensor distances;
+//    if (metric == faiss::METRIC_L2) {
+//        // Returns [num_queries, list_size], each entry is the Euclidean distance
+//        distances = torch::cdist(query, list, 2.0);
+//    } else if (metric == faiss::METRIC_INNER_PRODUCT) {
+//        // [num_queries, list_size], each entry is dot product
+//        distances = torch::matmul(query, list.t());
 //    } else {
 //        throw std::runtime_error("Metric type not supported");
 //    }
 //
-//    // map the labels to the actual list_ids
-//    if (list_ids != nullptr) {
-//        for (int i = 0; i < num_queries; i++) {
-//            for (int j = 0; j < k_max; j++) {
-//                labels[i * k_max + j] = list_ids[labels[i * k_max + j]];
+//    // For each query, push all list vectors and their distances into TopkBuffer
+//    auto distances_acc = distances.accessor<float,2>();
+//    for (int i = 0; i < num_queries; ++i) {
+//        std::vector<float> dists(list_size);
+//        std::vector<int64_t> ids(list_size);
+//
+//        for (int j = 0; j < list_size; ++j) {
+//            dists[j] = distances_acc[i][j];
+//        }
+//
+//        if (list_ids) {
+//            for (int j = 0; j < list_size; ++j) {
+//                ids[j] = list_ids[j];
+//            }
+//        } else {
+//            for (int j = 0; j < list_size; ++j) {
+//                ids[j] = j;
 //            }
 //        }
-//    }
 //
-//    // if the metric is l2, convert the distances to sqrt
-//    if (metric == faiss::METRIC_L2) {
-//        for (int i = 0; i < num_queries * k_max; i++) {
-//            distances[i] = sqrt(distances[i]);
-//        }
+//        topk_buffers[i]->batch_add(dists.data(), ids.data(), list_size);
 //    }
-//
-//    // add distances to the topk buffers
-//    for (int i = 0; i < num_queries; i++) {
-//        topk_buffers[i]->batch_add(distances + i * k_max, labels + i * k_max, k_max);
-//    }
-//
-//    free(labels);
-//    free(distances);
 //}
+
+inline void batched_scan_list(const float *query_vecs,
+                              const float *list_vecs,
+                              const int64_t *list_ids,
+                              int num_queries,
+                              int list_size,
+                              int dim,
+                              vector<shared_ptr<TopkBuffer>> &topk_buffers,
+                              MetricType metric = faiss::METRIC_L2) {
+    if (list_size == 0 || list_vecs == nullptr) {
+        // No list vectors to process;
+        return;
+    }
+
+    // Ensure k does not exceed list_size
+    int k = topk_buffers[0]->k_;
+    int k_max = std::min(k, list_size);
+
+    int64_t *labels = (int64_t *) malloc(num_queries * k_max * sizeof(int64_t));
+    float *distances = (float *) malloc(num_queries * k_max * sizeof(float));
+
+    if (metric == faiss::METRIC_INNER_PRODUCT) {
+        faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
+        faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
+    } else if (metric == faiss::METRIC_L2) {
+        faiss::float_maxheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
+        faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
+    } else {
+        throw std::runtime_error("Metric type not supported");
+    }
+
+    // map the labels to the actual list_ids
+    if (list_ids != nullptr) {
+        for (int i = 0; i < num_queries; i++) {
+            for (int j = 0; j < k_max; j++) {
+                labels[i * k_max + j] = list_ids[labels[i * k_max + j]];
+            }
+        }
+    }
+
+    // if the metric is l2, convert the distances to sqrt
+    if (metric == faiss::METRIC_L2) {
+        for (int i = 0; i < num_queries * k_max; i++) {
+            distances[i] = sqrt(distances[i]);
+        }
+    }
+
+    // add distances to the topk buffers
+    for (int i = 0; i < num_queries; i++) {
+        topk_buffers[i]->batch_add(distances + i * k_max, labels + i * k_max, k_max);
+    }
+
+    free(labels);
+    free(distances);
+}
 
 // }
 #endif //LIST_SCANNING_H
