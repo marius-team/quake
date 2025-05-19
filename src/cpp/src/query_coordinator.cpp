@@ -42,7 +42,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, in
     res.topk_buffer_pool.resize(num_queries);
     for (int q = 0; q < num_queries; ++q) {
         res.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
-        res.job_queue = moodycamel::ReaderWriterQueue<int64_t>();
+        res.job_queue = moodycamel::ConcurrentQueue<int64_t>();
     }
 }
 

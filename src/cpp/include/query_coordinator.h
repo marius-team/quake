@@ -10,8 +10,7 @@
 #include <common.h>
 #include <list_scanning.h>
 #include <maintenance_policies.h>
-//#include <blockingconcurrentqueue.h>
-#include <readerwritequeue.h>
+#include <concurrentqueue.h>
 
 class QuakeIndex;
 class PartitionManager;
@@ -54,7 +53,7 @@ public:
      int core_id; ///< Logical identifier of the core.
      vector<shared_ptr<TopkBuffer>> topk_buffer_pool; ///< Preallocated Top‑K buffers.
      vector<std::byte> local_query_buffer;            ///< Local aggregator for query results.
-     moodycamel::ReaderWriterQueue<int64_t> job_queue; ///< Job queue for scan jobs.
+     moodycamel::ConcurrentQueue<int64_t> job_queue; ///< Job queue for scan jobs.
     };
 
     vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.
