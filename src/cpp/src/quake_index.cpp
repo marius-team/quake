@@ -284,7 +284,7 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa)
             int n_parts = partition_manager_->nlist();
 
             // don't put too many parent workers. maximum of 1 worker per 500 partitions
-            int parent_n_workers = std::max(1, n_parts / 500);
+            int parent_n_workers = std::max(1, n_parts / 1000);
             parent_n_workers = std::min(parent_n_workers, n_workers);
 
             parent_->load(parent_dir, parent_n_workers, use_numa);

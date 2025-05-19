@@ -49,6 +49,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, in
     #ifdef QUAKE_USE_NUMA
     num_numa_nodes = numa_max_node();
     #endif
+    numa_resources_.resize(num_numa_nodes);
 
     for (int i = 0; i < num_numa_nodes; i++) {
         NUMAResources &numa_res = numa_resources_[i];
