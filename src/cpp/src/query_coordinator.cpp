@@ -352,27 +352,48 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     if (search_params->batched_scan) {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
-        std::unordered_map<int64_t, vector<int64_t>> per_partition_query_ids;
-        for (int64_t q = 0; q < num_queries; q++) {
-            for (int64_t p = 0; p < partition_ids.size(1); p++) {
-                int64_t pid = partition_ids_accessor[q][p];
-                if (pid < 0) continue;
-                per_partition_query_ids[pid].push_back(q);
+        if (partition_manager_->nlist() == partition_ids.size(0)) {
+            vector<int64_t> all_query_ids = std::vector<int64_t>(x.size(0));
+            std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
+
+            for (int64_t i = 0; i < partition_manager_->nlist(); i++) {
+                ScanJob job;
+                job.is_batched = true;
+                job.partition_id = i;
+                job.k = k;
+                job.query_vector = x.data_ptr<float>();
+                job.num_queries = x.size(0);
+                job.query_ids = all_query_ids;
+                int core_id = partition_manager_->get_partition_core_id(i);
+                if (core_id < 0) {
+                    throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
+                }
+                core_resources_[core_id].job_queue.enqueue(job);
             }
-        }
-        for (auto &kv : per_partition_query_ids) {
-            ScanJob job;
-            job.is_batched = true;
-            job.partition_id = kv.first;
-            job.k = k;
-            job.query_vector = x.data_ptr<float>();
-            job.num_queries = kv.second.size();
-            job.query_ids = kv.second;
-            int core_id = partition_manager_->get_partition_core_id(kv.first);
-            if (core_id < 0) {
-                throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
+
+        } else {
+            std::unordered_map<int64_t, vector<int64_t>> per_partition_query_ids;
+            for (int64_t q = 0; q < num_queries; q++) {
+                for (int64_t p = 0; p < partition_ids.size(1); p++) {
+                    int64_t pid = partition_ids_accessor[q][p];
+                    if (pid < 0) continue;
+                    per_partition_query_ids[pid].push_back(q);
+                }
             }
-            core_resources_[core_id].job_queue.enqueue(job);
+            for (auto &kv : per_partition_query_ids) {
+                ScanJob job;
+                job.is_batched = true;
+                job.partition_id = kv.first;
+                job.k = k;
+                job.query_vector = x.data_ptr<float>();
+                job.num_queries = kv.second.size();
+                job.query_ids = kv.second;
+                int core_id = partition_manager_->get_partition_core_id(kv.first);
+                if (core_id < 0) {
+                    throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
+                }
+                core_resources_[core_id].job_queue.enqueue(job);
+            }
         }
     } else {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
