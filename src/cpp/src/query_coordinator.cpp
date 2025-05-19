@@ -462,8 +462,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
                 job_buffer_[jid] = std::move(job);
-                jid++;
                 core_resources_[core_id].job_queue.enqueue(jid);
+                jid++;
             }
         }
     }
