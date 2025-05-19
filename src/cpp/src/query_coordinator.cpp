@@ -103,6 +103,10 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         std::cout << "[QueryCoordinator::partition_scan_worker_fn] Failed to set thread affinity on core " << core_index << std::endl;
     }
 
+    int64_t total_pull_time = 0;
+    int64_t total_scan_time = 0;
+    int64_t total_merge_time = 0;
+
     while (true) {
         ScanJob job;
 
@@ -260,6 +264,10 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             auto process_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s3 - s2).count();
             auto merge_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s4 - s3).count();
 
+            total_pull_time += wait_time;
+            total_scan_time += process_time;
+            total_merge_time += merge_time;
+
 //            std::cout << "[QueryCoordinator::partition_scan_worker_fn] Worker " << core_index
 //                      << " wait_time: " << wait_time / 1e6 << " ms, "
 //                      << "process_time: " << process_time / 1e6 << " ms, "
@@ -268,6 +276,8 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         auto job_process_end = std::chrono::high_resolution_clock::now();
         job_process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(job_process_end - job_process_start).count();
     }
+
+    std::cout << "Worker=" << core_index << ": total_pull_time=" << total_pull_time / 1000 << ", total_scan_time=" << total_scan_time / 1000 << ", merge_time=" << merge_time / 1000 << '\n';
 }
 
 // Worker-Based Scan Implementation
