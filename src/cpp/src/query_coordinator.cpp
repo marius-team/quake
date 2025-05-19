@@ -172,15 +172,10 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             break; // Exit signal or global stop signal
         }
 
-        if (job.query_ids.empty()) {
-            if (job.single_query_global_id != -1) {
-                job.query_ids = {job.single_query_global_id}; // Convert single query ID to vector
-            } else {
-                continue;
-            }
-            // std::cerr << "[Worker " << core_index << "] Job for partition " << job.partition_id << " has no query_ids. Skipping." << std::endl;
-
+        if (job.query_ids.empty() && job.single_query_global_id != -1) {
+            continue;
         }
+
 
         const float *partition_codes_ptr = nullptr;
         const int64_t *partition_ids_ptr = nullptr;
@@ -188,29 +183,30 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         int current_dim = 0;
 
         try {
-            if (!partition_manager_ || !partition_manager_->partition_store_) {
-                // std::cerr << "[Worker " << core_index << "] Partition manager or store not available. Skipping job for partition " << job.partition_id << std::endl;
-                // Send empty/failure results for affected queries
-                for(int64_t q_id : job.query_ids) {
-                    aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, false)});
-                }
-                continue;
-            }
             current_dim = partition_manager_->d();
             partition_codes_ptr = (float *)partition_manager_->partition_store_->get_codes(job.partition_id);
             partition_ids_ptr = (int64_t *)partition_manager_->partition_store_->get_ids(job.partition_id);
             partition_size = partition_manager_->partition_store_->list_size(job.partition_id);
         } catch (const std::runtime_error &e) {
-            // std::cerr << "[Worker " << core_index << "] Error accessing partition " << job.partition_id << ": " << e.what() << std::endl;
-            for(int64_t q_id : job.query_ids) {
-                aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, false)});
+            if (job.is_batched) {
+                for(int64_t q_id : job.query_ids) {
+                    aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, false)});
+                }
+            } else {
+                aggregated_results_queue_.enqueue(AggregatedResultItem{job.single_query_global_id, PartitionScanResult(job.single_query_global_id, job.partition_id, false)});
             }
+
             continue;
         }
 
         if (partition_size == 0 || partition_codes_ptr == nullptr) {
-            for(int64_t q_id : job.query_ids) {
-                aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, {}, {})}); // Empty but valid
+
+            if (job.is_batched) {
+                for(int64_t q_id : job.query_ids) {
+                    aggregated_results_queue_.enqueue(AggregatedResultItem{q_id, PartitionScanResult(q_id, job.partition_id, {}, {})}); // Empty but valid
+                }
+            } else {
+                aggregated_results_queue_.enqueue(AggregatedResultItem{job.single_query_global_id, PartitionScanResult(job.single_query_global_id, job.partition_id, {}, {})}); // Empty but valid
             }
             continue;
         }
@@ -245,7 +241,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         // --- End Buffer Management ---
 
         if (!job.is_batched) {
-            int64_t current_global_query_id = job.query_ids[0];
+            int64_t current_global_query_id = job.single_query_global_id;
             std::memcpy(res_ref.local_query_data_, job.query_vector, required_capacity_bytes);
 
             if (res_ref.topk_buffer_pool.empty() || !res_ref.topk_buffer_pool[0]) {
