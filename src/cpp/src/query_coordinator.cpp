@@ -160,6 +160,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         // Branch for non-batched jobs.
         if (!job.is_batched) {
 
+            auto s1 = std::chrono::high_resolution_clock::now();
             // Allocate a thread-local query buffer if needed.
             if (res.local_query_buffer.size() < partition_manager_->d() * sizeof(float)) {
                 res.local_query_buffer.resize(partition_manager_->d() * sizeof(float));
@@ -176,6 +177,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 local_topk_buffer->set_k(job.k);
                 local_topk_buffer->reset();
             }
+            auto s2 = std::chrono::high_resolution_clock::now();
             // Perform the scan on the partition.
             scan_list((float *) res.local_query_buffer.data(),
                 partition_codes,
@@ -184,6 +186,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                       partition_manager_->d(),
                       *local_topk_buffer,
                       metric_);
+            auto s3 = std::chrono::high_resolution_clock::now();
 
             vector<float> topk = local_topk_buffer->get_topk();
             vector<int64_t> topk_indices = local_topk_buffer->get_topk_indices();
@@ -192,6 +195,17 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             // Merge local results into the global query buffer.
             global_topk_buffer_pool_[job.query_ids[0]]->batch_add(topk.data(), topk_indices.data(), n_results);
             job_flags_[job.query_ids[0]][job.rank] = true;
+
+            auto s4 = std::chrono::high_resolution_clock::now();
+
+            // print out timings for worker
+            auto wait_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s2 - s1).count();
+            auto process_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s3 - s2).count();
+            auto merge_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s4 - s3).count();
+
+            total_pull_time += wait_time;
+            total_scan_time += process_time;
+            total_merge_time += merge_time;
         }
         // Batched job branch.
         else {
@@ -267,11 +281,6 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             total_pull_time += wait_time;
             total_scan_time += process_time;
             total_merge_time += merge_time;
-
-//            std::cout << "[QueryCoordinator::partition_scan_worker_fn] Worker " << core_index
-//                      << " wait_time: " << wait_time / 1e6 << " ms, "
-//                      << "process_time: " << process_time / 1e6 << " ms, "
-//                      << "merge_time: " << merge_time / 1e6 << " ms" << std::endl;
         }
         auto job_process_end = std::chrono::high_resolution_clock::now();
         job_process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(job_process_end - job_process_start).count();
@@ -801,7 +810,6 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
         } else {
             parent_search_params = search_params->parent_params;
         }
-        parent_search_params->batched_scan = true;
 
         // if recall_target is set, we need an initial set of partitions to consider
         if (search_params->recall_target > 0.0 && !search_params->batched_scan) {
