@@ -418,8 +418,8 @@ inline void batched_scan_list(const float *query_vecs,
     bool alloc_results = false;
     if (distances == nullptr) {
         alloc_results = true;
-        (int64_t *) malloc(num_queries * k_max * sizeof(int64_t));
-        (float *) malloc(num_queries * k_max * sizeof(float));
+        labels = (int64_t *) malloc(num_queries * k_max * sizeof(int64_t));
+        distances = (float *) malloc(num_queries * k_max * sizeof(float));
     }
 
     if (metric == faiss::METRIC_INNER_PRODUCT) {
