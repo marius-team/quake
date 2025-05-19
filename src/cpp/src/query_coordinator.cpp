@@ -442,6 +442,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         job_buffer_.resize(num_queries * partition_ids.size(1));
+        int jid = 0;
         for (int q = 0; q < num_queries; q++) {
             for (int64_t p = 0; p < partition_ids.size(1); p++) {
                 int64_t pid = partition_ids_accessor[q][p];
@@ -460,8 +461,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
-                size_t jid = next_job_id_.fetch_add(1, std::memory_order_acq_rel);
                 job_buffer_[jid] = std::move(job);
+                jid++;
                 core_resources_[core_id].job_queue.enqueue(jid);
             }
         }
