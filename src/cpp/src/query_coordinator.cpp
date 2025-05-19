@@ -38,11 +38,26 @@ QueryCoordinator::~QueryCoordinator() {
 void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, int k, int d) {
     CoreResources &res = core_resources_[core_idx];
     res.core_id = core_idx;
-    res.local_query_buffer.resize(num_queries * d * sizeof(float));
     res.topk_buffer_pool.resize(num_queries);
     for (int q = 0; q < num_queries; ++q) {
         res.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
         res.job_queue = moodycamel::ConcurrentQueue<int64_t>();
+    }
+
+
+    int num_numa_nodes = 1;
+    #ifdef QUAKE_USE_NUMA
+    num_numa_nodes = numa_max_node();
+    #endif
+
+    for (int i = 0; i < num_numa_nodes; i++) {
+        NUMAResources &numa_res = numa_resources_[i];
+        int64_t alloc_size = num_queries * d * sizeof(float);
+    #ifdef QUAKE_USE_NUMA
+        numa_res.local_query_buffer = (float *) numa_alloc_onnode(alloc_size, numa_node));
+    #else
+        numa_res.local_query_buffer = (float *) std::malloc(alloc_size);
+    #endif
     }
 }
 
@@ -107,6 +122,12 @@ void threadsafe_cout(std::string log_msg)
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     CoreResources &res = core_resources_[core_index];
+
+    int numa_node = 1;
+    #ifdef QUAKE_USE_NUMA
+    numa_node = numa_node_of_cpu(core_index);
+    #endif
+    NUMAResources &numa_res = numa_resources_[numa_node];
 
     if (!set_thread_affinity(core_index)) {
         std::cout << "[QueryCoordinator::partition_scan_worker_fn] Failed to set thread affinity on core " << core_index << std::endl;
@@ -185,15 +206,6 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         if (!job.is_batched) {
 
             auto s1 = std::chrono::high_resolution_clock::now();
-            // Allocate a thread-local query buffer if needed.
-            if (res.local_query_buffer.size() < partition_manager_->d() * sizeof(float)) {
-                res.local_query_buffer.resize(partition_manager_->d() * sizeof(float));
-            }
-
-            // Copy the contents of the query vector to the local buffer using memcpy.
-            if (memcpy(res.local_query_buffer.data(), job.query_vector, partition_manager_->d() * sizeof(float)) == nullptr) {
-                throw std::runtime_error("[partition_scan_worker_fn] memcpy failed.");
-            }
 
             if (local_topk_buffer == nullptr) {
                 throw std::runtime_error("[partition_scan_worker_fn] local_topk_buffer is null.");
@@ -203,7 +215,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             }
             auto s2 = std::chrono::high_resolution_clock::now();
             // Perform the scan on the partition.
-            scan_list((float *) res.local_query_buffer.data(),
+            scan_list(numa_res.local_query_buffer,
                 partition_codes,
                 partition_ids,
                       partition_size,
@@ -239,10 +251,6 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 throw std::runtime_error("[partition_scan_worker_fn] Invalid batched job.");
             }
 
-            if (res.local_query_buffer.size() < partition_manager_->d() * sizeof(float) * job.num_queries) {
-                res.local_query_buffer.resize(partition_manager_->d() * sizeof(float) * job.num_queries);
-            }
-
             auto s1 = std::chrono::high_resolution_clock::now();
 
             int64_t d = partition_manager_->d();
@@ -254,7 +262,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                        d * sizeof(float));
             }
 
-            if(memcpy(res.local_query_buffer.data(),
+            if(memcpy(numa_res.local_query_buffer,
                    query_subset.data(),
                    query_subset.size() * sizeof(float)) == nullptr) {
                 throw std::runtime_error("[partition_scan_worker_fn] memcpy failed.");
@@ -276,7 +284,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             auto s2 = std::chrono::high_resolution_clock::now();
 
             // Process the batched job.
-            batched_scan_list((float *) res.local_query_buffer.data(),
+            batched_scan_list(numa_res.local_query_buffer,
                 partition_codes,
                 partition_ids,
                               job.num_queries,

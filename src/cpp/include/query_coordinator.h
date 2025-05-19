@@ -53,11 +53,15 @@ public:
     struct CoreResources {
      int core_id; ///< Logical identifier of the core.
      vector<shared_ptr<TopkBuffer>> topk_buffer_pool; ///< Preallocated Top‑K buffers.
-     vector<std::byte> local_query_buffer;            ///< Local aggregator for query results.
      moodycamel::ConcurrentQueue<int64_t> job_queue; ///< Job queue for scan jobs.
     };
 
+    struct NUMAResources {
+        float *local_query_buffer;
+    };
+
     vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.
+    vector<NUMAResources> numa_resources_;
     bool workers_initialized_ = false;                 ///< Flag indicating if worker threads are initialized.
     int num_workers_;                                  ///< Total number of worker threads.
     vector<std::thread> worker_threads_;               ///< Container for worker threads.
