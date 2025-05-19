@@ -124,7 +124,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     CoreResources &res = core_resources_[core_index];
 
-    int numa_node = 1;
+    int numa_node = 0;
     #ifdef QUAKE_USE_NUMA
     numa_node = numa_node_of_cpu(core_index);
     #endif
