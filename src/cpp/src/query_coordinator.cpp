@@ -54,7 +54,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, in
         NUMAResources &numa_res = numa_resources_[i];
         int64_t alloc_size = num_queries * d * sizeof(float);
     #ifdef QUAKE_USE_NUMA
-        numa_res.local_query_buffer = (float *) numa_alloc_onnode(alloc_size, numa_node));
+        numa_res.local_query_buffer = (float *) numa_alloc_onnode(alloc_size, numa_node);
     #else
         numa_res.local_query_buffer = (float *) std::malloc(alloc_size);
     #endif
