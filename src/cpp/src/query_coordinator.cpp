@@ -457,7 +457,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 job.num_queries = 1;
                 job.rank = p;
 
-                int core_id = partition_manager_->get_partition_core_id(pid);
+                int core_id = pid % num_workers_;
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
