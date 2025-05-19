@@ -353,6 +353,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         if (partition_manager_->nlist() == partition_ids.size(0)) {
+            std::cout << "SCAN ALL\n";
             vector<int64_t> all_query_ids = std::vector<int64_t>(x.size(0));
             std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
 
@@ -372,6 +373,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
 
         } else {
+            std::cout << "BATCH SCAN SUBSET\n";
             std::unordered_map<int64_t, vector<int64_t>> per_partition_query_ids;
             for (int64_t q = 0; q < num_queries; q++) {
                 for (int64_t p = 0; p < partition_ids.size(1); p++) {
@@ -396,6 +398,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
         }
     } else {
+        std::cout << "PER-QUERY SCAN\n";
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         int64_t start = 0;
