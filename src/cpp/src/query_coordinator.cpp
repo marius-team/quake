@@ -329,6 +329,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
 
     job_buffer_.clear();
+    next_job_id_.store(0);
     job_flags_.clear();
     job_flags_.resize(num_queries);
     for (int64_t q = 0; q < num_queries; q++) {

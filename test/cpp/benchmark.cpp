@@ -27,9 +27,9 @@ using torch::Tensor;
 
 // Global benchmark parameters
 static const int64_t DIM = 128;
-static const int64_t NUM_VECTORS = 1000000;   // number of database vectors
+static const int64_t NUM_VECTORS = 100000;   // number of database vectors
 static const int64_t N_LIST = 1000;           // number of clusters for IVF
-static const int64_t NUM_QUERIES = 10000;     // number of queries for search benchmark
+static const int64_t NUM_QUERIES = 1000;     // number of queries for search benchmark
 static const int64_t K = 10;                  // top-K neighbors
 static const int64_t N_PROBE = 20;             // number of probes for IVF
 static const int64_t N_WORKERS = 12;           // number of workers for parallel query coordinator
