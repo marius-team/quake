@@ -362,20 +362,23 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     if (search_params->batched_scan) {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
-        if (partition_manager_->nlist() == partition_ids.size(0)) {
-            std::cout << "SCAN ALL\n";
+        auto pids = partition_manager_->get_partition_ids();
+        auto pids_acc = pids.accessor<int64_t, 1>();
+
+        if (pids.size(0) == partition_ids.size(1)) {
             vector<int64_t> all_query_ids = std::vector<int64_t>(x.size(0));
             std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
 
-            for (int64_t i = 0; i < partition_manager_->nlist(); i++) {
+
+            for (int64_t i = 0; i < pids.size(0); i++) {
                 ScanJob job;
                 job.is_batched = true;
-                job.partition_id = i;
+                job.partition_id = pids_acc[i];
                 job.k = k;
                 job.query_vector = x.data_ptr<float>();
                 job.num_queries = x.size(0);
                 job.query_ids = all_query_ids;
-                int core_id = partition_manager_->get_partition_core_id(i);
+                int core_id = partition_manager_->get_partition_core_id(pids_acc[i]);
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
@@ -383,7 +386,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
 
         } else {
-            std::cout << "BATCH SCAN SUBSET\n";
             std::unordered_map<int64_t, vector<int64_t>> per_partition_query_ids;
             for (int64_t q = 0; q < num_queries; q++) {
                 for (int64_t p = 0; p < partition_ids.size(1); p++) {
@@ -408,7 +410,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
         }
     } else {
-        std::cout << "PER-QUERY SCAN\n";
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         int64_t start = 0;
@@ -559,13 +560,13 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     search_result->distances = topk_dists;
     search_result->timing_info = timing_info;
 
-    // print out timing info
-    std::cout << "[QueryCoordinator::worker_scan] Timing info: " << std::endl;
-    std::cout << "Total time: " << timing_info->total_time_ns / 1e6 << " ms" << std::endl;
-    std::cout << "Job enqueue time: " << timing_info->job_enqueue_time_ns / 1e6 << " ms" << std::endl;
-    std::cout << "Job wait time: " << timing_info->job_wait_time_ns / 1e6 << " ms" << std::endl;
-    std::cout << "Buffer init time: " << timing_info->buffer_init_time_ns / 1e6 << " ms" << std::endl;
-    std::cout << "Result agg time: " << timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
+//    // print out timing info
+//    std::cout << "[QueryCoordinator::worker_scan] Timing info: " << std::endl;
+//    std::cout << "Total time: " << timing_info->total_time_ns / 1e6 << " ms" << std::endl;
+//    std::cout << "Job enqueue time: " << timing_info->job_enqueue_time_ns / 1e6 << " ms" << std::endl;
+//    std::cout << "Job wait time: " << timing_info->job_wait_time_ns / 1e6 << " ms" << std::endl;
+//    std::cout << "Buffer init time: " << timing_info->buffer_init_time_ns / 1e6 << " ms" << std::endl;
+//    std::cout << "Result agg time: " << timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
 
     return search_result;
 }
