@@ -539,6 +539,9 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             } else {
                 std::cerr << "[QueryCoordinator::worker_scan] Dequeued item with invalid or out-of-bounds q_id: " << q_id << std::endl;
             }
+        } else {
+            // sleep for 1 microsecond
+            std::this_thread::sleep_for(std::chrono::microseconds(1));
         }
 
         // APS Logic (runs if an item was dequeued or if wait_dequeue_timed timed out)
