@@ -337,7 +337,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
-    job_buffer_.clear();
+//    job_buffer_.clear();
     next_job_id_.store(0);
     job_flags_.clear();
     job_flags_.resize(num_queries);
