@@ -405,6 +405,13 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 if (core_id < 0 || core_id >= num_workers_) core_id = i % num_workers_;
                 core_resources_[core_id].job_queue.enqueue(job_id);
             }
+
+            for (int64_t q_global = 0; q_global < num_queries_total; ++q_global) {
+                expected_results_per_query[q_global].store(partition_manager_->nlist());
+                if(q_global < global_topk_buffer_pool_.size() && global_topk_buffer_pool_[q_global]) { // Defensive check
+                    global_topk_buffer_pool_[q_global]->set_jobs_left(partition_manager_->nlist());
+                }
+            }
         } else {
             std::cout << "Scanning subset\n";
             std::unordered_map<int64_t, std::vector<int64_t>> partition_to_queries_map;
