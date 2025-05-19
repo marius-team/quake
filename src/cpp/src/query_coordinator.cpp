@@ -386,8 +386,8 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     // Dispatch jobs (logic remains similar, workers will use the new queue)
     if (search_params->batched_scan) {
 
-        if (false) {
-            std::cout << "Scanning All\n";
+        if (partition_ids_to_scan_all_queries.size(1) == partition_manager_->nlist()) {
+//            std::cout << "Scanning All\n";
             vector<int64_t> all_query_ids = std::vector<int64_t>(num_queries_total);
             std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
             for (int64_t i = 0; i <= partition_manager_->nlist(); ++i) {
@@ -413,7 +413,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 }
             }
         } else {
-            std::cout << "Scanning subset\n";
+//            std::cout << "Scanning subset\n";
             std::unordered_map<int64_t, std::vector<int64_t>> partition_to_queries_map;
             partition_to_queries_map.reserve(partition_manager_->nlist());
             for (int64_t q_global = 0; q_global < num_queries_total; ++q_global) {
@@ -447,7 +447,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
         }
     } else { // Non-batched job dispatch
-        std::cout << "Scanning per-query\n";
+//        std::cout << "Scanning per-query\n";
         for (int64_t q_global = 0; q_global < num_queries_total; ++q_global) {
             int valid_jobs_for_this_q = 0;
             for (int64_t p_idx = 0; p_idx < partition_ids_to_scan_all_queries.size(1); ++p_idx) {
@@ -602,12 +602,12 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     timing_info->result_aggregate_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - result_aggregation_start_time).count();
 
     // Print out timing info in ms with a single indent
-    std::cout << "[QueryCoordinator::worker_scan] Worker scan timing info:" << std::endl;
-    std::cout << "  Buffer init time: " << timing_info->buffer_init_time_ns / 1e6 << " ms" << std::endl;
-    std::cout << "  Job enqueue time: " << timing_info->job_enqueue_time_ns / 1e6 << " ms" << std::endl;
-    std::cout << "  Job wait time: " << timing_info->job_wait_time_ns / 1e6 << " ms" << std::endl;
-    std::cout << "  Result aggregate time: " << timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
-    std::cout << "  Total worker scan time: " << timing_info->job_wait_time_ns / 1e6 + timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
+//    std::cout << "[QueryCoordinator::worker_scan] Worker scan timing info:" << std::endl;
+//    std::cout << "  Buffer init time: " << timing_info->buffer_init_time_ns / 1e6 << " ms" << std::endl;
+//    std::cout << "  Job enqueue time: " << timing_info->job_enqueue_time_ns / 1e6 << " ms" << std::endl;
+//    std::cout << "  Job wait time: " << timing_info->job_wait_time_ns / 1e6 << " ms" << std::endl;
+//    std::cout << "  Result aggregate time: " << timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
+//    std::cout << "  Total worker scan time: " << timing_info->job_wait_time_ns / 1e6 + timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
     auto overall_worker_scan_end_time = high_resolution_clock::now();
 
     auto search_result = std::make_shared<SearchResult>();
