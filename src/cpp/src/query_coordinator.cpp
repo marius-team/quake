@@ -172,7 +172,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             break; // Exit signal or global stop signal
         }
 
-        if (job.query_ids.empty() && job.single_query_global_id != -1) {
+        if (job.query_ids.empty() && job.single_query_global_id == -1) {
             continue;
         }
 
