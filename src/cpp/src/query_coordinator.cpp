@@ -387,6 +387,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     if (search_params->batched_scan) {
 
         if (partition_ids_to_scan_all_queries.size(1) == partition_manager_->nlist()) {
+            std::cout << "Scanning All\n";
             vector<int64_t> all_query_ids = std::vector<int64_t>(num_queries_total);
             std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
             for (int64_t i = 0; i <= partition_manager_->nlist(); ++i) {
@@ -405,6 +406,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 core_resources_[core_id].job_queue.enqueue(job_id);
             }
         } else {
+            std::cout << "Scanning subset\n";
             std::unordered_map<int64_t, std::vector<int64_t>> partition_to_queries_map;
             partition_to_queries_map.reserve(partition_manager_->nlist());
             for (int64_t q_global = 0; q_global < num_queries_total; ++q_global) {
@@ -438,6 +440,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
         }
     } else { // Non-batched job dispatch
+        std::cout << "Scanning per-query\n";
         for (int64_t q_global = 0; q_global < num_queries_total; ++q_global) {
             int valid_jobs_for_this_q = 0;
             for (int64_t p_idx = 0; p_idx < partition_ids_to_scan_all_queries.size(1); ++p_idx) {
