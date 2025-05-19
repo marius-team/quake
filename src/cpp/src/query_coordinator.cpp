@@ -455,11 +455,12 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 //                core_resources_[core_id].job_queue.enqueue((int64_t) jid);
             }
         }
+        end_time = high_resolution_clock::now();
         for (int i = 0; i < num_workers_; i++) {
             core_resources_[i].job_queue.enqueue_bulk(per_worker_job_ids[i].begin(), per_worker_job_ids[i].size());
         }
     }
-    end_time = high_resolution_clock::now();
+//    end_time = high_resolution_clock::now();
     timing_info->job_enqueue_time_ns = duration_cast<nanoseconds>(end_time - start_time).count();
 
     auto last_flush_time = high_resolution_clock::now();
