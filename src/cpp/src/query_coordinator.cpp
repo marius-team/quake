@@ -314,9 +314,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         job_details_store_.reserve(x.size(0) * search_params->nprobe);
     }
 
-
     auto overall_worker_scan_start_time = std::chrono::high_resolution_clock::now();
-
     auto buffer_init_start_time = std::chrono::high_resolution_clock::now();
 
     if (!partition_manager_) {
@@ -387,59 +385,57 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     // Dispatch jobs (logic remains similar, workers will use the new queue)
     if (search_params->batched_scan) {
-        const int64_t nlist = partition_manager_->nlist();
-        std::vector<uint32_t> hit_count(nlist, 0);
 
-        for (int64_t q = 0; q < num_queries_total; ++q) {
-            for (int64_t j = 0; j < partition_ids_to_scan_all_queries.size(1); ++j) {
-                int64_t pid = p_ids_acc[q][j];
-                if (pid < 0) break;                // early out on sentinel
-                ++hit_count[pid];
+        if (partition_ids_to_scan_all_queries.size(1) == partition_manager_->nlist()) {
+            vector<int64_t> all_query_ids = std::vector<int64_t>(num_queries_total);
+            std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
+            for (int64_t i = 0; i <= partition_manager_->nlist(); ++i) {
+                ScanJob job;
+                job.is_batched = true;
+                job.partition_id = i;
+                job.k = k;
+                job.query_vector = x_ptr; // Pointer to the start of the entire batch of queries
+                job.num_queries = num_queries_total;
+                job.query_ids_for_batch_job = all_query_ids;
+                job_details_store_.push_back(job);
+                int job_id = static_cast<int>(job_details_store_.size() - 1);
+
+                int core_id = partition_manager_->get_partition_core_id(i);
+                if (core_id < 0 || core_id >= num_workers_) core_id = i % num_workers_;
+                core_resources_[core_id].job_queue.enqueue(job_id);
             }
-        }
-
-// ---------- build CSR offsets ----------
-        std::vector<uint32_t> offset(nlist + 1, 0);
-        std::partial_sum(hit_count.begin(), hit_count.end(), offset.begin() + 1);
-        const uint32_t nnz = offset.back();
-
-        std::vector<int64_t> csr_queries(nnz);     // flat, contiguous storage
-
-// ---------- pass 1: fill the CSR ----------
-        std::vector<uint32_t> cursor = offset;     // copy; will walk it
-        for (int64_t q = 0; q < num_queries_total; ++q) {
-            int valid_jobs = 0;
-            for (int64_t j = 0; j < partition_ids_to_scan_all_queries.size(1); ++j) {
-                int64_t pid = p_ids_acc[q][j];
-                if (pid < 0) break;
-                csr_queries[cursor[pid]++] = q;
-                ++valid_jobs;
+        } else {
+            std::unordered_map<int64_t, std::vector<int64_t>> partition_to_queries_map;
+            partition_to_queries_map.reserve(partition_manager_->nlist());
+            for (int64_t q_global = 0; q_global < num_queries_total; ++q_global) {
+                int valid_jobs_for_this_q = 0;
+                for (int64_t p_idx = 0; p_idx < partition_ids_to_scan_all_queries.size(1); ++p_idx) {
+                    int64_t pid = p_ids_acc[q_global][p_idx];
+                    if (pid == -1) continue;
+                    partition_to_queries_map[pid].push_back(q_global);
+                    valid_jobs_for_this_q++;
+                }
+                expected_results_per_query[q_global].store(valid_jobs_for_this_q);
+                if(q_global < global_topk_buffer_pool_.size() && global_topk_buffer_pool_[q_global]) { // Defensive check
+                    global_topk_buffer_pool_[q_global]->set_jobs_left(valid_jobs_for_this_q);
+                }
             }
-            expected_results_per_query[q].store(valid_jobs, std::memory_order_relaxed);
-            global_topk_buffer_pool_[q]->set_jobs_left(valid_jobs);
-        }
 
-        for (int64_t pid = 0; pid < nlist; ++pid) {
-            uint32_t begin = offset[pid];
-            uint32_t end   = offset[pid + 1];
-            if (begin == end) continue;            // no queries hit this partition
+            for(auto const& [pid, query_indices_for_pid] : partition_to_queries_map) {
+                ScanJob job;
+                job.is_batched = true;
+                job.partition_id = pid;
+                job.k = k;
+                job.query_vector = x_ptr; // Pointer to the start of the entire batch of queries
+                job.num_queries = query_indices_for_pid.size();
+                job.query_ids_for_batch_job = query_indices_for_pid; // These are global indices into x_ptr
+                job_details_store_.push_back(job);
+                int job_id = static_cast<int>(job_details_store_.size() - 1);
 
-            ScanJob job;
-            job.is_batched            = true;
-            job.partition_id          = pid;
-            job.k                     = k;
-            job.query_vector          = x_ptr;            // base of the batch
-            job.num_queries           = end - begin;
-            job.query_ids_for_batch_job.assign(
-                    csr_queries.begin() + begin,
-                    csr_queries.begin() + end);
-
-            job_details_store_.push_back(std::move(job));
-            const int job_id = static_cast<int>(job_details_store_.size() - 1);
-
-            int core_id = partition_manager_->get_partition_core_id(pid);
-            if (core_id < 0 || core_id >= num_workers_) core_id = pid % num_workers_;
-            core_resources_[core_id].job_queue.enqueue(job_id);
+                int core_id = partition_manager_->get_partition_core_id(pid);
+                if (core_id < 0 || core_id >= num_workers_) core_id = pid % num_workers_;
+                core_resources_[core_id].job_queue.enqueue(job_id);
+            }
         }
     } else { // Non-batched job dispatch
         for (int64_t q_global = 0; q_global < num_queries_total; ++q_global) {
