@@ -127,12 +127,12 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
         ScanJob job = job_buffer_[job_id];
 
-        // Ignore this job if the global buffer is not processing queries.
-        if (!global_topk_buffer_pool_[job.query_ids[0]]->currently_processing_query()) {
-            // decrement the job counter
-            global_topk_buffer_pool_[job.query_ids[0]]->record_empty_job();
-            continue;
-        }
+//        // Ignore this job if the global buffer is not processing queries.
+//        if (!global_topk_buffer_pool_[job.query_ids[0]]->currently_processing_query()) {
+//            // decrement the job counter
+//            global_topk_buffer_pool_[job.query_ids[0]]->record_empty_job();
+//            continue;
+//        }
 
         worker_job_counter_[core_index]++;
 
@@ -153,10 +153,17 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         if (partition_size == 0) {
             std::cerr << "[QueryCoordinator::partition_scan_worker_fn] Partition " << job.partition_id << " is empty." << std::endl;
             // call dummy batch add to decrement topk_buffer jobs counter. #TODO remove jobs counter from topk_buffer
-            for (int64_t q = 0; q < job.num_queries; q++) {
-                int64_t global_q = job.query_ids[q];
-                global_topk_buffer_pool_[global_q]->batch_add(nullptr, nullptr, 0);
+
+            if (job.is_batched) {
+                for (int64_t q = 0; q < job.num_queries; q++) {
+                    int global_q = job.query_ids->at(q);
+                    global_topk_buffer_pool_[global_q]->batch_add(nullptr, nullptr, 0);
+                }
+            } else {
+                global_topk_buffer_pool_[job.query_id]->batch_add(nullptr, nullptr, 0);
             }
+
+
             continue;
         }
 
@@ -196,8 +203,8 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             int64_t n_results = topk_indices.size();
 
             // Merge local results into the global query buffer.
-            global_topk_buffer_pool_[job.query_ids[0]]->batch_add(topk.data(), topk_indices.data(), n_results);
-            job_flags_[job.query_ids[0]][job.rank] = true;
+            global_topk_buffer_pool_[job.query_id]->batch_add(topk.data(), topk_indices.data(), n_results);
+            job_flags_[job.query_id][job.rank] = true;
 
             auto s4 = std::chrono::high_resolution_clock::now();
 
@@ -225,7 +232,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             int64_t d = partition_manager_->d();
             std::vector<float> query_subset(job.num_queries * d);
             for (int i = 0; i < job.num_queries; i++) {
-                int64_t global_q = job.query_ids[i];
+                int64_t global_q = job.query_ids->at(i);
                 memcpy(&query_subset[i * d],
                        job.query_vector + global_q * d,
                        d * sizeof(float));
@@ -265,7 +272,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             auto s3 = std::chrono::high_resolution_clock::now();
 
             for (int64_t q = 0; q < job.num_queries; q++) {
-                int64_t global_q = job.query_ids[q];
+                int64_t global_q = job.query_ids->at(q);
 
                 vector<float> topk = res.topk_buffer_pool[q]->get_topk();
                 vector<int64_t> topk_indices = res.topk_buffer_pool[q]->get_topk_indices();
@@ -375,7 +382,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     start_time = high_resolution_clock::now();
     vector<int> all_query_ids = std::vector<int>(x.size(0));
-    std::unordered_map<int64_t, vector<int>> per_partition_query_ids; // for batched scan
+    shared_ptr<vector<int>> all_query_ids_ptr = make_shared<vector<int>>(all_query_ids);
+    std::unordered_map<int64_t, shared_ptr<vector<int>>> per_partition_query_ids; // for batched scan
     std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
     if (search_params->batched_scan) {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
@@ -391,7 +399,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 job.k = k;
                 job.query_vector = x.data_ptr<float>();
                 job.num_queries = x.size(0);
-                job.query_ids = all_query_ids.data();
+                job.query_ids = all_query_ids_ptr;
                 int core_id = partition_manager_->get_partition_core_id(pids_acc[i]);
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
@@ -406,7 +414,10 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 for (int64_t p = 0; p < partition_ids.size(1); p++) {
                     int64_t pid = partition_ids_accessor[q][p];
                     if (pid < 0) continue;
-                    per_partition_query_ids[pid].push_back(q);
+                    if (per_partition_query_ids[pid] == nullptr) {
+                        per_partition_query_ids[pid] = make_shared<vector<int>>();
+                    }
+                    per_partition_query_ids[pid]->push_back(q);
                 }
             }
             for (auto &kv : per_partition_query_ids) {
@@ -415,8 +426,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 job.partition_id = kv.first;
                 job.k = k;
                 job.query_vector = x.data_ptr<float>();
-                job.num_queries = kv.second.size();
-                job.query_ids = kv.second.data();
+                job.num_queries = kv.second->size();
+                job.query_ids = kv.second;
                 int core_id = partition_manager_->get_partition_core_id(kv.first);
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
@@ -437,7 +448,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
                 ScanJob job;
                 job.is_batched = false;
-                job.query_ids = all_query_ids.data() + q;
+                job.query_id = q;
                 job.partition_id = pid;
                 job.k = k;
                 job.query_vector = x_ptr + q * dimension;
