@@ -1,230 +1,264 @@
 #!/usr/bin/env python3
 """
-NUMA Single-Query Latency and Recall Benchmark
+NUMA Single-Query Latency and Recall Benchmark (v2)
 
-Benchmarks a suite of ANN indexes (Quake, Faiss-IVF, SCANN, HNSW, DiskANN, SVS, etc.)
-for single-query latency and recall@k under configurable build and search parameters.
-Results are cached and only recomputed if the 'overwrite' flag is set in the configuration.
-Outputs a unified CSV and a latency plot per index.
+Builds each non-Quake index once.
+Builds **one** shared Quake base-index and re-uses it for every Quake
+configuration, so we avoid the O(dataset) rebuild for each worker-count.
 
-Usage:
-    python numa_latency_experiment.py numa_latency_experiment.yaml output_dir
+Usage
+-----
+    python numa_latency_experiment.py <config.yaml> <output_dir>
 """
 
+from pathlib import Path
+import os
 import yaml
 import numpy as np
 import torch
 import pandas as pd
 import matplotlib.pyplot as plt
-from pathlib import Path
-from quake.utils import compute_recall
 
+from quake.utils import compute_recall
 from quake.datasets.ann_datasets import load_dataset
 from quake.index_wrappers.faiss_ivf import FaissIVF
 from quake.index_wrappers.faiss_hnsw import FaissHNSW
 from quake.index_wrappers.quake import QuakeWrapper
-
 try:
     from quake.index_wrappers.scann import Scann
 except ImportError:
-    raise ImportError("SCANN wrapper not available. Please install the required package.")
+    Scann = None
 try:
     from quake.index_wrappers.diskann import DiskANNDynamic
 except ImportError:
-    raise ImportError("DiskANN wrapper not available. Please install the required package.")
+    DiskANNDynamic = None
 try:
     from quake.index_wrappers.vamana import Vamana
 except ImportError:
-    raise ImportError("SVS wrapper not available. Please install the required package.")
+    Vamana = None
 
 INDEX_CLASSES = {
-    "Quake": QuakeWrapper,
-    "IVF": FaissIVF,
-    "SCANN": Scann,
-    "HNSW": FaissHNSW,
+    "Quake":   QuakeWrapper,
+    "IVF":     FaissIVF,
+    "SCANN":   Scann,
+    "HNSW":    FaissHNSW,
     "DiskANN": DiskANNDynamic,
-    "SVS": Vamana,
+    "SVS":     Vamana,
 }
 
-def build_and_save_index(index_class, build_params, base_vecs, index_file):
-    idx = index_class()
-    params = dict(build_params)
-    idx.build(base_vecs, **params)
-    idx.save(str(index_file))
+# --------------------------------------------------------------------------- #
+# Helpers                                                                     #
+# --------------------------------------------------------------------------- #
+def build_and_save(index_cls, params, vecs, path):
+    """Build <index_cls> with <params> on <vecs> and persist to <path>."""
+    idx = index_cls()
+    idx.build(vecs, **params)
+    idx.save(str(path))
 
-def run_experiment(cfg_path: str, output_dir: str):
-    cfg = yaml.safe_load(Path(cfg_path).read_text())
-    ds           = cfg["dataset"]
-    queries_n    = ds["num_queries"]
-    k            = ds["k"]
+def extract_ids(res):
+    """Return search‐result ids as np.ndarray."""
+    if hasattr(res, "ids"):
+        arr = res.ids
+    elif hasattr(res, "I"):
+        arr = res.I
+    elif hasattr(res, "indices"):
+        arr = res.indices
+    else:
+        raise RuntimeError("Search result has no id field.")
+    if isinstance(arr, torch.Tensor):
+        arr = arr.cpu().numpy()
+    return np.asarray(arr, dtype=np.int64)
+
+# --------------------------------------------------------------------------- #
+# Main                                                                         #
+# --------------------------------------------------------------------------- #
+def run_experiment(cfg_path: str, output_dir: str) -> None:
+    cfg          = yaml.safe_load(Path(cfg_path).read_text())
+    ds_cfg       = cfg["dataset"]
+    k            = ds_cfg["k"]
+    q_n          = ds_cfg["num_queries"]
     trials       = cfg.get("trials", 5)
-    warmup       = cfg.get("warmup", 10)
-    indexes_cfg  = cfg["indexes"]
+    warmup_n     = cfg.get("warmup", 10)
+    idx_cfgs     = cfg["indexes"]
     csv_name     = cfg.get("output", {}).get("results_csv", "numa_results.csv")
     overwrite    = cfg.get("overwrite", False)
 
-    out_dir = Path(output_dir)
+    out_dir = Path(output_dir).expanduser().absolute()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[INFO] Loading dataset '{ds['name']}'...")
-    base_vecs, queries, gt = load_dataset(ds["name"])
-    queries = queries[:queries_n]
-    gt = gt[:queries_n] if gt is not None else None
+    # --------------------------------------------------------------------- #
+    # Dataset                                                               #
+    # --------------------------------------------------------------------- #
+    print(f"[INFO] loading dataset {ds_cfg['name']} …")
+    base_vecs, queries, gt = load_dataset(ds_cfg["name"])
+    queries = queries[:q_n]
+    gt      = gt[:q_n] if gt is not None else None
 
-    all_rows = []
+    # --------------------------------------------------------------------- #
+    # Build a single Quake base index (if any Quake config exists)          #
+    # --------------------------------------------------------------------- #
+    quake_base_params = None
+    for cfg_i in idx_cfgs:
+        if cfg_i["index"] == "Quake":
+            quake_base_params = dict(cfg_i.get("build_params", {}))
+            # Remove loading-stage-only keys; not needed for the build
+            quake_base_params.pop("num_workers", None)
+            quake_base_params.pop("use_numa", None)
+            break
 
-    for idx_cfg in indexes_cfg:
-        idx_name      = idx_cfg["name"]
-        idx_type      = idx_cfg["index"]
-        build_params  = idx_cfg.get("build_params", {})
-        search_params = idx_cfg.get("search_params", {})
-        IndexClass    = INDEX_CLASSES.get(idx_type)
-        if IndexClass is None:
-            print(f"[WARN] Unknown index type: {idx_type}. Skipping.")
+    quake_base_path = out_dir / "Quake_base_index.bin"
+    if quake_base_params:
+        if overwrite and quake_base_path.exists():
+            os.remove(quake_base_path)
+        if not quake_base_path.exists():
+            print("[BUILD] Quake (shared) base index …")
+            build_and_save(QuakeWrapper, quake_base_params, base_vecs, quake_base_path)
+            print(f"[SAVE] Quake base index → {quake_base_path}")
+
+    # --------------------------------------------------------------------- #
+    # Per-configuration benchmarking                                        #
+    # --------------------------------------------------------------------- #
+    rows = []
+    for cfg_i in idx_cfgs:
+        name        = cfg_i["name"]
+        typ         = cfg_i["index"]
+        b_params    = dict(cfg_i.get("build_params", {}))       # safe copy
+        s_params    = dict(cfg_i.get("search_params", {}))
+        cls         = INDEX_CLASSES.get(typ)
+        if cls is None:
+            print(f"[WARN] unknown index type '{typ}' – skipping.")
             continue
 
-        idx_csv = out_dir / f"{idx_name}_results.csv"
-        idx_file = out_dir / f"{idx_name}_index.bin"
+        idx_csv  = out_dir / f"{name}_results.csv"
+        idx_path = quake_base_path if typ == "Quake" else out_dir / f"{name}_index.bin"
 
+        # Skip if we already have results and not overwriting
         if idx_csv.exists() and not overwrite:
-            print(f"[SKIP] {idx_name}: Results exist. Use overwrite: true to rerun.")
-            df_idx = pd.read_csv(idx_csv)
-            all_rows.append(df_idx.iloc[0].to_dict())
+            print(f"[SKIP] {name} – results exist.")
+            rows.append(pd.read_csv(idx_csv).iloc[0].to_dict())
             continue
 
-        if not idx_file.exists():
-            print(f"[BUILD] {idx_name} index...")
-            build_and_save_index(IndexClass, build_params, base_vecs, idx_file)
-            print(f"[SAVE] Index saved at {idx_file}")
+        # Build non-Quake index (one-off)
+        if typ != "Quake" and not idx_path.exists():
+            print(f"[BUILD] {name} index …")
+            build_and_save(cls, b_params, base_vecs, idx_path)
+            print(f"[SAVE] index → {idx_path}")
 
-        print(f"[RUN] {idx_name} ...")
-
-        if idx_type == "Quake":
-            load_kwargs = {}
-            if "use_numa" in build_params:
-                load_kwargs["use_numa"] = build_params["use_numa"]
-            if "num_workers" in build_params:
-                load_kwargs["num_workers"] = build_params["num_workers"]
-            idx = IndexClass()
-            idx.load(str(idx_file), **load_kwargs)
-        elif idx_type == "DiskANN":
-            idx = IndexClass()
-            # remove metric from build_params
-            build_params.pop("metric", None)
-            idx.load(str(idx_file), **build_params)
+        # ----------------------------------------------------------------- #
+        # Load                                                               #
+        # ----------------------------------------------------------------- #
+        if typ == "Quake":
+            load_kw = {k: b_params[k] for k in ("use_numa", "num_workers") if k in b_params}
+            idx = QuakeWrapper()
+            idx.load(str(idx_path), **load_kw)
+        elif typ == "DiskANN":
+            idx = cls()
+            b_params.pop("metric", None)      # DiskANN load signature
+            idx.load(str(idx_path), **b_params)
         else:
-            idx = IndexClass()
-            idx.load(str(idx_file))
+            idx = cls()
+            idx.load(str(idx_path))
 
-        if idx_type == "SCANN":
-            search_args = {"leaves_to_search": search_params.get("leaves_to_search", 100)}
-        elif idx_type == "HNSW":
-            search_args = {"ef_search": search_params.get("ef_search", 32)}
-        elif idx_type == "DiskANN":
-            search_args = {"complexity": search_params.get("complexity", 32)}
-        elif idx_type == "SVS":
-            search_args = {"search_window_size": search_params.get("search_window_size", 32)}
-        else:  # IVF, Quake, others
-            search_args = {"nprobe": search_params.get("nprobe", 100)}
+        # ----------------------------------------------------------------- #
+        # Search parameter dispatch                                          #
+        # ----------------------------------------------------------------- #
+        if typ == "SCANN":
+            search_kw = {"leaves_to_search": s_params.get("leaves_to_search", 100)}
+        elif typ == "HNSW":
+            search_kw = {"ef_search": s_params.get("ef_search", 32)}
+        elif typ == "DiskANN":
+            search_kw = {"complexity": s_params.get("complexity", 32)}
+        elif typ == "SVS":
+            search_kw = {"search_window_size": s_params.get("search_window_size", 32)}
+        else:
+            search_kw = {"nprobe": s_params.get("nprobe", 100)}
 
-        # Warmup
-        for i in range(min(warmup, len(queries))):
-            q = queries[i].unsqueeze(0).float()
-            idx.search(q, k, **search_args)
+        # ----------------------------------------------------------------- #
+        # Warm-up                                                           #
+        # ----------------------------------------------------------------- #
+        for q in queries[:min(warmup_n, len(queries))]:
+            idx.search(q.unsqueeze(0).float(), k, **search_kw)
 
-        # Benchmark Trials (and collect recall for first trial)
-        trial_means = []
-        trial_recalls = []
+        # ----------------------------------------------------------------- #
+        # Trials                                                            #
+        # ----------------------------------------------------------------- #
+        trial_lat  = []
+        trial_rec  = []
         for t in range(trials):
-            lats = []
-            if t == 0 and gt is not None:
-                all_preds = []
-            for qi, q_vec in enumerate(queries):
-                q = q_vec.unsqueeze(0).float()
-                res = idx.search(q, k, **search_args)
+            lats_ms, preds = [], []
+            for qi, q in enumerate(queries):
+                res = idx.search(q.unsqueeze(0).float(), k, **search_kw)
+                # latency collection
                 ti = getattr(res, "timing_info", None)
                 if ti and hasattr(ti, "total_time_ns"):
-                    lats.append(ti.total_time_ns / 1e6)
+                    lats_ms.append(ti.total_time_ns / 1e6)
                 elif hasattr(res, "latency_ms"):
-                    lats.append(res.latency_ms)
+                    lats_ms.append(res.latency_ms)
                 else:
-                    raise RuntimeError(f"No timing info found in search result for {idx_name}")
-                # Collect predicted indices for recall in trial 0
+                    raise RuntimeError("missing timing info.")
                 if t == 0 and gt is not None:
-                    pred = res.ids  # [1, k]
-                    all_preds.append(pred[0])    # get the [k]
-            mean_t = float(np.mean(lats))
-            trial_means.append(mean_t)
+                    preds.append(extract_ids(res)[0])  # [k]
+            trial_lat.append(float(np.mean(lats_ms)))
             if t == 0 and gt is not None:
-                preds_arr = torch.stack(all_preds) # [num_queries, k]
-                print(f"[DEBUG] preds_arr shape: {preds_arr.shape}, gt shape: {gt.shape}")
-                recall = float(compute_recall(preds_arr, gt, k).mean())
-                trial_recalls.append(recall)
-                print(f" [trial {t+1}/{trials}] {mean_t:.2f} ms | recall@{k}: {recall:.4f}")
+                recall = float(compute_recall(torch.tensor(preds), gt, k).mean())
+                trial_rec.append(recall)
+                print(f" [{name} trial {t+1}/{trials}] {trial_lat[-1]:.2f} ms | R@{k} {recall:.4f}")
             else:
-                print(f" [trial {t+1}/{trials}] {mean_t:.2f} ms")
+                print(f" [{name} trial {t+1}/{trials}] {trial_lat[-1]:.2f} ms")
 
-        mean_lat = float(np.mean(trial_means))
-        std_lat  = float(np.std(trial_means))
-        mean_recall = float(trial_recalls[0]) if trial_recalls else np.nan
-        n_workers_val = build_params.get("num_workers", None)
+        # ----------------------------------------------------------------- #
+        # Persist per-config results                                         #
+        # ----------------------------------------------------------------- #
         row = {
-            "index": idx_name,
-            "n_workers": n_workers_val,
-            "mean_latency_ms": mean_lat,
-            "std_latency_ms":  std_lat,
-            f"recall_at_{k}": mean_recall,
+            "index":            name,
+            "n_workers":        b_params.get("num_workers", np.nan),
+            "mean_latency_ms":  float(np.mean(trial_lat)),
+            "std_latency_ms":   float(np.std(trial_lat)),
+            f"recall_at_{k}":   (float(trial_rec[0]) if trial_rec else np.nan),
         }
-        all_rows.append(row)
+        rows.append(row)
         pd.DataFrame([row]).to_csv(idx_csv, index=False)
 
-    # Save Unified CSV
-    df = pd.DataFrame(all_rows)
+    # --------------------------------------------------------------------- #
+    # Aggregate CSV + plots                                                 #
+    # --------------------------------------------------------------------- #
+    df = pd.DataFrame(rows)
     out_csv = out_dir / csv_name
     df.to_csv(out_csv, index=False)
-    print(f"\n[RESULT] Results written to {out_csv}")
+    print(f"\n[RESULT] aggregated CSV → {out_csv}")
 
-    # Plot Latency
+    # Latency plot
     plt.figure()
-    for idx_name in df["index"].unique():
-        subset = df[df["index"] == idx_name]
-        label = f"{idx_name}" if subset["n_workers"].isnull().all() else f"{idx_name} (n_workers={subset['n_workers'].iloc[0]})"
-        plt.errorbar(
-            subset["n_workers"] if "n_workers" in subset else subset.index,
-            subset["mean_latency_ms"],
-            yerr=subset["std_latency_ms"],
-            marker="o",
-            capsize=5,
-            label=label
-        )
+    for nm in df["index"].unique():
+        sub = df[df["index"] == nm]
+        lbl = f"{nm}" if sub["n_workers"].isnull().all() else f"{nm} (nw={sub['n_workers'].iloc[0]})"
+        plt.errorbar(sub["n_workers"] if "n_workers" in sub else sub.index,
+                     sub["mean_latency_ms"], yerr=sub["std_latency_ms"],
+                     marker="o", capsize=5, label=lbl)
     plt.xscale("symlog", base=2)
     plt.xlabel("Num Workers")
     plt.ylabel("Mean Latency (ms)")
-    plt.title("Single-Query Latency (per-index)")
+    plt.title("Single-Query Latency")
     plt.legend()
-    plot_file = out_dir / f"{out_csv.stem}_latency.png"
     plt.tight_layout()
-    plt.savefig(plot_file)
-    print(f"[PLOT] Saved to {plot_file}")
+    lat_path = out_dir / f"{out_csv.stem}_latency.png"
+    plt.savefig(lat_path)
+    print(f"[PLOT] latency plot → {lat_path}")
 
-    # Plot Recall
+    # Recall plot
     if f"recall_at_{k}" in df.columns:
         plt.figure()
-        for idx_name in df["index"].unique():
-            subset = df[df["index"] == idx_name]
-            label = f"{idx_name}" if subset["n_workers"].isnull().all() else f"{idx_name} (n_workers={subset['n_workers'].iloc[0]})"
-            plt.plot(
-                subset["n_workers"] if "n_workers" in subset else subset.index,
-                subset[f"recall_at_{k}"],
-                marker="o",
-                label=label
-            )
+        for nm in df["index"].unique():
+            sub = df[df["index"] == nm]
+            lbl = f"{nm}" if sub["n_workers"].isnull().all() else f"{nm} (nw={sub['n_workers'].iloc[0]})"
+            plt.plot(sub["n_workers"] if "n_workers" in sub else sub.index,
+                     sub[f"recall_at_{k}"], marker="o", label=lbl)
         plt.xscale("symlog", base=2)
         plt.xlabel("Num Workers")
         plt.ylabel(f"Recall@{k}")
-        plt.title(f"Recall@{k} (per-index)")
+        plt.title(f"Recall@{k}")
         plt.legend()
-        plot_file = out_dir / f"{out_csv.stem}_recall.png"
         plt.tight_layout()
-        plt.savefig(plot_file)
-        print(f"[PLOT] Recall plot saved to {plot_file}")
+        rec_path = out_dir / f"{out_csv.stem}_recall.png"
+        plt.savefig(rec_path)
+        print(f"[PLOT] recall plot → {rec_path}")
