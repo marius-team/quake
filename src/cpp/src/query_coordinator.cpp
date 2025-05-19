@@ -386,7 +386,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     // Dispatch jobs (logic remains similar, workers will use the new queue)
     if (search_params->batched_scan) {
 
-        if (partition_ids_to_scan_all_queries.size(1) == partition_manager_->nlist()) {
+        if (false) {
             std::cout << "Scanning All\n";
             vector<int64_t> all_query_ids = std::vector<int64_t>(num_queries_total);
             std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
