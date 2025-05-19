@@ -173,6 +173,12 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         }
 
         if (job.query_ids.empty()) {
+
+            if (job.single_query_global_id != -1) {
+                job.query_ids = {job.single_query_global_id}; // Convert single query ID to vector
+            } else {
+                // std::cerr << "[Worker " << core_index << "] Job for partition " << job.partition_id << " has no query_ids. Skipping." << std::endl;
+            }
             // std::cerr << "[Worker " << core_index << "] Job for partition " << job.partition_id << " has no query_ids. Skipping." << std::endl;
             continue;
         }
@@ -419,7 +425,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 valid_jobs_for_this_q++;
                 ScanJob job;
                 job.is_batched = false;
-                job.query_ids = {q_global};
+                job.single_query_global_id = {q_global};
                 job.partition_id = pid;
                 job.k = k;
                 job.query_vector = x_ptr + q_global * dimension;
