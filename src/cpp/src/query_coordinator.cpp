@@ -381,10 +381,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         duration_cast<nanoseconds>(end_time - start_time).count();
 
     start_time = high_resolution_clock::now();
-    vector<int> all_query_ids = std::vector<int>(x.size(0));
-    shared_ptr<vector<int>> all_query_ids_ptr = make_shared<vector<int>>(all_query_ids);
-    std::unordered_map<int64_t, shared_ptr<vector<int>>> per_partition_query_ids; // for batched scan
-    std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
+
     if (search_params->batched_scan) {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
         job_buffer_.resize(partition_manager_->nlist());
@@ -392,6 +389,9 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         auto pids_acc = pids.accessor<int64_t, 1>();
 
         if (pids.size(0) == partition_ids.size(1)) {
+            vector<int> all_query_ids = std::vector<int>(x.size(0));
+            std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
+            shared_ptr<vector<int>> all_query_ids_ptr = make_shared<vector<int>>(all_query_ids);
             for (int64_t i = 0; i < pids.size(0); i++) {
                 ScanJob job;
                 job.is_batched = true;
@@ -410,6 +410,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
 
         } else {
+            std::unordered_map<int64_t, shared_ptr<vector<int>>> per_partition_query_ids; // for batched scan
             for (int64_t q = 0; q < num_queries; q++) {
                 for (int64_t p = 0; p < partition_ids.size(1); p++) {
                     int64_t pid = partition_ids_accessor[q][p];
@@ -441,6 +442,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         job_buffer_.resize(num_queries * partition_ids.size(1));
+        vector<int> job_ids
         for (int q = 0; q < num_queries; q++) {
             for (int64_t p = 0; p < partition_ids.size(1); p++) {
                 int64_t pid = partition_ids_accessor[q][p];
@@ -461,12 +463,11 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 }
                 size_t jid = next_job_id_.fetch_add(1, std::memory_order_acq_rel);
                 job_buffer_[jid] = job;
-                end_time = high_resolution_clock::now();
                 core_resources_[core_id].job_queue.enqueue((int64_t) jid);
             }
         }
     }
-
+    end_time = high_resolution_clock::now();
     timing_info->job_enqueue_time_ns = duration_cast<nanoseconds>(end_time - start_time).count();
 
     auto last_flush_time = high_resolution_clock::now();
