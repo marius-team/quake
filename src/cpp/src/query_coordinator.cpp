@@ -790,6 +790,7 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
         } else {
             parent_search_params = search_params->parent_params;
         }
+        parent_search_params->batched_scan = true;
 
         // if recall_target is set, we need an initial set of partitions to consider
         if (search_params->recall_target > 0.0 && !search_params->batched_scan) {
