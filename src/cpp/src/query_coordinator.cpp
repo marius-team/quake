@@ -307,7 +307,13 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         std::shared_ptr<SearchParams> search_params) {
 
     job_details_store_.clear();
-    job_details_store_.reserve(x.size(0));
+
+    if (search_params->batched_scan) {
+        job_details_store_.reserve(partition_manager_->nlist());
+    } else {
+        job_details_store_.reserve(x.size(0) * search_params->nprobe);
+    }
+
 
     auto overall_worker_scan_start_time = std::chrono::high_resolution_clock::now();
 
@@ -379,36 +385,62 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     auto job_dispatch_start_time = std::chrono::high_resolution_clock::now();
 
-    // Dispatch jobs (logic remains similar, workers will use the new queue)
     if (search_params->batched_scan) {
-        std::unordered_map<int64_t, std::vector<int64_t>> partition_to_queries_map;
-        for (int64_t q_global = 0; q_global < num_queries_total; ++q_global) {
-            int valid_jobs_for_this_q = 0;
-            for (int64_t p_idx = 0; p_idx < partition_ids_to_scan_all_queries.size(1); ++p_idx) {
-                int64_t pid = p_ids_acc[q_global][p_idx];
+        const size_t nlist       = partition_manager_->nlist();
+        const int64_t nprobe_max = partition_ids_to_scan_all_queries.size(1);
+
+        // count queries per partition ------------------------
+        std::vector<uint32_t> count(nlist, 0);
+
+        for (int64_t q = 0; q < num_queries_total; ++q) {
+            uint32_t hits = 0;
+            for (int64_t j = 0; j < nprobe_max; ++j) {
+                int64_t pid = p_ids_acc[q][j];
                 if (pid == -1) continue;
-                partition_to_queries_map[pid].push_back(q_global);
-                valid_jobs_for_this_q++;
+                ++count[pid];
+                ++hits;
             }
-            expected_results_per_query[q_global].store(valid_jobs_for_this_q);
-            if(q_global < global_topk_buffer_pool_.size() && global_topk_buffer_pool_[q_global]) { // Defensive check
-                global_topk_buffer_pool_[q_global]->set_jobs_left(valid_jobs_for_this_q);
-            }
+            expected_results_per_query[q].store(hits);
+            if (q < global_topk_buffer_pool_.size() && global_topk_buffer_pool_[q])
+                global_topk_buffer_pool_[q]->set_jobs_left(hits);
         }
 
-        for(auto const& [pid, query_indices_for_pid] : partition_to_queries_map) {
+        std::vector<uint32_t> offset(nlist + 1, 0);
+        std::partial_sum(count.begin(), count.end(), offset.begin() + 1);
+        const uint32_t total_pairs = offset.back();
+
+        std::vector<int64_t> flat(total_pairs);
+
+        for (int64_t q = 0; q < num_queries_total; ++q) {
+            for (int64_t j = 0; j < nprobe_max; ++j) {
+                int64_t pid = p_ids_acc[q][j];
+                if (pid == -1) continue;
+                flat[offset[pid]++] = q;
+            }
+        }
+        for (size_t p = nlist; p-- > 1; )
+            offset[p] = offset[p-1];
+        offset[0] = 0;
+
+        for (size_t p = 0; p < nlist; ++p) {
+            uint32_t begin = offset[p];
+            uint32_t end   = offset[p+1];
+            if (begin == end) continue;                  // no queries for this pid
+
             ScanJob job;
-            job.is_batched = true;
-            job.partition_id = pid;
-            job.k = k;
-            job.query_vector = x_ptr; // Pointer to the start of the entire batch of queries
-            job.num_queries = query_indices_for_pid.size();
-            job.query_ids_for_batch_job = query_indices_for_pid; // These are global indices into x_ptr
-            job_details_store_.push_back(job);
+            job.is_batched           = true;
+            job.partition_id         = static_cast<int64_t>(p);
+            job.k                    = k;
+            job.query_vector         = x_ptr;            // whole batch start
+            job.num_queries          = end - begin;
+            job.query_ids_for_batch_job.assign(flat.begin() + begin,
+                                               flat.begin() + end);
+
+            job_details_store_.push_back(std::move(job));
             int job_id = static_cast<int>(job_details_store_.size() - 1);
 
-            int core_id = partition_manager_->get_partition_core_id(pid);
-            if (core_id < 0 || core_id >= num_workers_) core_id = pid % num_workers_;
+            int core_id = partition_manager_->get_partition_core_id(p);
+            if (core_id < 0 || core_id >= num_workers_) core_id = p % num_workers_;
             core_resources_[core_id].job_queue.enqueue(job_id);
         }
     } else { // Non-batched job dispatch
