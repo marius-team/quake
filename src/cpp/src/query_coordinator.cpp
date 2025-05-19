@@ -442,7 +442,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         job_buffer_.resize(num_queries * partition_ids.size(1));
-        vector<int> job_ids
         for (int q = 0; q < num_queries; q++) {
             for (int64_t p = 0; p < partition_ids.size(1); p++) {
                 int64_t pid = partition_ids_accessor[q][p];
