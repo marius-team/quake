@@ -682,6 +682,11 @@ std::shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, std::shared_ptr
     auto scan_result = scan_partitions(x, partition_ids_to_scan, search_params);
     auto scan_partitions_call_end_time = std::chrono::high_resolution_clock::now();
 
+    if (parent_timing_info) { // Check if parent_timing_info was populated
+        scan_result->timing_info->parent_info = parent_timing_info;
+    }
+    scan_result->timing_info->total_time_ns = duration_cast<nanoseconds>(high_resolution_clock::now() - overall_search_start_time).count();
+
     // print out timing info in ms
 //    std::cout << "[QueryCoordinator::search] Scan Partition time: " << std::chrono::duration_cast<std::chrono::milliseconds>(scan_partitions_call_end_time - scan_partitions_call_start_time).count() << " ms" << std::endl;
 //    std::cout << "[QueryCoordinator::search] Parent search time: " << std::chrono::duration_cast<std::chrono::milliseconds>(parent_search_end_time - parent_search_start_time).count() << " ms" << std::endl;
