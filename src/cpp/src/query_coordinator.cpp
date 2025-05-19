@@ -96,6 +96,13 @@ void QueryCoordinator::shutdown_workers() {
     workers_initialized_ = false;
 }
 
+void threadsafe_cout(std::string log_msg)
+{
+    static std::mutex lock;
+    std::lock_guard guard{ lock };
+    std::cout << std::move(log_msg);
+}
+
 // Worker Thread Function
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
@@ -106,6 +113,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     }
 
     int64_t total_pull_time = 0;
+    int64_t total_copy_time = 0;
     int64_t total_scan_time = 0;
     int64_t total_merge_time = 0;
 
@@ -116,6 +124,8 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         while (!res.job_queue.try_dequeue(job_id)) {
             std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
+
+        auto s0 = std::chrono::high_resolution_clock::now();
 
         auto job_wait_end = std::chrono::high_resolution_clock::now();
 
@@ -213,11 +223,13 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             auto s4 = std::chrono::high_resolution_clock::now();
 
             // print out timings for worker
-            auto wait_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s2 - s1).count();
+            auto pull_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s1 - s0).count();
+            auto copy_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s2 - s1).count();
             auto process_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s3 - s2).count();
             auto merge_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s4 - s3).count();
 
-            total_pull_time += wait_time;
+            total_pull_time += pull_time;
+            total_copy_time += copy_time;
             total_scan_time += process_time;
             total_merge_time += merge_time;
         }
@@ -288,19 +300,27 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             auto s4 = std::chrono::high_resolution_clock::now();
 
             // print out timings for worker
-            auto wait_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s2 - s1).count();
+            auto pull_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s1 - s0).count();
+            auto copy_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s2 - s1).count();
             auto process_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s3 - s2).count();
             auto merge_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s4 - s3).count();
 
-            total_pull_time += wait_time;
+            total_pull_time += pull_time;
+            total_copy_time += copy_time;
             total_scan_time += process_time;
             total_merge_time += merge_time;
         }
         auto job_process_end = std::chrono::high_resolution_clock::now();
         job_process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(job_process_end - job_process_start).count();
     }
+    std::string log_message =
+        "[QueryCoordinator::partition_scan_worker_fn] Worker " + std::to_string(core_index) +
+        ": total_pull_time=" + std::to_string(total_pull_time / 1000) +
+        ", total_copy_time=" + std::to_string(total_copy_time / 1000) +
+        ", total_scan_time=" + std::to_string(total_scan_time / 1000) +
+        ", merge_time=" + std::to_string(total_merge_time / 1000) + '\n';
 
-//    std::cout << "Worker=" << core_index << ": total_pull_time=" << total_pull_time / 1000 << ", total_scan_time=" << total_scan_time / 1000 << ", merge_time=" << total_merge_time / 1000 << '\n';
+    threadsafe_cout(log_message);
 }
 
 // Worker-Based Scan Implementation
