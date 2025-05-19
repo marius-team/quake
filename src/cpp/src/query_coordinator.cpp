@@ -468,6 +468,12 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
         }
     }
+    auto topk_ids = torch::full({num_queries, k}, -1, torch::kInt64);
+    auto topk_dists = torch::full({num_queries, k},
+                                  (metric_ == faiss::METRIC_INNER_PRODUCT)
+                                  ? -std::numeric_limits<float>::infinity()
+                                  : std::numeric_limits<float>::infinity(),
+                                  torch::kFloat32);
     end_time = high_resolution_clock::now();
     timing_info->job_enqueue_time_ns = duration_cast<nanoseconds>(end_time - start_time).count();
 
@@ -548,12 +554,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     // Aggregate results.
     start_time = high_resolution_clock::now();
-    auto topk_ids = torch::full({num_queries, k}, -1, torch::kInt64);
-    auto topk_dists = torch::full({num_queries, k},
-                                  (metric_ == faiss::METRIC_INNER_PRODUCT)
-                                      ? -std::numeric_limits<float>::infinity()
-                                      : std::numeric_limits<float>::infinity(),
-                                  torch::kFloat32);
     auto ids_accessor = topk_ids.accessor<int64_t, 2>();
     auto dists_accessor = topk_dists.accessor<float, 2>();
     {
