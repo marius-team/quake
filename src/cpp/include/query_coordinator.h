@@ -54,7 +54,7 @@ public:
      int core_id; ///< Logical identifier of the core.
      vector<shared_ptr<TopkBuffer>> topk_buffer_pool; ///< Preallocated Top‑K buffers.
      vector<std::byte> local_query_buffer;            ///< Local aggregator for query results.
-     moodycamel::BlockingReaderWriterQueue<int64_t> job_queue; ///< Job queue for scan jobs.
+     moodycamel::ReaderWriterQueue<int64_t> job_queue; ///< Job queue for scan jobs.
     };
 
     vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.
