@@ -375,6 +375,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         duration_cast<nanoseconds>(end_time - start_time).count();
 
     start_time = high_resolution_clock::now();
+    vector<int> all_query_ids = std::vector<int>(x.size(0));
+    std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
     if (search_params->batched_scan) {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
         job_buffer_.resize(partition_manager_->nlist());
@@ -382,10 +384,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         auto pids_acc = pids.accessor<int64_t, 1>();
 
         if (pids.size(0) == partition_ids.size(1)) {
-            vector<int64_t> all_query_ids = std::vector<int64_t>(x.size(0));
-            std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
-
-
             for (int64_t i = 0; i < pids.size(0); i++) {
                 ScanJob job;
                 job.is_batched = true;
@@ -393,7 +391,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 job.k = k;
                 job.query_vector = x.data_ptr<float>();
                 job.num_queries = x.size(0);
-                job.query_ids = all_query_ids;
+                job.query_ids = all_query_ids.data();
                 int core_id = partition_manager_->get_partition_core_id(pids_acc[i]);
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
@@ -404,7 +402,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
 
         } else {
-            std::unordered_map<int64_t, vector<int64_t>> per_partition_query_ids;
+            std::unordered_map<int64_t, vector<int>> per_partition_query_ids;
             for (int64_t q = 0; q < num_queries; q++) {
                 for (int64_t p = 0; p < partition_ids.size(1); p++) {
                     int64_t pid = partition_ids_accessor[q][p];
@@ -419,7 +417,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 job.k = k;
                 job.query_vector = x.data_ptr<float>();
                 job.num_queries = kv.second.size();
-                job.query_ids = kv.second;
+                job.query_ids = kv.second.data();
                 int core_id = partition_manager_->get_partition_core_id(kv.first);
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
@@ -440,7 +438,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
                 ScanJob job;
                 job.is_batched = false;
-                job.query_ids = {q};
+                job.query_ids = all_query_ids.data() + q;
                 job.partition_id = pid;
                 job.k = k;
                 job.query_vector = x_ptr + q * dimension;

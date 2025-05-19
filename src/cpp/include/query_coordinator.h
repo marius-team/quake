@@ -24,7 +24,7 @@ struct ScanJob {
  int64_t partition_id;         ///< The identifier of the partition to be scanned.
  int k;                        ///< The number of neighbors (Top-K) to return.
  const float* query_vector;    ///< Pointer to the query vector.
- vector<int64_t> query_ids;    ///< Global query IDs; used in batched mode.
+ int *query_ids;    ///< Global query IDs; used in batched mode.
  bool is_batched = false;      ///< Indicates whether this is a batched query job.
  int64_t num_queries = 0;      ///< The number of queries in batched mode.
  int rank = 0;                 ///< Rank of the partition
