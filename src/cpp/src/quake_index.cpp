@@ -281,7 +281,13 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa)
         std::string parent_dir = (fs::path(dir_path) / "parent").string();
         if (fs::exists(parent_dir) && fs::is_directory(parent_dir)) {
             parent_ = std::make_shared<QuakeIndex>();
-            parent_->load(parent_dir, n_workers, use_numa);
+            int n_parts = partition_manager_->nlist();
+
+            // don't put too many parent workers. maximum of 1 worker per 500 partitions
+            int parent_n_workers = std::max(1, n_parts / 500);
+            parent_n_workers = std::min(parent_n_workers, n_workers);
+
+            parent_->load(parent_dir, parent_n_workers, use_numa);
             partition_manager_->parent_ = parent_;
         } else {
             parent_ = nullptr;
