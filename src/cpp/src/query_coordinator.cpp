@@ -683,9 +683,9 @@ std::shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, std::shared_ptr
     auto scan_partitions_call_end_time = std::chrono::high_resolution_clock::now();
 
     // print out timing info in ms
-    std::cout << "[QueryCoordinator::search] Scan Partition time: " << std::chrono::duration_cast<std::chrono::milliseconds>(scan_partitions_call_end_time - scan_partitions_call_start_time).count() << " ms" << std::endl;
-    std::cout << "[QueryCoordinator::search] Parent search time: " << std::chrono::duration_cast<std::chrono::milliseconds>(parent_search_end_time - parent_search_start_time).count() << " ms" << std::endl;
-    std::cout << "[QueryCoordinator::search] Overall search time: " << std::chrono::duration_cast<std::chrono::milliseconds>(scan_partitions_call_end_time - overall_search_start_time).count() << " ms" << std::endl;
+//    std::cout << "[QueryCoordinator::search] Scan Partition time: " << std::chrono::duration_cast<std::chrono::milliseconds>(scan_partitions_call_end_time - scan_partitions_call_start_time).count() << " ms" << std::endl;
+//    std::cout << "[QueryCoordinator::search] Parent search time: " << std::chrono::duration_cast<std::chrono::milliseconds>(parent_search_end_time - parent_search_start_time).count() << " ms" << std::endl;
+//    std::cout << "[QueryCoordinator::search] Overall search time: " << std::chrono::duration_cast<std::chrono::milliseconds>(scan_partitions_call_end_time - overall_search_start_time).count() << " ms" << std::endl;
 
     return scan_result;
 }
