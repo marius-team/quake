@@ -294,6 +294,9 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     Tensor x,
     Tensor partition_ids,
     shared_ptr<SearchParams> search_params) {
+
+    auto start_time = high_resolution_clock::now();
+
     if (!partition_manager_) {
         throw std::runtime_error("[QueryCoordinator::worker_scan] partition_manager_ is null.");
     }
@@ -317,8 +320,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     timing_info->search_params = search_params;
 
     float *x_ptr = x.data_ptr<float>();
-
-    auto start_time = high_resolution_clock::now();
 
     if (partition_ids.dim() == 1) {
         partition_ids = partition_ids.unsqueeze(0).expand({num_queries, partition_ids.size(0)});
