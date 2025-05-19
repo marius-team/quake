@@ -71,9 +71,9 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
     }
     workers_initialized_ = true;
 
-    // get num cores on machine
+    // set main thread on separate thread from workers
     int num_cores_on_machine = std::thread::hardware_concurrency();
-    set_thread_affinity(num_cores + 1 % num_cores_on_machine);
+    set_thread_affinity(num_cores % num_cores_on_machine);
 }
 
 // Shutdown Worker Threads
