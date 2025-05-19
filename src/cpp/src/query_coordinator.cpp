@@ -394,8 +394,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
-                job_buffer_.push_back(job);
-                int64_t jid = (int64_t)job_buffer_.size() - 1;
+                int64_t jid = job_buffer_.size();
+                job_buffer_[jid] = job;
                 core_resources_[core_id].job_queue.enqueue(jid);
             }
 
@@ -420,13 +420,15 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
-                job_buffer_.push_back(job);
-                int64_t jid = (int64_t)job_buffer_.size() - 1;
+                int64_t jid = job_buffer_.size();
+                job_buffer_[jid] = job;
                 core_resources_[core_id].job_queue.enqueue(jid);
             }
         }
     } else {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
+
+        job_buffer_.reserve(num_queries * partition_ids.size(1));
         for (int q = 0; q < num_queries; q++) {
             for (int64_t p = 0; p < partition_ids.size(1); p++) {
                 int64_t pid = partition_ids_accessor[q][p];
@@ -445,8 +447,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
-                job_buffer_.push_back(job);
-                int64_t jid = (int64_t)job_buffer_.size() - 1;
+                int64_t jid = job_buffer_.size();
+                job_buffer_[jid] = job;
                 core_resources_[core_id].job_queue.enqueue(jid);
             }
         }
