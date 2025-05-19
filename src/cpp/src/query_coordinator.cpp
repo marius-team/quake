@@ -649,6 +649,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, std::shared_ptr
         }
         if (parent_search_params->k == 0 && partition_manager_->nlist() > 0) parent_search_params->k = 1; // Ensure k is at least 1 if there are partitions
 
+        parent_search_params->batched_scan = search_params->batched_scan;
 
         auto parent_search_result = parent_->search(x, parent_search_params);
         partition_ids_to_scan = parent_search_result->ids;
