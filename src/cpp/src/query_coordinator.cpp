@@ -42,7 +42,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx, int num_queries, in
     res.topk_buffer_pool.resize(num_queries);
     for (int q = 0; q < num_queries; ++q) {
         res.topk_buffer_pool[q] = make_shared<TopkBuffer>(k, metric_ == faiss::METRIC_INNER_PRODUCT);
-        res.job_queue = moodycamel::BlockingConcurrentQueue<ScanJob>();
+        res.job_queue = moodycamel::BlockingConcurrentQueue<int64_t>();
     }
 }
 
@@ -81,9 +81,7 @@ void QueryCoordinator::shutdown_workers() {
     stop_workers_.store(true);
     // Enqueue a special shutdown job for each core.
     for (auto &res : core_resources_) {
-        ScanJob termination_job;
-        termination_job.partition_id = -1;
-        res.job_queue.enqueue(termination_job);
+        res.job_queue.enqueue(-1);
     }
     // Join all worker threads.
     for (auto &thr : worker_threads_) {
@@ -108,10 +106,10 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     int64_t total_merge_time = 0;
 
     while (true) {
-        ScanJob job;
 
         auto job_wait_start = std::chrono::high_resolution_clock::now();
-        res.job_queue.wait_dequeue(job);
+        int64_t job_id;
+        res.job_queue.wait_dequeue(job_id);
         auto job_wait_end = std::chrono::high_resolution_clock::now();
 
         job_pull_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(job_wait_end - job_wait_start).count();
@@ -120,9 +118,11 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         shared_ptr<TopkBuffer> local_topk_buffer = res.topk_buffer_pool[0];
 
         // Shutdown signal: -1 indicates the worker should exit.
-        if (job.partition_id == -1) {
+        if (job_id == -1) {
             break;
         }
+
+        ScanJob job = job_buffer_[job_id];
 
         // Ignore this job if the global buffer is not processing queries.
         if (!global_topk_buffer_pool_[job.query_ids[0]]->currently_processing_query()) {
@@ -327,6 +327,8 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
+
+    job_buffer_.clear();
     job_flags_.clear();
     job_flags_.resize(num_queries);
     for (int64_t q = 0; q < num_queries; q++) {
@@ -392,7 +394,9 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
-                core_resources_[core_id].job_queue.enqueue(job);
+                job_buffer_.push_back(job);
+                int64_t jid = (int64_t)job_buffer_.size() - 1;
+                core_resources_[core_id].job_queue.enqueue(jid);
             }
 
         } else {
@@ -416,15 +420,14 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
-                core_resources_[core_id].job_queue.enqueue(job);
+                job_buffer_.push_back(job);
+                int64_t jid = (int64_t)job_buffer_.size() - 1;
+                core_resources_[core_id].job_queue.enqueue(jid);
             }
         }
     } else {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
-
-        int64_t start = 0;
-        int64_t end = num_queries;
-        parallel_for(start, end, [&](int64_t q) {
+        for (int q = 0; q < num_queries; q++) {
             for (int64_t p = 0; p < partition_ids.size(1); p++) {
                 int64_t pid = partition_ids_accessor[q][p];
                 if (pid == -1) continue;
@@ -442,9 +445,11 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
-                core_resources_[core_id].job_queue.enqueue(job);
+                job_buffer_.push_back(job);
+                int64_t jid = (int64_t)job_buffer_.size() - 1;
+                core_resources_[core_id].job_queue.enqueue(jid);
             }
-            }, search_params->num_threads);
+        }
     }
     end_time = high_resolution_clock::now();
     timing_info->job_enqueue_time_ns = duration_cast<nanoseconds>(end_time - start_time).count();
