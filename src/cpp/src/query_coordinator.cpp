@@ -330,7 +330,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
-
     job_buffer_.clear();
     next_job_id_.store(0);
     job_flags_.clear();
@@ -376,6 +375,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     start_time = high_resolution_clock::now();
     vector<int> all_query_ids = std::vector<int>(x.size(0));
+    std::unordered_map<int64_t, vector<int>> per_partition_query_ids; // for batched scan
     std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
     if (search_params->batched_scan) {
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
@@ -402,7 +402,6 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             }
 
         } else {
-            std::unordered_map<int64_t, vector<int>> per_partition_query_ids;
             for (int64_t q = 0; q < num_queries; q++) {
                 for (int64_t p = 0; p < partition_ids.size(1); p++) {
                     int64_t pid = partition_ids_accessor[q][p];
