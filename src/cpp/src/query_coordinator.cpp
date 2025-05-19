@@ -173,14 +173,13 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         }
 
         if (job.query_ids.empty()) {
-
             if (job.single_query_global_id != -1) {
                 job.query_ids = {job.single_query_global_id}; // Convert single query ID to vector
             } else {
-                // std::cerr << "[Worker " << core_index << "] Job for partition " << job.partition_id << " has no query_ids. Skipping." << std::endl;
+                continue;
             }
             // std::cerr << "[Worker " << core_index << "] Job for partition " << job.partition_id << " has no query_ids. Skipping." << std::endl;
-            continue;
+
         }
 
         const float *partition_codes_ptr = nullptr;
