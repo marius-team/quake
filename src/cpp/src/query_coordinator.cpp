@@ -307,6 +307,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         std::shared_ptr<SearchParams> search_params) {
 
     job_details_store_.clear();
+    job_details_store_.reserve(x.size(0));
 
     auto overall_worker_scan_start_time = std::chrono::high_resolution_clock::now();
 

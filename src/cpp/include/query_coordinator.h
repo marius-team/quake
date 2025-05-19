@@ -31,7 +31,7 @@ struct ScanJob {
     int64_t num_queries = 0;      ///< The number of queries in batched mode.
     int rank = 0;                 ///< Rank of the partition
 
-    std::vector<int64_t> query_ids_for_batch_job;
+    std::vector<int64_t> query_ids_for_batch_job = {};
 
     ScanJob() :
             is_batched(false),
