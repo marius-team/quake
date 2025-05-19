@@ -815,11 +815,6 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
             parent_search_params->recompute_threshold = search_params->recompute_threshold;
             parent_search_params->initial_search_fraction = .5;
             parent_search_params->batched_scan = false;
-
-            // check if parent is flat
-            if (parent_->parent_ == nullptr) {
-                parent_search_params->batched_scan = true;
-            }
         } else {
             parent_search_params = search_params->parent_params;
         }
