@@ -430,6 +430,7 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         auto partition_ids_accessor = partition_ids.accessor<int64_t, 2>();
 
         job_buffer_.resize(num_queries * partition_ids.size(1));
+        vector<vector<int64_t>> per_worker_job_ids(num_workers_);
         for (int q = 0; q < num_queries; q++) {
             for (int64_t p = 0; p < partition_ids.size(1); p++) {
                 int64_t pid = partition_ids_accessor[q][p];
@@ -450,8 +451,12 @@ shared_ptr<SearchResult> QueryCoordinator::worker_scan(
                 }
                 size_t jid = next_job_id_.fetch_add(1, std::memory_order_acq_rel);
                 job_buffer_[jid] = job;
-                core_resources_[core_id].job_queue.enqueue((int64_t) jid);
+                per_worker_job_ids[core_id].push_back(jid);
+//                core_resources_[core_id].job_queue.enqueue((int64_t) jid);
             }
+        }
+        for (int i = 0; i < num_workers_; i++) {
+            core_resources_[i].job_queue.enqueue_bulk(per_worker_job_ids[i].begin(), per_worker_job_ids[i].size());
         }
     }
     end_time = high_resolution_clock::now();
