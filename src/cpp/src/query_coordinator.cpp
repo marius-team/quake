@@ -305,6 +305,8 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
     int64_t nQ = x.size(0), D = x.size(1);
     float *xptr = x.data_ptr<float>();
 
+    auto partition_ids_acc = partition_ids.accessor<int64_t,2>();
+
     // flatten jobs
     next_job_id_ = 0;
     job_flags_.clear();
@@ -313,6 +315,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
         job_flags_[q] = vector<std::atomic<bool>>(partition_ids.size(1));
         for (int p = 0; p < partition_ids.size(1); ++p) {
             job_flags_[q][p] = false;
+            if (partition_ids_acc[q][p] < 0) job_flags_[q][p] = true;
         }
     }
     job_buffer_.clear();
