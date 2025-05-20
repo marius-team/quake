@@ -190,15 +190,19 @@ public:
             } else {
                 miniselect::pdqpartial_sort_branchless(ord_, ord_ + m, ord_ + n, cmpIdx);
             }
+
+        } else {
+            miniselect::pdqsort_branchless(ord_, ord_ + n, cmpIdx);
         }
-        // 3) sort the top‐m prefix
+
+        // 4) fully sort the top-m indices so they are in strictly correct order
         miniselect::pdqsort_branchless(ord_, ord_ + m, cmpIdx);
 
-        // 4) copy the m winners back to front of vals_/ids_
+        // 5) copy the winners back to vals_/ids_ and clamp head_
         for (int i = 0; i < m; ++i) {
             int idx = ord_[i];
             vals_[i] = vals_[idx];
-            ids_[i]  = ids_[idx];
+            ids_ [i] = ids_ [idx];
         }
 
         // 5) clamp head_ and return the k-th value (or extreme if too few)
