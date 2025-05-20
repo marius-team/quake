@@ -70,7 +70,7 @@ void ListScanLatencyEstimator::profile_scan_latency() {
 
             torch::Tensor curr_vectors = vectors.narrow(0, 0, n);
             torch::Tensor curr_ids = ids.narrow(0, 0, n);
-            auto topk_buffer = make_shared<TopkBuffer>(k, false);
+            auto topk_buffer = make_shared<TopkBuffer>(k, false, k * 100, 0);
 
             const float *query_ptr = query.data_ptr<float>();
             const float *curr_vectors_ptr = curr_vectors.data_ptr<float>();

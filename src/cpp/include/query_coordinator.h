@@ -21,14 +21,17 @@ class PartitionManager;
  * A ScanJob encapsulates all parameters required to perform a scan on a given index partition.
  */
 struct ScanJob {
- int64_t partition_id;         ///< The identifier of the partition to be scanned.
- int k;                        ///< The number of neighbors (Top-K) to return.
- const float* query_vector;    ///< Pointer to the query vector.
- std::shared_ptr<vector<int>> query_ids;    ///< Global query IDs; used in batched mode.
- int query_id;
- bool is_batched = false;      ///< Indicates whether this is a batched query job.
- int64_t num_queries = 0;      ///< The number of queries in batched mode.
- int rank = 0;                 ///< Rank of the partition
+    int64_t partition_id;         ///< The identifier of the partition to be scanned.
+    int k;                        ///< The number of neighbors (Top-K) to return.
+    const float* query_vector;    ///< Pointer to the query vector.
+    bool is_batched = false;      ///< Indicates whether this is a batched query job.
+    int64_t num_queries = 0;
+
+    int query_id;
+    int rank = 0;                 ///< Rank of the partition
+
+    std::shared_ptr<vector<int>> query_ids;    ///< Global query IDs; used in batched mode.
+    std::shared_ptr<vector<int>> ranks;     ///< Rank of the partition for each query
 };
 
 /**
@@ -51,17 +54,33 @@ public:
      * Each core maintains its own pool of Top‑K buffers, a local query buffer, and a dedicated job queue.
      */
     struct CoreResources {
-     int core_id; ///< Logical identifier of the core.
-     vector<shared_ptr<TopkBuffer>> topk_buffer_pool; ///< Preallocated Top‑K buffers.
-     moodycamel::ConcurrentQueue<int64_t> job_queue; ///< Job queue for scan jobs.
+        int core_id;
+        std::vector<std::shared_ptr<TopkBuffer>> topk_buffer_pool;
+        moodycamel::ConcurrentQueue<int64_t> job_queue;
+
+        // Thread-local buffers for batched queries
+        float *batch_queries; ///< Thread-local buffer used for batched queries.
+        float *batch_distances; ///< Thread-Local buffer for result distances.
+        int64_t *batch_ids; ///< Thread-Local buffer for result IDs.
     };
 
     struct NUMAResources {
-        float *local_query_buffer;
+        float* local_query_buffer = nullptr;
+        size_t buffer_size = 0;
     };
+
+    struct ResultJob {
+        int           query_id;
+        int           rank;
+        std::vector<float>     distances;
+        std::vector<int64_t>   indices;
+    };
+
 
     vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.
     vector<NUMAResources> numa_resources_;
+    moodycamel::ConcurrentQueue<ResultJob> result_queue_;
+
     bool workers_initialized_ = false;                 ///< Flag indicating if worker threads are initialized.
     int num_workers_;                                  ///< Total number of worker threads.
     vector<std::thread> worker_threads_;               ///< Container for worker threads.
@@ -73,7 +92,7 @@ public:
     bool debug_ = false;                               ///< Debug mode flag.
 
     std::vector<ScanJob> job_buffer_;
-    std::atomic<size_t>     next_job_id_{0};
+    int   next_job_id_{0};
     vector<vector<std::atomic<bool>>> job_flags_; ///< Flags to track job completion
     std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.
     std::atomic<int64_t> job_process_time_ns = 0; ///< Time spent processing jobs.
@@ -198,6 +217,41 @@ private:
      * @param d Dimensionality of the query vectors.
      */
     void allocate_core_resources(int core_idx, int num_queries, int k, int d);
+
+    int64_t pop_scan_job(CoreResources &res);
+    void process_scan_job(ScanJob job, CoreResources &res);
+
+    // handles the non‐batched branch
+    void handle_nonbatched_job(const ScanJob &job,
+                               CoreResources &res,
+                               NUMAResources &nr);
+
+    // handles the batched branch
+    void handle_batched_job(const ScanJob &job,
+                            CoreResources &res,
+                            NUMAResources &nr);
+
+    // — Main‐thread helpers —
+    void init_global_buffers(int64_t nQ, int K,
+                             Tensor &partition_ids,
+                             shared_ptr<SearchParams> params);
+
+    void copy_query_to_numa(const float *xptr, int64_t nQ, int64_t D);
+
+    void enqueue_scan_jobs(Tensor x,
+                           Tensor partition_ids,
+                           shared_ptr<SearchParams> params);
+
+    void drain_and_apply_aps(Tensor x,
+                            Tensor partition_ids,
+                             bool use_aps,
+                             float recall_target,
+                             float aps_flush_period_us,
+                             shared_ptr<SearchTimingInfo> timing);
+
+    std::shared_ptr<SearchResult>
+    aggregate_scan_results(int64_t nQ, int K,
+                           shared_ptr<SearchTimingInfo> timing);
     };
 
 #endif //QUERY_COORDINATOR_H

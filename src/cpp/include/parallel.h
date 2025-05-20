@@ -38,6 +38,60 @@ inline bool set_thread_affinity(int core_id) {
 #endif
 }
 
+
+#ifdef QUAKE_USE_NUMA
+#include <numa.h>
+  #include <sys/mman.h>
+  #include <new>
+
+  inline void* quake_alloc(size_t sz, int node) {
+    void* ptr = numa_alloc_onnode(sz, node);
+    if (ptr == nullptr || ptr == MAP_FAILED) {
+      throw std::bad_alloc();
+    }
+    return ptr;
+  }
+
+  inline void quake_free(void* ptr, size_t sz) noexcept {
+    if (ptr) {
+      numa_free(ptr, sz);
+    }
+  }
+
+    inline int numa_node_of_cpu(int cpu) {
+        return numa_node_of_cpu(cpu);
+    }
+
+    inline int get_num_numa_nodes() {
+        return numa_num_configured_nodes();
+    }
+
+#else
+#include <cstdlib>
+#include <new>
+
+inline void* quake_alloc(size_t sz, int /*node*/) {
+    void* ptr = std::malloc(sz);
+    if (!ptr) {
+        throw std::bad_alloc();
+    }
+    return ptr;
+}
+
+inline void quake_free(void* ptr, size_t /*sz*/) noexcept {
+    std::free(ptr);
+}
+
+inline int numa_node_of_cpu(int /*cpu*/) {
+    return 0; // Not applicable
+}
+
+inline int get_num_numa_nodes() {
+    return 1; // Not applicable
+}
+#endif
+
+
 template <typename IndexType, typename Function>
 void parallel_for(IndexType start, IndexType end, Function func, int num_threads = -1) {
     if (num_threads <= 0) {

@@ -14,7 +14,7 @@ class ListScanningTest : public ::testing::Test {
 protected:
     // Helper function to create a TopkBuffer
     std::shared_ptr<TopkBuffer> create_buffer(int k, bool is_descending) {
-        return std::make_shared<TypedTopKBuffer<float, int64_t>>(k, is_descending);
+        return std::make_shared<TypedTopKBuffer<float, int64_t>>(k, is_descending, k * 100, 0);
     }
 };
 
@@ -448,7 +448,7 @@ TEST_F(ListScanningTest, LargeListCorrectnessInnerProduct) {
     auto gt_dists_accessor = gt_dists.accessor<float, 2>();
 
     // perform single query scan first
-    auto buffer = make_shared<TopkBuffer>(k, true);
+    auto buffer = make_shared<TopkBuffer>(k, true, k * 100, 0);
     for (int i = 0; i < num_queries; i++) {
         scan_list(
             query_vectors[i].data_ptr<float>(),
@@ -514,7 +514,7 @@ TEST_F(ListScanningTest, LargeListCorrectnessL2) {
     auto gt_dists_accessor = gt_dists.accessor<float, 2>();
 
     // perform single query scan first
-    auto buffer = make_shared<TopkBuffer>(k, false);
+    auto buffer = make_shared<TopkBuffer>(k, false, k * 100, 0);
     for (int i = 0; i < num_queries; i++) {
         scan_list(
             query_vectors[i].data_ptr<float>(),

@@ -13,6 +13,7 @@
 #include "sorting/pdqsort.h"
 #include "sorting/floyd_rivest_select.h"
 #include "sorting/heap_select.h"
+#include "parallel.h"
 
 inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     Tensor num_correct = torch::zeros(ids.size(0), torch::kInt64);
@@ -39,205 +40,225 @@ inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     return recall;
 }
 
-#define TOP_K_BUFFER_CAPACITY (16 * 1024)
-
-template<typename DistanceType = float, typename IdType = int>
+template<typename T, typename I>
 class TypedTopKBuffer {
 public:
-    int k_; // Number of top elements to keep
-    int curr_offset_ = 0; // Current offset in the buffer
-    std::vector<std::pair<DistanceType, IdType> > topk_; // Buffer to store top-k elements
-    bool is_descending_; // Flag to indicate sorting order
-    std::recursive_mutex buffer_mutex_;
-    std::atomic<bool> processing_query_;
-    std::atomic<int> jobs_left_;
-    std::atomic<int> partitions_scanned_;
+    T *vals_;    // size = capacity
+    I *ids_;
+    int capacity_, head_, k_;
+    bool is_desc_;
+    int *ord_;
+    bool owns_memory_ = true;
+    TypedTopKBuffer(int k, bool desc, int cap, int node)
+            : capacity_(cap), head_(0), k_(k) {
+        vals_ = static_cast<T *>(quake_alloc(sizeof(T) * cap, node));
+        ids_ = static_cast<I *>(quake_alloc(sizeof(I) * cap, node));
+        ord_ = static_cast<int *>(quake_alloc(sizeof(int) * cap, node));
 
-    TypedTopKBuffer(int k, bool is_descending, int buffer_capacity = TOP_K_BUFFER_CAPACITY)
-            : k_(k), is_descending_(is_descending), topk_(buffer_capacity), processing_query_(true), partitions_scanned_(0) {
-        assert(k <= buffer_capacity); // Ensure k is smaller than or equal to buffer size
+        if (capacity_ < k_) {
+            throw std::invalid_argument("capacity must be greater than k");
+        }
 
-        for (int i = 0; i < topk_.size(); i++) {
-            if (is_descending_) {
-                topk_[i] = {-std::numeric_limits<DistanceType>::infinity(), -1};
-            } else {
-                topk_[i] = {std::numeric_limits<DistanceType>::max(), -1};
+        if (desc) {
+            is_desc_ = true;
+            for (int i = 0; i < capacity_; i++) {
+                vals_[i] = -std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
+            }
+        } else {
+            is_desc_ = false;
+            for (int i = 0; i < capacity_; i++) {
+                vals_[i] = std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
             }
         }
     }
 
-    ~TypedTopKBuffer() = default;
+    // Create buffer but do not allocate memory (except for ord_)
+    TypedTopKBuffer(T *vals, I* ids, int cap, int k, bool desc, int node) {
+        capacity_ = cap;
+        head_ = 0;
+        k_ = k;
+        is_desc_ = desc;
+        vals_ = vals;
+        ids_ = ids;
+        ord_ = static_cast<int *>(quake_alloc(sizeof(int) * cap, node));
+        owns_memory_ = false;
+
+        if (capacity_ < k_) {
+            throw std::invalid_argument("capacity must be greater than k");
+        }
+
+        if (desc) {
+            for (int i = 0; i < capacity_; i++) {
+                vals_[i] = -std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
+            }
+        } else {
+            for (int i = 0; i < capacity_; i++) {
+                vals_[i] = std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
+            }
+        }
+    }
+
+    ~TypedTopKBuffer() {
+        if (owns_memory_) {
+            if (vals_) {
+                quake_free(vals_, sizeof(T) * capacity_);
+            }
+
+            if (ids_) {
+                quake_free(ids_, sizeof(I) * capacity_);
+            }
+        }
+
+        if (ord_) {
+            quake_free(ord_, sizeof(int) * capacity_);
+        }
+
+        vals_ = nullptr;
+        ids_ = nullptr;
+        ord_ = nullptr;
+    }
 
     void set_k(int new_k) {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        assert(new_k <= topk_.size());
+        if (new_k > capacity_) {
+            throw std::invalid_argument("k must be less than the capacity");
+        }
         k_ = new_k;
         reset();
     }
 
-    void set_processing_query(bool new_value) {
-        processing_query_.store(new_value, std::memory_order_relaxed);
-    }
-
-    inline bool currently_processing_query() {
-        return processing_query_.load(std::memory_order_relaxed);
-    }
-
-    void set_jobs_left(int total_jobs) {
-        jobs_left_.store(total_jobs, std::memory_order_relaxed);
-    }
-
-    void record_skipped_jobs(int skipped_jobs) {
-        jobs_left_.fetch_sub(skipped_jobs, std::memory_order_relaxed);
-    }
-
-    void record_empty_job() {
-        jobs_left_.fetch_sub(1, std::memory_order_relaxed);
-    }
-
-    inline bool finished_all_jobs() {
-        int curr_jobs_left = jobs_left_.load(std::memory_order_relaxed);
-        return jobs_left_.load(std::memory_order_relaxed) <= 0;
-    }
-
-    inline int get_num_partitions_scanned() {
-        return partitions_scanned_.load(std::memory_order_relaxed);
-    }
-
     void reset() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        curr_offset_ = 0;
+        head_ = 0;
         for (int i = 0; i < k_; i++) {
-            if (is_descending_) {
-                topk_[i] = { -std::numeric_limits<DistanceType>::infinity(), -1 };
+            if (is_desc_) {
+                vals_[i] = -std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
             } else {
-                topk_[i] = { std::numeric_limits<DistanceType>::max(), -1 };
+                vals_[i] = std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
             }
         }
-        partitions_scanned_.store(0, std::memory_order_relaxed);
     }
 
-    void add(DistanceType distance, IdType index) {
-        if (curr_offset_ >= topk_.size()) {
-            flush(); // Flush the buffer if it is full
-        }
-        topk_[curr_offset_++] = {distance, index};
+    inline void add(T dist, I idx) {
+        vals_[head_] = dist;
+        ids_[head_] = idx;
+        if (++head_ == capacity_) flush();
     }
 
-    void batch_add(DistanceType *distances, const IdType *indices, int num_values) {
-        if (num_values == 0) {
-            jobs_left_.fetch_sub(1, std::memory_order_relaxed);
-            return;
-        }
-        if (!currently_processing_query()) {
-            jobs_left_.fetch_sub(1, std::memory_order_relaxed);
-            return;
-        }
-        std::lock_guard<std::recursive_mutex> lock(buffer_mutex_);
+    void batch_add(T *distances, I *indices, int num_values) {
         int pos = 0;
         while (pos < num_values) {
-            int available = static_cast<int>(topk_.size()) - curr_offset_;
+            int available = capacity_ - head_;
             if (available <= 0) {
                 flush();
-                available = static_cast<int>(topk_.size()) - curr_offset_;
+                available = capacity_ - head_;
             }
             int to_copy = std::min(num_values - pos, available);
             for (int i = 0; i < to_copy; i++) {
-                topk_[curr_offset_++] = { distances[pos + i], indices[pos + i] };
+                vals_[head_] = distances[pos + i];
+                ids_[head_] = indices[pos + i];
+                head_++;
             }
             pos += to_copy;
         }
-        jobs_left_.fetch_sub(1, std::memory_order_relaxed);
-        partitions_scanned_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    DistanceType flush() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        if (curr_offset_ > k_) {
+    T flush() {
+        int n = head_;
+        int m = std::min(n, k_);
 
-            // for k < 10 use heap select
-            if (k_ < 10) {
-                if (is_descending_) {
-                    miniselect::heap_select(topk_.begin(), topk_.begin() + k_,
-                                            topk_.begin() + curr_offset_,
-                                            [](const auto &a, const auto &b) { return a.first > b.first; });
-                } else {
-                    miniselect::heap_select(topk_.begin(), topk_.begin() + k_,
-                                            topk_.begin() + curr_offset_,
-                                            [](const auto &a, const auto &b) { return a.first < b.first; });
-                }
-            } else if (k_ < curr_offset_ * .001) {
-                if (is_descending_) {
-                    miniselect::floyd_rivest_select(topk_.begin(), topk_.begin() + k_,
-                                                    topk_.begin() + curr_offset_,
-                                                    [](const auto &a, const auto &b) { return a.first > b.first; });
-                } else {
-                    miniselect::floyd_rivest_select(topk_.begin(), topk_.begin() + k_,
-                                                    topk_.begin() + curr_offset_,
-                                                    [](const auto &a, const auto &b) { return a.first < b.first; });
-                }
+        // 1) build identity permutation
+        for (int i = 0; i < n; ++i) {
+            ord_[i] = i;
+        }
+        // comparator by value
+        auto cmpIdx = [&](int a, int b) {
+            return is_desc_ ? (vals_[a] > vals_[b])
+                            : (vals_[a] < vals_[b]);
+        };
+
+        // 2) select top‐m indices into ord_[0..m)
+        if (n > m) {
+            if (m < 10) {
+                miniselect::heap_select(ord_, ord_ + m, ord_ + n, cmpIdx);
+            } else if (m < n * 0.001) {
+                miniselect::floyd_rivest_select(ord_, ord_ + m, ord_ + n, cmpIdx);
             } else {
-                if (is_descending_) {
-                    miniselect::pdqpartial_sort_branchless(topk_.begin(), topk_.begin() + k_,
-                                                           topk_.begin() + curr_offset_,
-                                                           [](const auto &a, const auto &b) { return a.first > b.first; });
-                } else {
-                    miniselect::pdqpartial_sort_branchless(topk_.begin(), topk_.begin() + k_,
-                                                           topk_.begin() + curr_offset_,
-                                                           [](const auto &a, const auto &b) { return a.first < b.first; });
-                }
-            }
-            curr_offset_ = k_; // After flush, retain only the top-k elements
-        } else {
-            if (is_descending_) {
-                miniselect::pdqsort_branchless(topk_.begin(), topk_.begin() + curr_offset_,
-                                              [](const auto &a, const auto &b) { return a.first > b.first; });
-            } else {
-                miniselect::pdqsort_branchless(topk_.begin(), topk_.begin() + curr_offset_,
-                                              [](const auto &a, const auto &b) { return a.first < b.first; });
+                miniselect::pdqpartial_sort_branchless(ord_, ord_ + m, ord_ + n, cmpIdx);
             }
         }
-        return topk_[std::min(curr_offset_, k_ - 1)].first;
-    }
+        // 3) sort the top‐m prefix
+        miniselect::pdqsort_branchless(ord_, ord_ + m, cmpIdx);
 
-    std::vector<DistanceType> get_topk() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        flush(); // Ensure the buffer is properly flushed
-
-        std::vector<DistanceType> topk_distances(std::min(curr_offset_, k_));
-        for (int i = 0; i < std::min(curr_offset_, k_); i++) {
-            topk_distances[i] = topk_[i].first;
+        // 4) copy the m winners back to front of vals_/ids_
+        for (int i = 0; i < m; ++i) {
+            int idx = ord_[i];
+            vals_[i] = vals_[idx];
+            ids_[i]  = ids_[idx];
         }
 
-        return topk_distances;
+        // 5) clamp head_ and return the k-th value (or extreme if too few)
+        head_ = m;
+        if (head_ == 0) {
+            return is_desc_
+                   ? -std::numeric_limits<T>::infinity()
+                   :  std::numeric_limits<T>::infinity();
+        }
+        int ret_i = std::min(k_ - 1, head_ - 1);
+        return vals_[ret_i];
     }
 
-    DistanceType get_kth_distance() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        flush(); // Ensure the buffer is properly flushed
 
-        if (curr_offset_ < k_) {
-            return 0.0;
+    std::vector<T> get_topk() {
+        flush();
+        int n = head_;
+        std::vector<T> out;
+        out.reserve(n);
+        for (int i = 0; i < n; ++i) {
+            out.push_back(vals_[i]);
         }
-
-        return topk_[std::min(curr_offset_, k_ - 1)].first;
+        return out;
     }
 
-// Get the current top-k indices (after final flush)
-    std::vector<IdType> get_topk_indices() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        flush(); // Ensure the buffer is properly flushed
-
-        std::vector<IdType> topk_indices(std::min(curr_offset_, k_));
-        for (int i = 0; i < std::min(curr_offset_, k_); i++) {
-            topk_indices[i] = topk_[i].second;
+    T get_kth_distance() {
+        flush();
+        if (head_ < k_) {
+            // not enough elements: return the sentinel extreme
+            return is_desc_
+                   ? -std::numeric_limits<T>::infinity()
+                   : std::numeric_limits<T>::infinity();
         }
-        return topk_indices;
+        return vals_[k_ - 1];
+    }
+
+    std::vector<I> get_topk_indices() {
+        flush();
+        int n = head_;
+        std::vector<I> out;
+        out.reserve(n);
+        for (int i = 0; i < n; ++i) {
+            out.push_back(ids_[i]);
+        }
+        return out;
     }
 };
 
 // Type alias for convenience
 using TopkBuffer = TypedTopKBuffer<float, int64_t>;
+
+inline vector<shared_ptr<TopkBuffer>> create_buffers(int batch_size, int k, bool is_desc) {
+    vector<shared_ptr<TopkBuffer>> buffers;
+    for (int i = 0; i < batch_size; i++) {
+        buffers.push_back(make_shared<TopkBuffer>(k, is_desc, k*100, 0));
+    }
+    return buffers;
+}
+
+//vector<shared_ptr<TopkBuffer>> local_buffers = create_buffers(batch_size, k, (metric_ == faiss::METRIC_INNER_PRODUCT));
 
 inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer>> buffers) {
     int n = buffers.size();
@@ -261,14 +282,6 @@ inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer
     }
 
     return std::make_tuple(topk_indices, topk_distances);
-}
-
-inline vector<shared_ptr<TopkBuffer>> create_buffers(int n, int k, bool is_descending) {
-    vector<shared_ptr<TopkBuffer>> buffers(n);
-    for (int i = 0; i < n; i++) {
-        buffers[i] = make_shared<TopkBuffer>(k, is_descending, 10 * k);
-    }
-    return buffers;
 }
 
 inline void scan_list_no_ids_inner_product(const float *query_vec,

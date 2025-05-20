@@ -19,7 +19,7 @@ static float measure_actual_latency(const ListScanLatencyEstimator& estimator,
   torch::Tensor ids = torch::randperm(n);
   torch::Tensor query = torch::rand({estimator.d_});
 
-  auto topk_buffer = make_shared<TopkBuffer>(k, false);
+  auto topk_buffer = make_shared<TopkBuffer>(k, false, k * 100, 0);
 
   const float* query_ptr = query.data_ptr<float>();
   const float* vectors_ptr = vectors.data_ptr<float>();

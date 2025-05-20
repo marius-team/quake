@@ -13,7 +13,7 @@ class TypedTopKBufferTest : public ::testing::Test {
 protected:
     // Helper function to create a TopkBuffer
     std::shared_ptr<TopkBuffer> create_buffer(int k, bool is_descending) {
-        return std::make_shared<TypedTopKBuffer<float, int64_t>>(k, is_descending);
+        return std::make_shared<TypedTopKBuffer<float, int64_t>>(k, is_descending, k* 100, 0);
     }
 };
 
