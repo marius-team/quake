@@ -79,7 +79,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     while (!stop_workers_) {
         int64_t jid = 0;
         if (!res.job_queue.try_dequeue(jid)) {
-            std::this_thread::sleep_for(std::chrono::microseconds(5));
+            std::this_thread::sleep_for(std::chrono::microseconds(20));
             continue;
         }
 
@@ -236,7 +236,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     static constexpr int64_t MAX_SUBBATCH = 128;
 
     // 1) Prepare per-thread buffers *once* up to MAX_SUBBATCH
-    size_t cap = std::max(100 * K, 10000);
+    size_t cap = std::min(100 * K, 10000);
     int64_t queries_req = std::min(Q, MAX_SUBBATCH);
 
 
