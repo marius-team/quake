@@ -625,6 +625,8 @@ void PartitionManager::distribute_partitions(int num_workers, bool use_numa) {
     for (int i = 0; i < partition_ids.size(0); i++) {
         set_partition_core_id(partition_ids_accessor[i], partition_ids_accessor[i] % num_workers, use_numa);
     }
+
+    std::cout << "[PartitionManager] distribute_partitions: Distributed partitions to cores." << std::endl;
 }
 
 void PartitionManager::set_partition_core_id(int64_t partition_id, int core_id, bool use_numa) {
