@@ -78,6 +78,10 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             continue;
         }
 
+        if (jid == -1) {
+            break;
+        }
+
         process_scan_job(job_buffer_[jid], res);
         i++;
     }
