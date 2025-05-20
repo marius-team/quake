@@ -645,6 +645,8 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
 
     partition_manager_->distribute_partitions(num_cores, use_numa);
 
+    std::cout << "[QueryCoordinator::initialize_workers] Partition manager distributed partitions." << std::endl;
+
     core_resources_.resize(num_cores);
     worker_threads_.resize(num_cores);
     stop_workers_.store(false);
@@ -655,6 +657,7 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
         allocate_core_resources(i, 1, 10, partition_manager_->d());
         worker_threads_[i] = std::thread(&QueryCoordinator::partition_scan_worker_fn, this, i);
     }
+
     workers_initialized_ = true;
 
     // set main thread on separate thread from workers
