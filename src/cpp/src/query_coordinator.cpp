@@ -78,7 +78,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     set_thread_affinity(core_index);
 
-    while (true) {
+    while (!stop_workers_) {
         int64_t jid = pop_scan_job(res);
         if (jid == -1) break;
         process_scan_job(job_buffer_[jid], res);
