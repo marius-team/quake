@@ -44,12 +44,17 @@ void QueryCoordinator::allocate_core_resources(int core_idx,
     CR.core_id = core_idx;
     CR.topk_buffer_pool.clear();
 
+    // --- ZERO‐INITIALIZE our batched‐query buffers so we never free garbage pointers ---
+    CR.batch_queries   = nullptr;
+    CR.batch_distances = nullptr;
+    CR.batch_ids       = nullptr;
+
     int numa_node = 0;
 #ifdef QUAKE_USE_NUMA
     numa_node = cpu_numa_node(core_idx);
 #endif
 
-    // job queue remains default-constructed
+    // job queue remains default‐constructed
     numa_resources_.resize(get_num_numa_nodes());
     auto& numa_res = numa_resources_[numa_node];
     size_t bytes = size_t(num_queries) * d * sizeof(float);
