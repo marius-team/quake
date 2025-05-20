@@ -623,6 +623,8 @@ void PartitionManager::distribute_partitions(int num_workers, bool use_numa) {
     Tensor partition_ids = get_partition_ids();
     auto partition_ids_accessor = partition_ids.accessor<int64_t, 1>();
     for (int i = 0; i < partition_ids.size(0); i++) {
+        std::cout << "[PartitionManager] distribute_partitions: Partition " << partition_ids_accessor[i]
+                  << " assigned to core " << partition_ids_accessor[i] % num_workers << std::endl;
         set_partition_core_id(partition_ids_accessor[i], partition_ids_accessor[i] % num_workers, use_numa);
     }
 
@@ -631,10 +633,10 @@ void PartitionManager::distribute_partitions(int num_workers, bool use_numa) {
 
 void PartitionManager::set_partition_core_id(int64_t partition_id, int core_id, bool use_numa) {
     partition_store_->partitions_[partition_id]->set_core_id(core_id);
+    int node = numa_node_of_cpu(core_id);
 
     #ifdef QUAKE_USE_NUMA
     if (use_numa) {
-        int node = numa_node_of_cpu(core_id);
         partition_store_->partitions_[partition_id]->set_numa_node(node);
     }
     #endif
