@@ -320,8 +320,6 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     }
 }
 
-// — Main‐thread: worker_scan —
-
 void QueryCoordinator::init_global_buffers(int64_t nQ,
                                            int K,
                                            Tensor &partition_ids,
@@ -606,21 +604,45 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     timing->n_clusters = partition_manager_->nlist();
     timing->search_params = params;
 
+    auto s1 = high_resolution_clock::now();
+
     // 1) init global buffers & jobs_left
     init_global_buffers(nQ, K, partition_ids, params);
+
+    auto s2 = high_resolution_clock::now();
 
     // 2) copy query vec to NUMA buffers
     copy_query_to_numa(x.data_ptr<float>(), nQ, D);
 
+    auto s3 = high_resolution_clock::now();
+
     // 3) enqueue jobs
     enqueue_scan_jobs(x, partition_ids, params);
+
+    auto s4 = high_resolution_clock::now();
 
     // 4) drain results + APS
     drain_and_apply_aps(x, partition_ids, use_aps, params->recall_target,
                         params->aps_flush_period_us, timing);
 
-    // 5) aggregate & return
-    return aggregate_scan_results(nQ, K, timing);
+    auto s5 = high_resolution_clock::now();
+
+    auto res = aggregate_scan_results(nQ, K, timing);
+
+    auto s6 = high_resolution_clock::now();
+
+    res->timing_info->buffer_init_time_ns =
+            duration_cast<nanoseconds>(s2 - s1).count();
+//    res->timing_info->copy_query_time_ns =
+//            duration_cast<nanoseconds>(s3 - s2).count();
+    res->timing_info->job_enqueue_time_ns =
+            duration_cast<nanoseconds>(s4 - s3).count();
+    res->timing_info->job_wait_time_ns =
+            duration_cast<nanoseconds>(s5 - s4).count();
+    res->timing_info->result_aggregate_time_ns =
+            duration_cast<nanoseconds>(s6 - s5).count();
+
+    return res;
 }
 
 // Initialize Worker Threads
