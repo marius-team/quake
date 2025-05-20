@@ -60,14 +60,6 @@ void QueryCoordinator::allocate_core_resources(int core_idx,
     }
 }
 
-int64_t QueryCoordinator::pop_scan_job(CoreResources &res) {
-    int64_t jid;
-    while (!res.job_queue.try_dequeue(jid)) {
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-    }
-    return jid;
-}
-
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     CoreResources &res = core_resources_[core_index];
     int numa_node = 0;
@@ -78,9 +70,15 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     set_thread_affinity(core_index);
 
+    int64_t jid;
     while (!stop_workers_) {
-        int64_t jid = pop_scan_job(res);
+
+        if (!res.job_queue.try_dequeue(jid)) {
+            std::this_thread::sleep_for(std::chrono::microseconds(5));
+            continue;
+        }
         if (jid == -1) break;
+
         process_scan_job(job_buffer_[jid], res);
     }
 }
@@ -154,19 +152,47 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
     auto buf = res.topk_buffer_pool[0];
     res.topk_buffer_pool[0]->reset();
 
-    scan_list(nr.local_query_buffer,
-              (float*)partition_manager_->partition_store_->get_codes(job.partition_id),
-              (int64_t*)partition_manager_->partition_store_->get_ids(job.partition_id),
-              partition_manager_->partition_store_->list_size(job.partition_id),
-              partition_manager_->d(),
-              *buf,
-              metric_);
+    try {
+        // It's good practice to re-fetch or validate partition data here if it could
+        // have changed since process_scan_job's initial checks, especially with maintenance.
+        const float* codes = (float*)partition_manager_->partition_store_->get_codes(job.partition_id);
+        const int64_t* ids = (int64_t*)partition_manager_->partition_store_->get_ids(job.partition_id);
+        int64_t part_size = partition_manager_->partition_store_->list_size(job.partition_id);
+        int D = partition_manager_->d();
 
-    auto tv = buf->get_topk();
-    auto ti = buf->get_topk_indices();
-    result_queue_.enqueue(ResultJob{job.query_id, job.rank,
-                                    std::move(tv),
-                                    std::move(ti)});
+        // Defensive check for partition validity right before scan
+        if (!codes || !ids || part_size <= 0) {
+            std::cerr << "[QueryCoordinator::handle_nonbatched_job] Partition " << job.partition_id
+                      << " invalid or empty before scan for query " << job.query_id
+                      << ". Enqueuing empty result.\n";
+            result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
+            return; // Important to return after enqueueing the placeholder
+        }
+
+        scan_list(nr.local_query_buffer, // Or job.query_vector depending on NUMA strategy
+                  codes,
+                  ids,
+                  part_size,
+                  D,
+                  *buf,
+                  metric_);
+
+        // If scan_list completes, enqueue its results
+        auto tv = buf->get_topk();
+        auto ti = buf->get_topk_indices();
+        result_queue_.enqueue(ResultJob{job.query_id, job.rank, std::move(tv), std::move(ti)});
+
+    } catch (const std::exception& e) {
+        std::cerr << "[QueryCoordinator::handle_nonbatched_job] Exception during scan for partition "
+                  << job.partition_id << ", query " << job.query_id << ": " << e.what()
+                  << ". Enqueuing empty result.\n";
+        result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}}); // Enqueue empty result on error
+    } catch (...) {
+        std::cerr << "[QueryCoordinator::handle_nonbatched_job] Unknown exception during scan for partition "
+                  << job.partition_id << ", query " << job.query_id
+                  << ". Enqueuing empty result.\n";
+        result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}}); // Enqueue empty result on error
+    }
 }
 
 void QueryCoordinator::handle_batched_job(const ScanJob &job,
@@ -223,36 +249,77 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         }
     }
 
-    // gather queries
-    for (int64_t i = 0; i < job.num_queries; ++i) {
-        std::memcpy(res.batch_queries + i * partition_manager_->d(),
-                    job.query_vector + job.query_ids->at(i) * partition_manager_->d(),
-                    partition_manager_->d() * sizeof(float));
+    bool scan_successful = false;
+    try {
+        const float* codes = (float*)partition_manager_->partition_store_->get_codes(job.partition_id);
+        const int64_t* ids = (int64_t*)partition_manager_->partition_store_->get_ids(job.partition_id);
+        int64_t part_size = partition_manager_->partition_store_->list_size(job.partition_id);
+        int D = partition_manager_->d();
+
+        if (!codes || !ids || part_size <= 0) {
+            std::cerr << "[QueryCoordinator::handle_batched_job] Partition " << job.partition_id
+                      << " invalid or empty before batched scan. Enqueuing empty results for batch.\n";
+            // Let success remain false, loop below will send empty results
+            throw std::runtime_error("Batched scan pre-check failed for partition data");
+        }
+
+        // Gather queries into res.batch_queries (as in your original code)
+        for (int64_t i = 0; i < job.num_queries; ++i) {
+            std::memcpy(res.batch_queries + i * D,
+                        job.query_vector + job.query_ids->at(i) * D,
+                        D * sizeof(float));
+        }
+
+        batched_scan_list(res.batch_queries,
+                          codes,
+                          ids,
+                          job.num_queries,
+                          part_size,
+                          D,
+                          res.topk_buffer_pool, // Vector of TopkBuffer shared_ptrs
+                          metric_,
+                          res.batch_distances,  // Scratch space for distances
+                          res.batch_ids);       // Scratch space for IDs
+        scan_successful = true;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[QueryCoordinator::handle_batched_job] Exception during batched scan for partition "
+                  << job.partition_id << ": " << e.what()
+                  << ". Will enqueue empty results for affected queries.\n";
+        // scan_successful remains false
+    } catch (...) {
+        std::cerr << "[QueryCoordinator::handle_batched_job] Unknown exception during batched scan for partition "
+                  << job.partition_id
+                  << ". Will enqueue empty results for affected queries.\n";
+        // scan_successful remains false
     }
 
-    batched_scan_list(res.batch_queries,
-                      (float*)partition_manager_->partition_store_->get_codes(job.partition_id),
-                      (int64_t*)partition_manager_->partition_store_->get_ids(job.partition_id),
-                      job.num_queries,
-                      partition_manager_->partition_store_->list_size(job.partition_id),
-                      partition_manager_->d(),
-                      res.topk_buffer_pool,
-                      metric_,
-                      res.batch_distances,
-                      res.batch_ids);
-
-    vector<ResultJob> results(job.num_queries);
+    // Enqueue results (actual or empty) for every query in this batch job
+    std::vector<ResultJob> results_batch;
+    results_batch.reserve(job.num_queries);
     for (int64_t i = 0; i < job.num_queries; ++i) {
-        int g = job.query_ids->at(i);
-        auto tv = res.topk_buffer_pool[i]->get_topk();
-        auto ti = res.topk_buffer_pool[i]->get_topk_indices();
-        results[i] = ResultJob{g,
-                               job.ranks->at(i),
-                               std::move(tv),
-                               std::move(ti)};
+        int global_query_id = job.query_ids->at(i);
+        int rank_for_this_query = job.ranks->at(i); // Rank of this partition scan for this specific query
+
+        if (scan_successful) {
+            // Ensure buffer pool access is safe if it could have been resized or is smaller than expected
+            if (i < res.topk_buffer_pool.size() && res.topk_buffer_pool[i]) {
+                auto tv = res.topk_buffer_pool[i]->get_topk();
+                auto ti = res.topk_buffer_pool[i]->get_topk_indices();
+                results_batch.emplace_back(ResultJob{global_query_id, rank_for_this_query, std::move(tv), std::move(ti)});
+            } else {
+                std::cerr << "[QueryCoordinator::handle_batched_job] Error accessing TopK buffer for successful scan, query "
+                          << global_query_id << ", buffer index " << i << ". Sending empty result.\n";
+                results_batch.emplace_back(ResultJob{global_query_id, rank_for_this_query, {}, {}});
+            }
+        } else {
+            // Scan failed, enqueue an empty result for this query's part of the batch
+            results_batch.emplace_back(ResultJob{global_query_id, rank_for_this_query, {}, {}});
+        }
     }
-    result_queue_.enqueue_bulk(results.begin(),
-                               job.num_queries);
+    if (!results_batch.empty()) {
+        result_queue_.enqueue_bulk(std::make_move_iterator(results_batch.begin()), results_batch.size());
+    }
 }
 
 // — Main‐thread: worker_scan —
@@ -307,8 +374,6 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
     float *xptr = x.data_ptr<float>();
 
     auto partition_ids_acc = partition_ids.accessor<int64_t,2>();
-
-    std::cout << "[QueryCoordinator::enqueue_scan_jobs] Enqueueing scan jobs...\n";
 
     // flatten jobs
     next_job_id_ = 0;
@@ -582,6 +647,7 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
         worker_threads_[i] = std::thread(&QueryCoordinator::partition_scan_worker_fn, this, i);
     }
     workers_initialized_ = true;
+    stop_workers_.store(false);
 
     // set main thread on separate thread from workers
     int num_cores_on_machine = std::thread::hardware_concurrency();

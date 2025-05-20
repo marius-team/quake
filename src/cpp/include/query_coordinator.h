@@ -92,7 +92,7 @@ public:
     bool debug_ = false;                               ///< Debug mode flag.
 
     std::vector<ScanJob> job_buffer_;
-    int   next_job_id_{0};
+    int   next_job_id_ = 0; ///< ID for the next job to be processed.
     vector<vector<std::atomic<bool>>> job_flags_; ///< Flags to track job completion
     std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.
     std::atomic<int64_t> job_process_time_ns = 0; ///< Time spent processing jobs.
