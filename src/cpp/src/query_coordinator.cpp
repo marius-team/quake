@@ -295,22 +295,37 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         }
 
         // Gather queries into res.batch_queries (as in your original code)
-        for (int64_t i = 0; i < job.num_queries; ++i) {
-            std::memcpy(res.batch_queries + i * D,
-                        job.query_vector + job.query_ids->at(i) * D,
-                        D * sizeof(float));
+
+        if (job.scan_all) {
+            batched_scan_list(nr.local_query_buffer,
+                              codes,
+                              ids,
+                              job.num_queries,
+                              part_size,
+                              D,
+                              res.topk_buffer_pool, // Vector of TopkBuffer shared_ptrs
+                              metric_,
+                              res.batch_distances,  // Scratch space for distances
+                              res.batch_ids);       // Scratch space for IDs
+        } else {
+            for (int64_t i = 0; i < job.num_queries; ++i) {
+                std::memcpy(res.batch_queries + i * D,
+                            nr.local_query_buffer + job.query_ids->at(i) * D,
+                            D * sizeof(float));
+            }
+
+            batched_scan_list(res.batch_queries,
+                              codes,
+                              ids,
+                              job.num_queries,
+                              part_size,
+                              D,
+                              res.topk_buffer_pool, // Vector of TopkBuffer shared_ptrs
+                              metric_,
+                              res.batch_distances,  // Scratch space for distances
+                              res.batch_ids);       // Scratch space for IDs
         }
 
-        batched_scan_list(res.batch_queries,
-                          codes,
-                          ids,
-                          job.num_queries,
-                          part_size,
-                          D,
-                          res.topk_buffer_pool, // Vector of TopkBuffer shared_ptrs
-                          metric_,
-                          res.batch_distances,  // Scratch space for distances
-                          res.batch_ids);       // Scratch space for IDs
         scan_successful = true;
 
     } catch (const std::exception& e) {
@@ -453,7 +468,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job.k = params->k;
                 job.query_vector = x.data_ptr<float>();
                 job.num_queries = x.size(0);
-                job.query_ids = all_query_ids_ptr;
+                job.scan_all = true;
                 job.ranks = make_shared<vector<int>>(x.size(0), i);
                 int core_id = partition_manager_->get_partition_core_id(pids_acc[i]);
                 if (core_id < 0) {

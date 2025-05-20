@@ -32,6 +32,7 @@ struct ScanJob {
 
     std::shared_ptr<vector<int>> query_ids;    ///< Global query IDs; used in batched mode.
     std::shared_ptr<vector<int>> ranks;     ///< Rank of the partition for each query
+    bool scan_all = false;
 };
 
 /**
