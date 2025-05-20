@@ -207,55 +207,69 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
 void QueryCoordinator::handle_batched_job(const ScanJob &job,
                                           CoreResources &res,
                                           NUMAResources &nr) {
-    // ensure buffers
-    if (res.topk_buffer_pool.size() < (size_t)job.num_queries) {
-        res.topk_buffer_pool.resize(job.num_queries);
-        for (int64_t i = 0; i < job.num_queries; ++i) {
+    // Number of queries in this batch, top-k, vector dimension, and NUMA node
+    int64_t Q    = job.num_queries;
+    int     K    = job.k;
+    int     D    = partition_manager_->d();
+    int     node = cpu_numa_node(res.core_id);
+
+    // Ensure we have exactly Q TopK buffers, each with capacity = max(100*K, 10000)
+    size_t cap = std::max(100 * K, 10000);
+    if (res.topk_buffer_pool.size() < (size_t)Q) {
+        res.topk_buffer_pool.resize(Q);
+        for (int64_t i = 0; i < Q; ++i) {
             res.topk_buffer_pool[i] = std::make_shared<TopkBuffer>(
-                    job.k,
+                    K,
                     metric_ == faiss::METRIC_INNER_PRODUCT,
-                    /*cap=*/std::max(100 * job.k, 10000),
-                    /*node=*/cpu_numa_node(res.core_id)
+                    /*cap=*/cap,
+                    /*node=*/node
             );
         }
-
-        // realloc batch query buffer
-        if (res.batch_queries != nullptr) {
-            quake_free(res.batch_queries,
-                       size_t(job.num_queries) * partition_manager_->d() * sizeof(float));
-        }
-        res.batch_queries = static_cast<float*>(quake_alloc(
-                size_t(job.num_queries) * partition_manager_->d() * sizeof(float),
-                cpu_numa_node(res.core_id)));
-
-        // realloc batch distances and ids
-        if (res.batch_distances != nullptr) {
-            quake_free(res.batch_distances,
-                       size_t(job.num_queries) * job.k * sizeof(float));
-        }
-        if (res.batch_ids != nullptr) {
-            quake_free(res.batch_ids,
-                       size_t(job.num_queries) * job.k * sizeof(int64_t));
-        }
-        res.batch_distances = static_cast<float*>(quake_alloc(
-                size_t(job.num_queries) * job.k * sizeof(float),
-                cpu_numa_node(res.core_id)));
-        res.batch_ids = static_cast<int64_t*>(quake_alloc(
-                size_t(job.num_queries) * job.k * sizeof(int64_t),
-                cpu_numa_node(res.core_id)));
     } else {
-        for (int64_t i = 0; i < job.num_queries; ++i) {
-            res.topk_buffer_pool[i]->set_k(job.k);
-            res.topk_buffer_pool[i]->reset();
+        for (int64_t i = 0; i < Q; ++i) {
+            auto &buf = res.topk_buffer_pool[i];
+            buf->set_k(K);
+            buf->reset();
         }
+    }
 
-        // set batch distances and ids to max/min and -1
-        for (int64_t i = 0; i < job.num_queries * job.k; ++i) {
-            res.batch_distances[i] = metric_ == faiss::METRIC_INNER_PRODUCT ?
-                                     -std::numeric_limits<float>::infinity() :
-                                     std::numeric_limits<float>::infinity();
-            res.batch_ids[i] = -1;
+    // Allocate or grow the per-batch query buffer (size Q × D floats)
+    size_t need_q = size_t(Q) * D;
+    if (res.batch_q_capacity < need_q) {
+        if (res.batch_queries) {
+            quake_free(res.batch_queries,
+                       res.batch_q_capacity * sizeof(float));
         }
+        res.batch_queries   = static_cast<float*>(quake_alloc(
+                need_q * sizeof(float), node));
+        res.batch_q_capacity = need_q;
+    }
+
+    // Allocate or grow the per-batch result buffers (size Q × K entries)
+    size_t need_r = size_t(Q) * size_t(K);
+    if (res.batch_res_capacity < need_r) {
+        if (res.batch_distances) {
+            quake_free(res.batch_distances,
+                       res.batch_res_capacity * sizeof(float));
+        }
+        if (res.batch_ids) {
+            quake_free(res.batch_ids,
+                       res.batch_res_capacity * sizeof(int64_t));
+        }
+        res.batch_distances   = static_cast<float*>(
+                quake_alloc(need_r * sizeof(float), node));
+        res.batch_ids         = static_cast<int64_t*>(
+                quake_alloc(need_r * sizeof(int64_t), node));
+        res.batch_res_capacity = need_r;
+    }
+
+    // Initialize the result buffers to infinity (or –infinity) and –1
+    float dist_init = (metric_ == faiss::METRIC_INNER_PRODUCT)
+                      ? -std::numeric_limits<float>::infinity()
+                      :  std::numeric_limits<float>::infinity();
+    for (size_t idx = 0; idx < need_r; ++idx) {
+        res.batch_distances[idx] = dist_init;
+        res.batch_ids      [idx] = -1;
     }
 
     bool scan_successful = false;
