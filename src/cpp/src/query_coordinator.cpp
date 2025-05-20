@@ -215,156 +215,123 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
 void QueryCoordinator::handle_batched_job(const ScanJob &job,
                                           CoreResources &res,
                                           NUMAResources &nr) {
-    // Number of queries in this batch, top-k, vector dimension, and NUMA node
+    // Total queries in this batch, Top-K, vector dim, and NUMA node
     int64_t Q    = job.num_queries;
     int     K    = job.k;
     int     D    = partition_manager_->d();
     int     node = cpu_numa_node(res.core_id);
 
-    // Ensure we have exactly Q TopK buffers, each with capacity = max(100*K, 10000)
-    size_t cap = std::max(100 * K, 10000);
-    if (res.topk_buffer_pool.size() < (size_t)Q) {
-        res.topk_buffer_pool.resize(Q);
-        for (int64_t i = 0; i < Q; ++i) {
-            res.topk_buffer_pool[i] = std::make_shared<TopkBuffer>(
-                    K,
-                    metric_ == faiss::METRIC_INNER_PRODUCT,
-                    /*cap=*/cap,
-                    /*node=*/node
-            );
+    // Retrieve partition data once
+    const float   *codes     = (float*)partition_manager_->partition_store_->get_codes(job.partition_id);
+    const int64_t *ids       = (int64_t*)partition_manager_->partition_store_->get_ids(job.partition_id);
+    int64_t        part_size = partition_manager_->partition_store_->list_size(job.partition_id);
+    if (!codes || !ids || part_size <= 0) {
+        // Empty or invalid partition: enqueue empty results
+        for (int64_t q : *job.query_ids) {
+            result_queue_.enqueue(ResultJob{(int)q, 0, {}, {}});
         }
-    } else {
-        for (int64_t i = 0; i < Q; ++i) {
+        return;
+    }
+
+    // Maximum sub-batch size to bound memory
+    static constexpr int64_t MAX_SUBBATCH = 128;
+
+    // Process queries in chunks of at most MAX_SUBBATCH
+    for (int64_t offset = 0; offset < Q; offset += MAX_SUBBATCH) {
+        int64_t chunk = std::min(Q - offset, MAX_SUBBATCH);
+
+        // 1) Prepare TopK buffers for this sub-batch
+        size_t cap = std::max(100 * K, 10000);
+        if (res.topk_buffer_pool.size() < (size_t)chunk) {
+            // grow pool to at least 'chunk'
+            size_t old = res.topk_buffer_pool.size();
+            res.topk_buffer_pool.resize(chunk);
+            for (size_t i = old; i < (size_t)chunk; ++i) {
+                res.topk_buffer_pool[i] = std::make_shared<TopkBuffer>(
+                        K,
+                        metric_ == faiss::METRIC_INNER_PRODUCT,
+                        /*cap=*/cap,
+                        /*node=*/node
+                );
+            }
+        }
+        // reset first 'chunk' buffers
+        for (int64_t i = 0; i < chunk; ++i) {
             auto &buf = res.topk_buffer_pool[i];
             buf->set_k(K);
             buf->reset();
         }
-    }
 
-    // Allocate or grow the per-batch query buffer (size Q × D floats)
-    size_t need_q = size_t(Q) * D;
-    if (res.batch_q_capacity < need_q) {
-        if (res.batch_queries) {
-            quake_free(res.batch_queries,
-                       res.batch_q_capacity * sizeof(float));
-        }
-        res.batch_queries   = static_cast<float*>(quake_alloc(
-                need_q * sizeof(float), node));
-        res.batch_q_capacity = need_q;
-    }
-
-    // Allocate or grow the per-batch result buffers (size Q × K entries)
-    size_t need_r = size_t(Q) * size_t(K);
-    if (res.batch_res_capacity < need_r) {
-        if (res.batch_distances) {
-            quake_free(res.batch_distances,
-                       res.batch_res_capacity * sizeof(float));
-        }
-        if (res.batch_ids) {
-            quake_free(res.batch_ids,
-                       res.batch_res_capacity * sizeof(int64_t));
-        }
-        res.batch_distances   = static_cast<float*>(
-                quake_alloc(need_r * sizeof(float), node));
-        res.batch_ids         = static_cast<int64_t*>(
-                quake_alloc(need_r * sizeof(int64_t), node));
-        res.batch_res_capacity = need_r;
-    }
-
-    // Initialize the result buffers to infinity (or –infinity) and –1
-    float dist_init = (metric_ == faiss::METRIC_INNER_PRODUCT)
-                      ? -std::numeric_limits<float>::infinity()
-                      :  std::numeric_limits<float>::infinity();
-    for (size_t idx = 0; idx < need_r; ++idx) {
-        res.batch_distances[idx] = dist_init;
-        res.batch_ids      [idx] = -1;
-    }
-
-    bool scan_successful = false;
-    try {
-        const float* codes = (float*)partition_manager_->partition_store_->get_codes(job.partition_id);
-        const int64_t* ids = (int64_t*)partition_manager_->partition_store_->get_ids(job.partition_id);
-        int64_t part_size = partition_manager_->partition_store_->list_size(job.partition_id);
-        int D = partition_manager_->d();
-
-        if (!codes || !ids || part_size <= 0) {
-            std::cerr << "[QueryCoordinator::handle_batched_job] Partition " << job.partition_id
-                      << " invalid or empty before batched scan. Enqueuing empty results for batch.\n";
-            // Let success remain false, loop below will send empty results
-            throw std::runtime_error("Batched scan pre-check failed for partition data");
+        // 2) Allocate or grow query gather buffer (chunk × D floats)
+        size_t need_q = size_t(chunk) * D;
+        if (res.batch_q_capacity < need_q) {
+            if (res.batch_queries) {
+                quake_free(res.batch_queries,
+                           res.batch_q_capacity * sizeof(float));
+            }
+            res.batch_queries    = static_cast<float*>(
+                    quake_alloc(need_q * sizeof(float), node));
+            res.batch_q_capacity = need_q;
         }
 
-        // Gather queries into res.batch_queries (as in your original code)
+        // 3) Allocate or grow result scratch buffers (chunk × K entries)
+        size_t need_r = size_t(chunk) * size_t(K);
+        if (res.batch_res_capacity < need_r) {
+            if (res.batch_distances) {
+                quake_free(res.batch_distances,
+                           res.batch_res_capacity * sizeof(float));
+            }
+            if (res.batch_ids) {
+                quake_free(res.batch_ids,
+                           res.batch_res_capacity * sizeof(int64_t));
+            }
+            res.batch_distances    = static_cast<float*>(
+                    quake_alloc(need_r * sizeof(float), node));
+            res.batch_ids          = static_cast<int64_t*>(
+                    quake_alloc(need_r * sizeof(int64_t), node));
+            res.batch_res_capacity = need_r;
+        }
 
+        // 4) Initialize result scratch
+        float init_val = (metric_ == faiss::METRIC_INNER_PRODUCT)
+                         ? -std::numeric_limits<float>::infinity()
+                         :  std::numeric_limits<float>::infinity();
+        for (size_t i = 0; i < need_r; ++i) {
+            res.batch_distances[i] = init_val;
+            res.batch_ids      [i] = -1;
+        }
+
+        // 5) Gather this sub-batch of query vectors
         if (job.scan_all) {
-            batched_scan_list(nr.local_query_buffer,
-                              codes,
-                              ids,
-                              job.num_queries,
-                              part_size,
-                              D,
-                              res.topk_buffer_pool, // Vector of TopkBuffer shared_ptrs
-                              metric_,
-                              res.batch_distances,  // Scratch space for distances
-                              res.batch_ids);       // Scratch space for IDs
+            // use pre-copied NUMA buffer
         } else {
-            for (int64_t i = 0; i < job.num_queries; ++i) {
-                std::memcpy(res.batch_queries + i * D,
-                            nr.local_query_buffer + job.query_ids->at(i) * D,
-                            D * sizeof(float));
+            for (int64_t i = 0; i < chunk; ++i) {
+                int qid = (*job.query_ids)[offset + i];
+                float *dst = res.batch_queries + size_t(i) * D;
+                const float *src = nr.local_query_buffer + size_t(qid) * D;
+                std::memcpy(dst, src, D * sizeof(float));
             }
-
-            batched_scan_list(res.batch_queries,
-                              codes,
-                              ids,
-                              job.num_queries,
-                              part_size,
-                              D,
-                              res.topk_buffer_pool, // Vector of TopkBuffer shared_ptrs
-                              metric_,
-                              res.batch_distances,  // Scratch space for distances
-                              res.batch_ids);       // Scratch space for IDs
         }
 
-        scan_successful = true;
+        // 6) Perform the batched scan for this sub-batch
+        batched_scan_list(
+                job.scan_all ? nr.local_query_buffer : res.batch_queries,
+                codes, ids,
+                chunk, part_size, D,
+                res.topk_buffer_pool,
+                metric_,
+                res.batch_distances,
+                res.batch_ids
+        );
 
-    } catch (const std::exception& e) {
-        std::cerr << "[QueryCoordinator::handle_batched_job] Exception during batched scan for partition "
-                  << job.partition_id << ": " << e.what()
-                  << ". Will enqueue empty results for affected queries.\n";
-        // scan_successful remains false
-    } catch (...) {
-        std::cerr << "[QueryCoordinator::handle_batched_job] Unknown exception during batched scan for partition "
-                  << job.partition_id
-                  << ". Will enqueue empty results for affected queries.\n";
-        // scan_successful remains false
-    }
-
-    // Enqueue results (actual or empty) for every query in this batch job
-    std::vector<ResultJob> results_batch;
-    results_batch.reserve(job.num_queries);
-    for (int64_t i = 0; i < job.num_queries; ++i) {
-        int global_query_id = job.query_ids->at(i);
-        int rank_for_this_query = job.ranks->at(i); // Rank of this partition scan for this specific query
-
-        if (scan_successful) {
-            // Ensure buffer pool access is safe if it could have been resized or is smaller than expected
-            if (i < res.topk_buffer_pool.size() && res.topk_buffer_pool[i]) {
-                auto tv = res.topk_buffer_pool[i]->get_topk();
-                auto ti = res.topk_buffer_pool[i]->get_topk_indices();
-                results_batch.emplace_back(ResultJob{global_query_id, rank_for_this_query, std::move(tv), std::move(ti)});
-            } else {
-                std::cerr << "[QueryCoordinator::handle_batched_job] Error accessing TopK buffer for successful scan, query "
-                          << global_query_id << ", buffer index " << i << ". Sending empty result.\n";
-                results_batch.emplace_back(ResultJob{global_query_id, rank_for_this_query, {}, {}});
-            }
-        } else {
-            // Scan failed, enqueue an empty result for this query's part of the batch
-            results_batch.emplace_back(ResultJob{global_query_id, rank_for_this_query, {}, {}});
+        // 7) Enqueue each result immediately
+        for (int64_t i = 0; i < chunk; ++i) {
+            int global_q = (*job.query_ids)[offset + i];
+            int rank_q   = (*job.ranks)    [offset + i];
+            auto tv = res.topk_buffer_pool[i]->get_topk();
+            auto ti = res.topk_buffer_pool[i]->get_topk_indices();
+            result_queue_.enqueue(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
         }
-    }
-    if (!results_batch.empty()) {
-        result_queue_.enqueue_bulk(std::make_move_iterator(results_batch.begin()), results_batch.size());
     }
 }
 
