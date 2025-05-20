@@ -77,7 +77,8 @@ namespace faiss {
     const uint8_t *DynamicInvertedLists::get_codes(size_t list_no) const {
         auto it = partitions_.find(list_no);
         if (it == partitions_.end()) {
-            throw std::runtime_error("List does not exist in get_codes");
+            string err_message = "List " + std::to_string(list_no) + " does not exist in get_codes";
+            throw std::runtime_error(err_message);
         }
         return it->second->codes_;
     }
@@ -85,7 +86,8 @@ namespace faiss {
     const idx_t *DynamicInvertedLists::get_ids(size_t list_no) const {
         auto it = partitions_.find(list_no);
         if (it == partitions_.end()) {
-            throw std::runtime_error("List does not exist in get_ids");
+            string err_message = "List " + std::to_string(list_no) + " does not exist in get_ids";
+            throw std::runtime_error(err_message);
         }
         return it->second->ids_;
     }
@@ -100,8 +102,10 @@ namespace faiss {
 
     void DynamicInvertedLists::remove_entry(size_t list_no, idx_t id) {
         auto it = partitions_.find(list_no);
-        if (it == partitions_.end())
-            throw std::runtime_error("List does not exist in remove_entry");
+        if (it == partitions_.end()) {
+            string err_message = "List " + std::to_string(list_no) + " does not exist in remove_entry";
+            throw std::runtime_error(err_message);
+        }
 
         auto& part = it->second;
         if (part->num_vectors_ == 0) return;
@@ -121,7 +125,8 @@ namespace faiss {
     void DynamicInvertedLists::remove_entries_from_partition(size_t list_no, vector<idx_t> vectors_to_remove) {
         auto it = partitions_.find(list_no);
         if (it == partitions_.end()) {
-            throw std::runtime_error("List does not exist in remove_entries_from_partition");
+            string err_message = "List " + std::to_string(list_no) + " does not exist in remove_entries_from_partition";
+            throw std::runtime_error(err_message);
         }
         shared_ptr<IndexPartition> part = it->second;
 
@@ -180,8 +185,10 @@ namespace faiss {
         if (n_entry == 0) return 0;
 
         auto it = partitions_.find(list_no);
-        if (it == partitions_.end())
-            throw std::runtime_error("List does not exist in add_entries");
+        if (it == partitions_.end()) {
+            string err_message = "List " + std::to_string(list_no) + " does not exist in add_entries";
+            throw std::runtime_error(err_message);
+        }
 
         auto& part = it->second;
         if (part->code_size_ != static_cast<int64_t>(code_size))
@@ -204,7 +211,8 @@ namespace faiss {
         const uint8_t *codes) {
         auto it = partitions_.find(list_no);
         if (it == partitions_.end()) {
-            throw std::runtime_error("List does not exist in update_entries");
+            string err_message = "List " + std::to_string(list_no) + " does not exist in update_entries";
+            throw std::runtime_error(err_message);
         }
         shared_ptr<IndexPartition> part = it->second;
 
@@ -291,7 +299,8 @@ void DynamicInvertedLists::batch_update_entries(
 
     void DynamicInvertedLists::add_list(size_t list_no) {
         if (partitions_.find(list_no) != partitions_.end()) {
-            throw std::runtime_error("List already exists in add_list");
+            string err_message = "List " + std::to_string(list_no) + " already exists in add_list";
+            throw std::runtime_error(err_message);
         }
         shared_ptr<IndexPartition> ip = std::make_shared<IndexPartition>();
         ip->set_code_size((int64_t) code_size);
