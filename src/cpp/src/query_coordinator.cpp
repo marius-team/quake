@@ -95,6 +95,9 @@ void QueryCoordinator::process_scan_job(ScanJob job,
 #endif
     NUMAResources &nr = numa_resources_[numa_node];
 
+    // print out job details for debugging purposes
+    std::cout << "Core: " << res.core_id << " Processing partition_id=" << job.partition_id << '\n';
+
     // fetch codes & ids
     const float   *codes = (float*)partition_manager_->partition_store_->get_codes(job.partition_id);
     const int64_t *ids   = (int64_t*)partition_manager_->partition_store_->get_ids(job.partition_id);
