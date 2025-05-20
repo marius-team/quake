@@ -238,6 +238,7 @@ struct SearchTimingInfo {
 
     // main thread counters for worker scan
     int64_t buffer_init_time_ns; ///< Time spent on initializing buffers in nanoseconds.
+    int64_t copy_query_time_ns;
     int64_t job_enqueue_time_ns; ///< Time spent on creating jobs in nanoseconds.
     int64_t boundary_distance_time_ns; ///< Time spent on computing boundary distances in nanoseconds.
     int64_t aps_time_ns; ///< Time spent on APS in nanoseconds.

@@ -146,11 +146,13 @@ def run_experiment(cfg_path: str, output_dir: str):
 
         # Prepare per-phase accumulators
         child_buf_init_trials = []
+        child_copy_query_trials = []
         child_enqueue_trials  = []
         child_wait_trials     = []
         child_agg_trials      = []
         child_total_trials    = []
         parent_buf_init_trials= []
+        parent_copy_query_trials = []
         parent_enqueue_trials = []
         parent_wait_trials    = []
         parent_agg_trials     = []
@@ -164,6 +166,7 @@ def run_experiment(cfg_path: str, output_dir: str):
 
             # Child (worker_scan) timings
             child_buf_init_trials.append(ti.buffer_init_time_ns / 1e6)
+            child_copy_query_trials.append(ti.copy_query_time_ns / 1e6)
             child_enqueue_trials .append(ti.job_enqueue_time_ns   / 1e6)
             child_wait_trials    .append(ti.job_wait_time_ns      / 1e6)
             child_agg_trials     .append(ti.result_aggregate_time_ns / 1e6)
@@ -173,12 +176,14 @@ def run_experiment(cfg_path: str, output_dir: str):
             pi = getattr(ti, "parent_info", None)
             if pi:
                 parent_buf_init_trials.append(pi.buffer_init_time_ns / 1e6)
+                parent_copy_query_trials.append(pi.copy_query_time_ns / 1e6)
                 parent_enqueue_trials .append(pi.job_enqueue_time_ns   / 1e6)
                 parent_wait_trials    .append(pi.job_wait_time_ns      / 1e6)
                 parent_agg_trials     .append(pi.result_aggregate_time_ns / 1e6)
                 parent_total_trials   .append(pi.total_time_ns         / 1e6)
             else:
                 parent_buf_init_trials.append(0.0)
+                parent_copy_query_trials.append(0.0)
                 parent_enqueue_trials .append(0.0)
                 parent_wait_trials    .append(0.0)
                 parent_agg_trials     .append(0.0)
@@ -206,11 +211,13 @@ def run_experiment(cfg_path: str, output_dir: str):
             "mean_latency_ms":     mean_lat,
             "std_latency_ms":      std_lat,
             "child_buffer_init_ms":float(np.mean(child_buf_init_trials)),
+            "child_copy_query_ms": float(np.mean(child_copy_query_trials)),
             "child_enqueue_ms":    float(np.mean(child_enqueue_trials)),
             "child_wait_ms":       float(np.mean(child_wait_trials)),
             "child_aggregate_ms":  float(np.mean(child_agg_trials)),
             "child_total_ms":      float(np.mean(child_total_trials)),
             "parent_buffer_init_ms":float(np.mean(parent_buf_init_trials)),
+            "parent_copy_query_ms": float(np.mean(parent_copy_query_trials)),
             "parent_enqueue_ms":   float(np.mean(parent_enqueue_trials)),
             "parent_wait_ms":      float(np.mean(parent_wait_trials)),
             "parent_aggregate_ms": float(np.mean(parent_agg_trials)),

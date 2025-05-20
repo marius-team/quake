@@ -670,8 +670,8 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     res->timing_info->buffer_init_time_ns =
             duration_cast<nanoseconds>(s2 - s1).count();
-//    res->timing_info->copy_query_time_ns =
-//            duration_cast<nanoseconds>(s3 - s2).count();
+    res->timing_info->copy_query_time_ns =
+            duration_cast<nanoseconds>(s3 - s2).count();
     res->timing_info->job_enqueue_time_ns =
             duration_cast<nanoseconds>(s4 - s3).count();
     res->timing_info->job_wait_time_ns =

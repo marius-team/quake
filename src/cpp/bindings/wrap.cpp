@@ -324,6 +324,8 @@ PYBIND11_MODULE(_bindings, m) {
              "Total time taken for the search operation in nanoseconds.")
         .def_readwrite("buffer_init_time_ns", &SearchTimingInfo::buffer_init_time_ns,
              "Time spent on initializing buffers in nanoseconds.")
+         .def_readwrite("copy_query_time_ns", &SearchTimingInfo::copy_query_time_ns,
+                "Time spent on copying query vectors to NUMA buffers in nanoseconds.")
         .def_readwrite("job_enqueue_time_ns", &SearchTimingInfo::job_enqueue_time_ns,
              "Time spent on creating jobs in nanoseconds.")
         .def_readwrite("boundary_distance_time_ns", &SearchTimingInfo::boundary_distance_time_ns,
