@@ -302,20 +302,24 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         }
 
         // 5) Gather this sub-batch of query vectors
+        float*  qptr = nullptr;
         if (job.scan_all) {
-            // use pre-copied NUMA buffer
+            // point at the sub-batch slice inside the big NUMA buffer
+            qptr = nr.local_query_buffer + offset * D;
         } else {
+            // copy into our contiguous temp buffer
             for (int64_t i = 0; i < chunk; ++i) {
                 int qid = (*job.query_ids)[offset + i];
-                float *dst = res.batch_queries + size_t(i) * D;
                 const float *src = nr.local_query_buffer + size_t(qid) * D;
+                float       *dst = res.batch_queries    + size_t(i  ) * D;
                 std::memcpy(dst, src, D * sizeof(float));
             }
+            qptr = res.batch_queries;
         }
 
         // 6) Perform the batched scan for this sub-batch
         batched_scan_list(
-                job.scan_all ? nr.local_query_buffer : res.batch_queries,
+                qptr,
                 codes, ids,
                 chunk, part_size, D,
                 res.topk_buffer_pool,
