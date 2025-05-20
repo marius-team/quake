@@ -59,9 +59,9 @@ public:
         moodycamel::ConcurrentQueue<int64_t> job_queue;
 
         // Thread-local buffers for batched queries
-        float *batch_queries; ///< Thread-local buffer used for batched queries.
-        float *batch_distances; ///< Thread-Local buffer for result distances.
-        int64_t *batch_ids; ///< Thread-Local buffer for result IDs.
+        float*       batch_queries    = nullptr;
+        float*       batch_distances  = nullptr;
+        int64_t*     batch_ids        = nullptr;
     };
 
     struct NUMAResources {
