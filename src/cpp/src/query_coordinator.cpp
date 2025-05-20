@@ -436,6 +436,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job.query_vector = x.data_ptr<float>();
                 job.num_queries = x.size(0);
                 job.scan_all = true;
+                job.query_ids = all_query_ids_ptr;
                 job.ranks = make_shared<vector<int>>(x.size(0), i);
                 int core_id = partition_manager_->get_partition_core_id(pids_acc[i]);
                 if (core_id < 0) {
