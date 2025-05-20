@@ -237,7 +237,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
 
     // 1) Prepare per-thread buffers *once* up to MAX_SUBBATCH
     size_t cap = std::max(100 * K, 10000);
-    int64_t queries_req = std::max(Q, MAX_SUBBATCH);
+    int64_t queries_req = std::min(Q, MAX_SUBBATCH);
 
 
     if (res.topk_buffer_pool.size() < (size_t)queries_req) {
@@ -298,6 +298,13 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
             }
             qptr = dst;
         }
+
+        for (int64_t i = 0; i < chunk; i += 4) {
+            __builtin_prefetch(qptr + i * D, /* rw = */ 0, /* locality = */ 3);
+        }
+        // PREFETCH: warm up the partition codes and ids
+        __builtin_prefetch(codes, 0, 3);
+        __builtin_prefetch(ids,  0, 3);
 
         // run the scan on this chunk
         batched_scan_list(
