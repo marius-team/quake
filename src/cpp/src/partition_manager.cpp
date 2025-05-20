@@ -632,8 +632,16 @@ void PartitionManager::distribute_partitions(int num_workers, bool use_numa) {
 }
 
 void PartitionManager::set_partition_core_id(int64_t partition_id, int core_id, bool use_numa) {
+
+    std::cout << "[PartitionManager] set_partition_core_id: Setting core ID for partition " << partition_id
+              << " to core " << core_id << std::endl;
+
     partition_store_->partitions_[partition_id]->set_core_id(core_id);
-    int node = numa_node_of_cpu(core_id);
+
+    std::cout << "[PartitionManager] set_partition_core_id: Partition " << partition_id
+              << " assigned to core " << core_id << std::endl;
+
+    int node = cpu_numa_node(core_id);
 
     std::cout << "[PartitionManager] set_partition_core_id: Partition " << partition_id
               << " assigned to core " << core_id << " on NUMA node " << node << std::endl;

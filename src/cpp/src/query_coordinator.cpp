@@ -46,7 +46,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx,
 
     int numa_node = 0;
 #ifdef QUAKE_USE_NUMA
-    numa_node = numa_node_of_cpu(core_idx);
+    numa_node = cpu_numa_node(core_idx);
 #endif
 
     // job queue remains default-constructed
@@ -64,7 +64,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     CoreResources &res = core_resources_[core_index];
     int numa_node = 0;
 #ifdef QUAKE_USE_NUMA
-    numa_node = numa_node_of_cpu(core_index);
+    numa_node = cpu_numa_node(core_index);
 #endif
     NUMAResources &nr = numa_resources_[numa_node];
 
@@ -94,7 +94,7 @@ void QueryCoordinator::process_scan_job(ScanJob job,
                                         CoreResources &res) {
     int numa_node = 0;
 #ifdef QUAKE_USE_NUMA
-    numa_node = numa_node_of_cpu(res.core_id);
+    numa_node = cpu_numa_node(res.core_id);
 #endif
     NUMAResources &nr = numa_resources_[numa_node];
 
@@ -141,7 +141,7 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
                 job.k,
                 metric_ == faiss::METRIC_INNER_PRODUCT,
                 /*cap=*/100 * job.k,
-                /*node=*/numa_node_of_cpu(res.core_id)
+                /*node=*/cpu_numa_node(res.core_id)
         );
     } else if (res.topk_buffer_pool[0]->k_ != job.k) {
         // check capacity
@@ -150,7 +150,7 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
                     job.k,
                     metric_ == faiss::METRIC_INNER_PRODUCT,
                     /*cap=*/100 * job.k,
-                    /*node=*/numa_node_of_cpu(res.core_id)
+                    /*node=*/cpu_numa_node(res.core_id)
             );
         }
         res.topk_buffer_pool[0]->set_k(job.k);
@@ -213,7 +213,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
                     job.k,
                     metric_ == faiss::METRIC_INNER_PRODUCT,
                     /*cap=*/num_workers_ * job.k,
-                    /*node=*/numa_node_of_cpu(res.core_id)
+                    /*node=*/cpu_numa_node(res.core_id)
             );
         }
 
@@ -224,7 +224,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         }
         res.batch_queries = static_cast<float*>(quake_alloc(
                 size_t(job.num_queries) * partition_manager_->d() * sizeof(float),
-                numa_node_of_cpu(res.core_id)));
+                cpu_numa_node(res.core_id)));
 
         // realloc batch distances and ids
         if (res.batch_distances != nullptr) {
@@ -237,10 +237,10 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         }
         res.batch_distances = static_cast<float*>(quake_alloc(
                 size_t(job.num_queries) * job.k * sizeof(float),
-                numa_node_of_cpu(res.core_id)));
+                cpu_numa_node(res.core_id)));
         res.batch_ids = static_cast<int64_t*>(quake_alloc(
                 size_t(job.num_queries) * job.k * sizeof(int64_t),
-                numa_node_of_cpu(res.core_id)));
+                cpu_numa_node(res.core_id)));
     } else {
         for (int64_t i = 0; i < job.num_queries; ++i) {
             res.topk_buffer_pool[i]->set_k(job.k);

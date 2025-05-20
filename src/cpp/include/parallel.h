@@ -58,7 +58,7 @@ inline bool set_thread_affinity(int core_id) {
     }
   }
 
-    inline int numa_node_of_cpu(int cpu) {
+    inline int cpu_numa_node(int cpu) {
         return numa_node_of_cpu(cpu);
     }
 
@@ -82,7 +82,7 @@ inline void quake_free(void* ptr, size_t /*sz*/) noexcept {
     std::free(ptr);
 }
 
-inline int numa_node_of_cpu(int /*cpu*/) {
+inline int cpu_numa_node(int /*cpu*/) {
     return 0; // Not applicable
 }
 
