@@ -575,6 +575,8 @@ void PartitionManager::delete_partitions(const Tensor &partition_ids, bool reass
 
 
 void PartitionManager::distribute_partitions(int num_workers, bool use_numa) {
+
+    debug_ = true;
     if (debug_) {
         std::cout << "[PartitionManager] distribute_partitions: Attempting to distribute partitions across "
                   << num_workers << " workers." << std::endl;
