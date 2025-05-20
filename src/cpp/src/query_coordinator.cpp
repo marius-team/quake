@@ -102,6 +102,7 @@ void QueryCoordinator::process_scan_job(ScanJob job,
         part_size = partition_manager_->partition_store_->list_size(job.partition_id);
     } catch (...) {
         std::cerr << "[partition_scan_worker_fn] Partition " << job.partition_id << " not found.\n";
+        result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
         return;
     }
 
@@ -306,6 +307,8 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
     float *xptr = x.data_ptr<float>();
 
     auto partition_ids_acc = partition_ids.accessor<int64_t,2>();
+
+    std::cout << "[QueryCoordinator::enqueue_scan_jobs] Enqueueing scan jobs...\n";
 
     // flatten jobs
     next_job_id_ = 0;
