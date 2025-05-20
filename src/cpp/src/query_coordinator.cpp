@@ -70,6 +70,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     set_thread_affinity(core_index);
 
+    int i = 0;
     while (!stop_workers_) {
         int64_t jid = 0;
         if (!res.job_queue.try_dequeue(jid)) {
@@ -78,6 +79,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         }
 
         process_scan_job(job_buffer_[jid], res);
+        i++;
     }
 }
 
@@ -167,7 +169,7 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
             return; // Important to return after enqueueing the placeholder
         }
 
-        scan_list(nr.local_query_buffer, // Or job.query_vector depending on NUMA strategy
+        scan_list(nr.local_query_buffer + (job.query_id * D),
                   codes,
                   ids,
                   part_size,
@@ -333,7 +335,7 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
             global_topk_buffer_pool_[q] = std::make_shared<TopkBuffer>(
                     K,
                     metric_ == faiss::METRIC_INNER_PRODUCT,
-                    /*cap=*/num_workers_ * K * 2,
+                    /*cap=*/num_workers_ * K * 1000,
                     /*node=*/0
             );
         }
@@ -500,10 +502,12 @@ void QueryCoordinator::drain_and_apply_aps(Tensor x,
 
     auto last_flush = high_resolution_clock::now();
 
+    int64_t jobsReceived = 0;
     while (true) {
         // 1) drain all ready results
         ResultJob rj;
         while (result_queue_.try_dequeue(rj)) {
+            ++jobsReceived;
             global_topk_buffer_pool_[rj.query_id]
                     ->batch_add(rj.distances.data(),
                                 rj.indices.data(),
@@ -598,6 +602,8 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     int64_t nQ = x.size(0), D = x.size(1);
     int     K  = params->k;
     bool    use_aps = (params->recall_target>0 && !params->batched_scan && parent_);
+
+    int64_t nJobsExpected = 0;
 
     auto timing = std::make_shared<SearchTimingInfo>();
     timing->n_queries  = nQ;

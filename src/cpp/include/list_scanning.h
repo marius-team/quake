@@ -168,6 +168,8 @@ public:
     }
 
     T flush() {
+
+
         int n = head_;
         int m = std::min(n, k_);
 
@@ -199,10 +201,20 @@ public:
         miniselect::pdqsort_branchless(ord_, ord_ + m, cmpIdx);
 
         // 5) copy the winners back to vals_/ids_ and clamp head_
-        for (int i = m - 1; i >= 0; --i) {
-            int idx = ord_[i];
-            vals_[i] = vals_[idx];
-            ids_[i]  = ids_[idx];
+        std::vector<T> temp_v(m);
+        std::vector<I> temp_i(m);
+
+        for (int i = 0; i < m; ++i) {
+            int original_slot_idx = ord_[i]; // ord_[i] is the original index of the i-th best item
+            // (e.g. ord_[0] is index of best, ord_[1] of 2nd best)
+            temp_v[i] = vals_[original_slot_idx];
+            temp_i[i] = ids_[original_slot_idx];
+        }
+
+        // Now copy from temporary buffers to the main buffers
+        for (int i = 0; i < m; ++i) {
+            vals_[i] = temp_v[i];
+            ids_[i]  = temp_i[i];
         }
 
         // 5) clamp head_ and return the k-th value (or extreme if too few)
