@@ -70,6 +70,9 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     set_thread_affinity(core_index);
 
+    std::cout << "[QueryCoordinator::partition_scan_worker_fn] Worker " << core_index
+              << " started.\n";
+
     while (!stop_workers_) {
 
         int64_t jid = 0;
@@ -77,9 +80,14 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
             std::this_thread::sleep_for(std::chrono::microseconds(5));
             continue;
         }
+        std::cout << "[QueryCoordinator::partition_scan_worker_fn] Worker " << core_index
+                  << " processing job " << jid << "\n";
 
         process_scan_job(job_buffer_[jid], res);
     }
+
+    std::cout << "[QueryCoordinator::partition_scan_worker_fn] Worker " << core_index
+              << " exiting.\n";
 }
 
 void QueryCoordinator::process_scan_job(ScanJob job,
@@ -404,6 +412,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job.rank          = p;
                 job_buffer_.push_back(job);
                 core_resources_[pid % num_workers_].job_queue.enqueue(next_job_id_);
+                std::cout << "[QueryCoordinator::enqueue_scan_jobs] Enqueued job " << next_job_id_ << " for query " << q << ", partition " << pid << "\n";
                 next_job_id_++;
             }
         }
