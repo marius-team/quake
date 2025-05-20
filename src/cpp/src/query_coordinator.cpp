@@ -100,16 +100,24 @@ void QueryCoordinator::process_scan_job(ScanJob job,
 #endif
     NUMAResources &nr = numa_resources_[numa_node];
 
-    // fetch codes & ids
-    const float   *codes = (float*)partition_manager_->partition_store_->get_codes(job.partition_id);
-    const int64_t *ids   = (int64_t*)partition_manager_->partition_store_->get_ids(job.partition_id);
-
-    int64_t part_size = 0;
+    // Attempt to fetch partition data; if the list doesn't exist, catch and enqueue empty results.
+    const float   *codes = nullptr;
+    const int64_t *ids   = nullptr;
+    int64_t part_size    = 0;
     try {
+        codes     = (float *)(partition_manager_->partition_store_->get_codes(job.partition_id));
+        ids       = (int64_t *) partition_manager_->partition_store_->get_ids(job.partition_id);
         part_size = partition_manager_->partition_store_->list_size(job.partition_id);
-    } catch (...) {
-        std::cerr << "[partition_scan_worker_fn] Partition " << job.partition_id << " not found.\n";
-        result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
+    } catch (const std::exception &e) {
+        std::cerr << "[process_scan_job] Partition " << job.partition_id
+                  << " invalid: " << e.what() << ". Returning empty result(s).\n";
+        if (job.is_batched) {
+            for (int64_t q : *job.query_ids) {
+                result_queue_.enqueue(ResultJob{(int)q, 0, {}, {}});
+            }
+        } else {
+            result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
+        }
         return;
     }
 
