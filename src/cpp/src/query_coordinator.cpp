@@ -70,14 +70,13 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
     set_thread_affinity(core_index);
 
-    int64_t jid;
     while (!stop_workers_) {
 
+        int64_t jid = 0;
         if (!res.job_queue.try_dequeue(jid)) {
             std::this_thread::sleep_for(std::chrono::microseconds(5));
             continue;
         }
-        if (jid == -1) break;
 
         process_scan_job(job_buffer_[jid], res);
     }
@@ -382,7 +381,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
     for (int64_t q = 0; q < nQ; ++q) {
         job_flags_[q] = vector<std::atomic<bool>>(partition_ids.size(1));
         for (int p = 0; p < partition_ids.size(1); ++p) {
-            job_flags_[q][p] = false;
+            job_flags_[q][p].store(false);
             if (partition_ids_acc[q][p] < 0) job_flags_[q][p] = true;
         }
     }
@@ -639,6 +638,7 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
 
     core_resources_.resize(num_cores);
     worker_threads_.resize(num_cores);
+    stop_workers_.store(false);
     for (int i = 0; i < num_cores; i++) {
         if (!set_thread_affinity(i)) {
             std::cout << "[QueryCoordinator::initialize_workers] Failed to set thread affinity on core " << i << std::endl;
@@ -647,7 +647,6 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
         worker_threads_[i] = std::thread(&QueryCoordinator::partition_scan_worker_fn, this, i);
     }
     workers_initialized_ = true;
-    stop_workers_.store(false);
 
     // set main thread on separate thread from workers
     int num_cores_on_machine = std::thread::hardware_concurrency();
