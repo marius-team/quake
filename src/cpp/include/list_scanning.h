@@ -199,10 +199,10 @@ public:
         miniselect::pdqsort_branchless(ord_, ord_ + m, cmpIdx);
 
         // 5) copy the winners back to vals_/ids_ and clamp head_
-        for (int i = 0; i < m; ++i) {
+        for (int i = m - 1; i >= 0; --i) {
             int idx = ord_[i];
             vals_[i] = vals_[idx];
-            ids_ [i] = ids_ [idx];
+            ids_[i]  = ids_[idx];
         }
 
         // 5) clamp head_ and return the k-th value (or extreme if too few)

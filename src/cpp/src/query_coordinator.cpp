@@ -332,9 +332,9 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job.k             = params->k;
                 job.query_vector  = qptr;
                 job.rank          = p;
-                size_t jid = next_job_id_++;
                 job_buffer_.push_back(job);
-                core_resources_[pid % num_workers_].job_queue.enqueue((int64_t)jid);
+                core_resources_[pid % num_workers_].job_queue.enqueue(next_job_id_);
+                next_job_id_++;
             }
         }
     } else {
@@ -359,9 +359,9 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
-                size_t jid = next_job_id_++;
-                job_buffer_[jid] = job;
-                core_resources_[core_id].job_queue.enqueue(jid);
+                job_buffer_[next_job_id_] = job;
+                core_resources_[core_id].job_queue.enqueue(next_job_id_);
+                next_job_id_++;
             }
 
         } else {
@@ -398,9 +398,9 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 if (core_id < 0) {
                     throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
                 }
-                size_t jid = next_job_id_++;
-                job_buffer_[jid] = job;
-                core_resources_[core_id].job_queue.enqueue(jid);
+                job_buffer_[next_job_id_] = job;
+                core_resources_[core_id].job_queue.enqueue(next_job_id_);
+                next_job_id_++;
             }
         }
     }
