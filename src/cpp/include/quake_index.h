@@ -122,7 +122,7 @@ public:
      * @param path Path to load the index.
      * @param n_workers Number of workers to use for query processing.
      */
-    void load(const std::string &path, int n_workers = 0, bool use_numa=false);
+    void load(const std::string &path, int n_workers = 0, bool use_numa=false, int parent_n_workers=0);
 
     /**
      * @brief Get the total number of vectors in the index.

@@ -236,7 +236,7 @@ void QuakeIndex::save(const std::string& dir_path) {
     std::cout << "[QuakeIndex::save] Index saved to directory: " << dir_path << "\n";
 }
 
-void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa) {
+void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa, int parent_n_workers) {
     namespace fs = std::filesystem;
 
     if (!fs::exists(dir_path) || !fs::is_directory(dir_path)) {
@@ -282,11 +282,6 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa)
         if (fs::exists(parent_dir) && fs::is_directory(parent_dir)) {
             parent_ = std::make_shared<QuakeIndex>();
             int n_parts = partition_manager_->nlist();
-
-            // don't put too many parent workers. maximum of 1 worker per 500 partitions
-            int parent_n_workers = std::max(1, n_parts / 1000);
-            parent_n_workers = std::min(parent_n_workers, n_workers);
-
             parent_->load(parent_dir, parent_n_workers, use_numa);
             partition_manager_->parent_ = parent_;
         } else {

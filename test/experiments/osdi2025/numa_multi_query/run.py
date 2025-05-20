@@ -133,7 +133,7 @@ def run_experiment(cfg_path: str, output_dir: str):
 
         # Load index
         if idx_type == "Quake":
-            load_kwargs = {k: build_params[k] for k in ("use_numa","num_workers") if k in build_params}
+            load_kwargs = {k: build_params[k] for k in ("use_numa","num_workers", "parent_num_workers") if k in build_params}
             idx = QuakeWrapper(); idx.load(str(idx_file), **load_kwargs)
         elif idx_type == "DiskANN":
             idx = IndexClass(); build_params.pop("metric", None); idx.load(str(idx_file), **build_params)
