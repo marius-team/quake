@@ -133,7 +133,7 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
         res.topk_buffer_pool[0] = std::make_shared<TopkBuffer>(
                 job.k,
                 metric_ == faiss::METRIC_INNER_PRODUCT,
-                /*cap=*/100 * job.k,
+                /*cap=*/std::max(100 * job.k, 10000),
                 /*node=*/cpu_numa_node(res.core_id)
         );
     } else if (res.topk_buffer_pool[0]->k_ != job.k) {
@@ -142,7 +142,7 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
             res.topk_buffer_pool[0] = std::make_shared<TopkBuffer>(
                     job.k,
                     metric_ == faiss::METRIC_INNER_PRODUCT,
-                    /*cap=*/100 * job.k,
+                    /*cap=*/std::max(100 * job.k, 10000),
                     /*node=*/cpu_numa_node(res.core_id)
             );
         }
@@ -205,7 +205,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
             res.topk_buffer_pool[i] = std::make_shared<TopkBuffer>(
                     job.k,
                     metric_ == faiss::METRIC_INNER_PRODUCT,
-                    /*cap=*/num_workers_ * job.k,
+                    /*cap=*/std::max(100 * job.k, 10000),
                     /*node=*/cpu_numa_node(res.core_id)
             );
         }
@@ -335,7 +335,7 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
             global_topk_buffer_pool_[q] = std::make_shared<TopkBuffer>(
                     K,
                     metric_ == faiss::METRIC_INNER_PRODUCT,
-                    /*cap=*/num_workers_ * K * 1000,
+                    /*cap=*/num_workers_ * K * 2,
                     /*node=*/0
             );
         }
