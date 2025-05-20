@@ -950,11 +950,16 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
     } else {
         auto parent_search_params = make_shared<SearchParams>();
         if (search_params->parent_params == nullptr) {
-            parent_search_params->recall_target = .99;
+//            parent_search_params->recall_target = .99;
             parent_search_params->use_precomputed = search_params->use_precomputed;
             parent_search_params->recompute_threshold = search_params->recompute_threshold;
-            parent_search_params->initial_search_fraction = .5;
+//            parent_search_params->initial_search_fraction = .5;
             parent_search_params->batched_scan = false;
+
+            if (x.size(0) > 10) {
+                parent_search_params->batched_scan = true;
+            }
+
         } else {
             parent_search_params = search_params->parent_params;
         }
