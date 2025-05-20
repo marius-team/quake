@@ -635,9 +635,14 @@ void PartitionManager::set_partition_core_id(int64_t partition_id, int core_id, 
     partition_store_->partitions_[partition_id]->set_core_id(core_id);
     int node = numa_node_of_cpu(core_id);
 
+    std::cout << "[PartitionManager] set_partition_core_id: Partition " << partition_id
+              << " assigned to core " << core_id << " on NUMA node " << node << std::endl;
+
     #ifdef QUAKE_USE_NUMA
     if (use_numa) {
+        std::cout << "Before set\n";
         partition_store_->partitions_[partition_id]->set_numa_node(node);
+        std::cout << "After set\n";
     }
     #endif
 }
