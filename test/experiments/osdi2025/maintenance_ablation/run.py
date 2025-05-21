@@ -28,13 +28,11 @@ import test.experiments.osdi2025.experiment_utils as common_utils
 
 # Quake specific imports
 from quake.index_wrappers.quake import QuakeWrapper # This experiment only uses QuakeWrapper
-# DynamicWorkloadGenerator and WorkloadEvaluator are now used within common_utils helpers primarily
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s | %(levelname)s | %(message)s")
 log = logging.getLogger(__name__)
 
-# Constants for plotting remain specific to this experiment's visualization
 OP_STYLE = {
     "query":    dict(ls="-", marker="o", mfc="none", ms=4, lw=1.2),
     "insert":   dict(ls="-", marker="s", mfc="none", ms=4, lw=1.2),

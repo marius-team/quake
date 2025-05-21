@@ -1,0 +1,106 @@
+# Ablation experiment on Quake maintenance policy
+# ───────────────────────────────────────────────
+mode: run               # {build, run, plot}
+dataset:
+  name: sift1m
+  metric: l2
+  path: data
+
+workload_generator:
+  recall_target: 0.9
+  insert_ratio: 0.3
+  delete_ratio: 0.2
+  query_ratio: 0.5
+  number_of_operations: 1000
+  initial_size: 100000
+  cluster_size: 1000
+  update_batch_size: 10000
+  query_batch_size: 1000
+  cluster_sample_distribution: skewed
+  query_cluster_sample_distribution: uniform
+  seed: 9299
+
+# ── six index configurations ─────────────────────────────────────────────────
+indexes:
+  - name: Quake
+    index: Quake
+    build_params: {nc: 1000, num_workers: 0}
+    search_params: {k: 10, recall_target: .9}
+    maintenance_params:
+      split_threshold_ns: 50
+      delete_threshold_ns: 50
+
+  - name: Quake-NoReject
+    index: Quake
+    build_params: {nc: 1000, num_workers: 0}
+    search_params: {k: 10, recall_target: .9}
+    maintenance_params:
+      enable_split_rejection: false
+      enable_delete_rejection: false
+      split_threshold_ns: 50
+      delete_threshold_ns: 50
+
+  - name: Quake-NoRefine
+    index: Quake
+    build_params: {nc: 1000, num_workers: 0}
+    search_params: {k: 10, recall_target: .9}
+    maintenance_params:
+      refinement_radius: 0
+      split_threshold_ns: 50
+      delete_threshold_ns: 50
+
+  - name: Quake-NoRefineNoReject
+    index: Quake
+    build_params: {nc: 1000, num_workers: 0}
+    search_params: {k: 10, recall_target: .9}
+    maintenance_params:
+      refinement_radius: 0
+      enable_split_rejection: false
+      enable_delete_rejection: false
+      split_threshold_ns: 50
+      delete_threshold_ns: 50
+
+  - name: Quake-NoCost
+    index: Quake
+    build_params: {nc: 1000, num_workers: 0}
+    search_params: {k: 10, recall_target: .9}
+    maintenance_params:
+      max_partition_size: 2000
+
+  - name: Quake-NoCostNoRefine
+    index: Quake
+    build_params: {nc: 1000, num_workers: 0}
+    search_params: {k: 10, recall_target: .9}
+    maintenance_params:
+      refinement_radius: 0
+      max_partition_size: 2000
+
+  - name: LIRE
+    index: Quake
+    build_params: {nc: 1000, num_workers: 0}
+    search_params: {k: 10, recall_target: .9}
+    maintenance_params:
+      refinement_iterations: 0
+      max_partition_size: 2000
+
+plot:
+  x_axis: operation_number
+  metrics: [latency_ms, recall]
+  styles:
+    Quake:            {color: "#1f77b4", linestyle: "-",  marker: "o"}
+    Quake-NoReject:    {color: "#2ca02c", linestyle: "-",  marker: "v"}
+    Quake-NoRefine:    {color: "#9467bd", linestyle: "-",  marker: "^"}
+    Quake-NoRefineNoReject: {color: "#8c564b", linestyle: "-",  marker: "s"}
+    Quake-NoCost:     {color: "#d627bb", linestyle: "-",  marker: "D"}
+    Quake-NoCostNoRefine: {color: "#ff7f0e", linestyle: "-",  marker: "+"}
+    Quake-NoRejectSplit: {color: "#7f7f7f", linestyle: "-",  marker: "H"}
+    Quake-NoRejectDelete: {color: "#bcbd22", linestyle: "-",  marker: "h"}
+    Quake-NoRejectNoDelete: {color: "#ffbb78", linestyle: "-",  marker: "P"}
+    Quake-NoRejectNoSplit: {color: "#ffbb78", linestyle: "-",  marker: "P"}
+
+    LIRE:            {color: "#ffbb78", linestyle: "-",  marker: "P"}
+
+overwrite:
+  workload: true
+  index:   true
+  results: true
