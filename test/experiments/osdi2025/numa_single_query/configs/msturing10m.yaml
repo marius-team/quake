@@ -1,15 +1,152 @@
-# existing keys...
 dataset:
-  name: sift1m
+  name: msturing10m
   num_queries: 100
-  k: 10
-  nprobe: 100
+  k: 1
 
-n_workers: [0,1,2,4,8,16]
+trials: 2
+warmup: 1
+overwrite: true  # Set to true to force all indexes to rerun
 
-# new keys:
-trials: 5
-warmup: 10
+indexes:
+  - name: Quake_1_NUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 1
+      use_numa: true
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_2_NUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 2
+      use_numa: true
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_4_NUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 4
+      use_numa: true
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_8_NUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 8
+      use_numa: true
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_16_NUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 16
+      use_numa: true
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_32_NUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 32
+      use_numa: true
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_64_NUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 63
+      use_numa: true
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_1_NONUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 1
+      use_numa: false
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_2_NONUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 2
+      use_numa: false
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_4_NONUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 4
+      use_numa: false
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_8_NONUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 8
+      use_numa: false
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_16_NONUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 16
+      use_numa: false
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_32_NONUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 32
+      use_numa: false
+    search_params:
+      nprobe: 2000
+
+  - name: Quake_64_NONUMA
+    index: Quake
+    build_params:
+      nc: 10000
+      metric: l2
+      num_workers: 64
+      use_numa: false
+    search_params:
+      nprobe: 2000
 
 output:
   results_csv: numa_single_query_results.csv

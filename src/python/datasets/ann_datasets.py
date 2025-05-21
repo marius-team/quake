@@ -183,7 +183,7 @@ class MSTuring100m(Dataset):
         pass
 
     def load_vectors(self) -> Union[np.ndarray, torch.Tensor]:
-        fname = self.data_dir / "base1b.fbin.crop_nb_10000000"
+        fname = self.data_dir / "base1b.fbin.crop_nb_100000000"
         n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
         # return to_torch(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
         return torch.from_numpy(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
@@ -195,7 +195,7 @@ class MSTuring100m(Dataset):
         return torch.from_numpy(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
 
     def load_ground_truth(self) -> Union[np.ndarray, torch.Tensor]:
-        fname = self.data_dir / "msturing-gt-10M"
+        fname = self.data_dir / "msturing-gt-100M"
         n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
         assert os.stat(fname).st_size == 8 + n * d * (4 + 4)
         f = open(fname, "rb")

@@ -31,6 +31,19 @@ Each experiment directory (e.g., `aps_recall_targets`, `early_termination`) cont
 - Linux (Tested on Ubuntu 22.04)
 - Conda package manager
 
+### Install from Scratch
+
+This will install Quake, the baselines and all necessary dependencies.
+
+Run `sudo install.sh` 
+
+This will install:
+- C
+
+### Quake Installation Only (No Baselines)
+
+To just evaluate Quake use this.
+
 1.  **Clone the Repository:**
     ```bash
     git clone [https://github.com/marius-team/quake.git](https://github.com/marius-team/quake.git)
