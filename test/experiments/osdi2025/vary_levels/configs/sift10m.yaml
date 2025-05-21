@@ -1,101 +1,77 @@
 # ─── top-level controls ───────────────────────────────────
-mode: run                      # ignored by new script – kept for compatibility
 overwrite:
-  index:   false
-  results: true
+  index: false # Force rebuild of the base child index (L0)
+  results: true # Force rerun of searches for all experiment setups
 
 # ─── dataset ───────────────────────────────────────────────
 dataset:
   name: sift10m
   metric: l2
-  path: data
-  nq: 100
+  path: data # Path to dataset if not packaged locally
+  nq: 100    # Number of queries to use for benchmarking
 
-# ─── base index (built once) ───────────────────────────────
-index:
-  type: Quake
+# ─── base child index (L0 - innermost data layer) ──────────
+# This index is built once and used as the foundation for all experiment_setups.
+child_index_config:
+  type: Quake # Index type, currently supports Quake
   build_params:
-    nc: 40_000            # child level
-    num_workers: 8
-  search_params:
-    k: 1
+    nc: 40000       # Number of centroids for the L0 index
+    metric: l2      # Metric for L0 (inherited by parents unless overridden, though Quake parents don't typically change metric)
+    num_workers: 8  # Build workers for L0 index
 
-# ─── parent levels to test ─────────────────────────────────
-levels:
-  - nc: 0
-    search_params:
-      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-#      batched_scan: true
-#      recall_targets: [.5, .6, .7, .8, .85, .9, .95, .99]
-#      initial_search_fraction: 0.01
-#      aps_flush_period_us: 1
-      batch_size: 1
+# ─── global innermost search sweep (applies to L0 search phase) ───
+# Define EITHER nprobes OR recall_targets for the L0 search sweep.
+# These parameters are applied to the SearchParams of the L0 layer.
+global_innermost_search_sweep:
+  nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512] # Option 1: nprobe sweep for L0
+#  recall_targets: [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 0.99] # Option 2: recall_target sweep for L0
+#  initial_search_fraction: 0.01 # Required if using recall_targets for L0
+  k: 1 # k for the L0 search
+  batch_size: 1 # Query batch size for L0 search
+  # Other common SearchParams for L0 can be added here.
 
+# ─── experiment setups (different hierarchical configurations) ─────
+experiment_setups:
+  - name: "ChildOnly_L0"
+    # This setup uses only the base child_index_config.
+    # additional_levels is empty or omitted.
+    # Search on L0 is governed by global_innermost_search_sweep.
 
-#  - nc: 100                    # baseline (keep the index single-level)
-#    search_params:           # ← optional override for the CHILD search
-#      #      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-#      recall_targets: [.5, .6, .7, .8, .85, .9, .95, .99]
-#      initial_search_fraction: 0.002
-##      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256]
-#      batch_size: 1
-#    parent_search_params:    # ← optional params passed to *parent* search
-##      nprobe: 10
-#      recall_target: .999
-#      initial_search_fraction: 0.05
-#
-#  - nc: 500                  # 500-centroid parent layer
-#    search_params:
-#      #      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-#      recall_targets: [.5, .6, .7, .8, .85, .9, .95, .99]
-#      initial_search_fraction: 0.002
-#      batch_size: 1
-#    parent_search_params:    # ← optional params passed to *parent* search
-##      nprobe: 15
-#      recall_target: .999
-#      initial_search_fraction: 0.05
+  - name: "L0_plus_L1_Parent1k_PScan50"
+    additional_levels: # Levels added ON TOP of the base child_index (L0)
+      - type: Quake # Describes L1 (parent of L0)
+        build_params: # How to build this L1 layer
+          nc: 1000
+          num_workers: 4 # Build workers for this L1 layer
+        search_params: # How to search this L1 layer (when it's acting as parent of L0)
+          nprobe: 50
+          num_workers: 4 # Search workers for this L1 layer's scan
+          use_numa: true # NUMA setting for this L1 layer's scan
 
-  - nc: 1_000
-    search_params:
-      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-#      batched_scan: true
-#      recall_targets: [.5, .6, .7, .8, .85, .9, .95, .99]
-#      initial_search_fraction: 0.01
-      batch_size: 1
-    parent_search_params:    # ← optional params passed to *parent* search
-      nprobe: 50
-#      batched_scan: true
-#      recall_target: .999
-#      initial_search_fraction: 0.05
+  - name: "L0_plus_L1_Parent5k_PScan100"
+    additional_levels:
+      - type: Quake # L1
+        build_params: {nc: 5000, num_workers: 8}
+        search_params: {nprobe: 100, num_workers: 8, use_numa: false}
 
-#  - nc: 2_000
-#    search_params:
-#      #      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-#      recall_targets: [.5, .6, .7, .8, .85, .9, .95, .99]
-#      initial_search_fraction: 0.01
-#      batch_size: 1
-#    parent_search_params: # ← optional params passed to *parent* search
-#      nprobe: 50
-##
-#  - nc: 4_000
-#    search_params:
-#      nprobes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-##      recall_targets: [.5, .6, .7, .8, .85, .9, .95, .99]
-##      initial_search_fraction: 0.01
-##      aps_flush_period_us: 1
-#      batch_size: 1
-#    parent_search_params: # ← optional params passed to *parent* search
-#      nprobe: 200
-#      recall_target: .999
-#      aps_flush_period_us: 1
-#      initial_search_fraction: 0.05
+  - name: "L0_L1_Parent1k_L2_Parent100_PScan10"
+    additional_levels:
+      - type: Quake # L1 (parent of L0)
+        build_params: {nc: 1000, num_workers: 4}
+        search_params: {nprobe: 50, num_workers: 4} # Search params for L1 when it's parent of L0
+      - type: Quake # L2 (parent of L1)
+        build_params: {nc: 100, num_workers: 2}
+        search_params: {nprobe: 10, num_workers: 2} # Search params for L2 when it's parent of L1
+
+# ─── common experiment parameters ──────────────────────────
+experiment_params:
+  trials: 3 # Number of timed trials for each search configuration
+  warmup: 1 # Number of warmup runs before timed trials
 
 # ─── plotting (optional) ──────────────────────────────────
 plot:
-  styles:
-    L0:     {color: "#1f77b4"}
-    L100:   {color: "#ff7f0e"}
-    L500:   {color: "#ffbb78"}
-    L1000:  {color: "#2ca02c"}
-    L2000:  {color: "#d62728"}
-    L4000:  {color: "#9467bd"}
+  styles: # Keyed by experiment_setups.name
+    ChildOnly_L0: {color: "#1f77b4", marker: "o", linestyle: "-"}
+    L0_plus_L1_Parent1k_PScan50: {color: "#ff7f0e", marker: "s", linestyle: "--"}
+    L0_plus_L1_Parent5k_PScan100: {color: "#2ca02c", marker: "D", linestyle: "-."}
+    L0_L1_Parent1k_L2_Parent100_PScan10: {color: "#d62728", marker: "^", linestyle: ":"}

@@ -3,7 +3,7 @@ import time
 import yaml
 import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 import torch
 import pandas as pd
@@ -222,3 +222,17 @@ def plot_recall_performance(
         plt.savefig(output_path)
         logger.info(f"Plot saved to {output_path}")
     plt.close(fig)
+
+def expand_search_sweep(sweep_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Expands nprobes or recall_targets from sweep_config into individual search dicts."""
+    base_params = {k: v for k, v in sweep_config.items() if k not in ["nprobes", "recall_targets"]}
+    expanded_list = []
+    if "nprobes" in sweep_config:
+        for nprobe_val in sweep_config["nprobes"]:
+            expanded_list.append({**base_params, "nprobe": nprobe_val})
+    elif "recall_targets" in sweep_config:
+        for rt_val in sweep_config["recall_targets"]:
+            expanded_list.append({**base_params, "recall_target": rt_val})
+    else: # No sweep, just use base_params
+        expanded_list.append(base_params)
+    return expanded_list

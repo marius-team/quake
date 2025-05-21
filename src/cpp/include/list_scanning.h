@@ -49,14 +49,17 @@ public:
     bool is_desc_;
     int *ord_;
     bool owns_memory_ = true;
+    int node_;
     TypedTopKBuffer(int k, bool desc, int cap, int node)
             : capacity_(cap), head_(0), k_(k) {
-        vals_ = static_cast<T *>(quake_alloc(sizeof(T) * cap, node));
-        ids_ = static_cast<I *>(quake_alloc(sizeof(I) * cap, node));
-        ord_ = static_cast<int *>(quake_alloc(sizeof(int) * cap, node));
+        node_ = node;
+
+        alloc();
 
         if (capacity_ < k_) {
-            throw std::invalid_argument("capacity must be greater than k");
+            string err_msg = "capacity= " + std::to_string(capacity_) +
+                             " must be greater than k= " + std::to_string(k_);
+            throw std::invalid_argument(err_msg);
         }
 
         if (desc) {
@@ -103,6 +106,26 @@ public:
     }
 
     ~TypedTopKBuffer() {
+        clear();
+    }
+
+    void set_k(int new_k) {
+        if (new_k > capacity_) {
+            clear();
+            capacity_ = std::min(new_k * 100, 10000);
+            alloc();
+        }
+        k_ = new_k;
+        reset();
+    }
+
+    void alloc() {
+        vals_ = static_cast<T *>(quake_alloc(sizeof(T) * capacity_, node_));
+        ids_ = static_cast<I *>(quake_alloc(sizeof(I) * capacity_, node_));
+        ord_ = static_cast<int *>(quake_alloc(sizeof(int) * capacity_, node_));
+    }
+
+    void clear() {
         if (owns_memory_) {
             if (vals_) {
                 quake_free(vals_, sizeof(T) * capacity_);
@@ -120,14 +143,6 @@ public:
         vals_ = nullptr;
         ids_ = nullptr;
         ord_ = nullptr;
-    }
-
-    void set_k(int new_k) {
-        if (new_k > capacity_) {
-            throw std::invalid_argument("k must be less than the capacity");
-        }
-        k_ = new_k;
-        reset();
     }
 
     void reset() {
