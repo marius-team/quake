@@ -113,7 +113,7 @@ OMP_NUM_THREADS=1 python3 -m test.experiments.osdi2025.experiment_runner \
 
 ### Quick Reproduction
 
-These experiments should take less than 10 minutes to run in total.
+These experiments should take less than 10 minutes to run in total if the datasets/indexes have been prepared ahead of time. Otherwise it will take 30-60 minutes on the first run.
 
 1. Reproduction of APS (Figure 6 in `paper/Quake.pdf`)
 
