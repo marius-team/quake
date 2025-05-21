@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
 """
-NUMA Batch-Query Latency and Recall Benchmark (with detailed child/parent timers)
+NUMA Multi-Query Batch Performance Benchmark
+───────────────────────────────────────────
+Benchmarks Quake (with varying NUMA/worker settings) and other ANN indexes
+for batch-query latency, per-phase breakdown (for Quake), and recall@k.
+Results are cached. Outputs per-index CSVs, a unified CSV, and plots.
 
-Benchmarks a suite of ANN indexes (Quake, Faiss-IVF, SCANN, HNSW, DiskANN, SVS, etc.)
-for batch-query latency, per-phase breakdown, and recall@k under configurable parameters.
-Results are cached and only recomputed if 'overwrite' is set.
-Outputs per-index CSVs with detailed timers, a unified CSV, and plots.
-
-Usage:
-    python numa_latency_batch_experiment.py nna_latency_experiment.yaml output_dir
+This script tests how different configurations handle batches of queries,
+focusing on Quake's behavior with NUMA-awareness and threading for parallel
+processing of queries or internal operations.
 """
-import sys
+import logging # Standard library logging
 from pathlib import Path
-import yaml
 import numpy as np
-torch = None
 import torch
 import pandas as pd
 import matplotlib.pyplot as plt
-from time import time
+# time.time() is still used for the benchmark loop due to its specificity.
 
-from quake.utils import compute_recall
-from quake.datasets.ann_datasets import load_dataset
+# Common utilities
+import test.experiments.osdi2025.experiment_utils as common_utils
+
+# Quake specific imports
+from quake.utils import compute_recall # compute_recall remains useful
 from quake.index_wrappers.faiss_ivf import FaissIVF
 from quake.index_wrappers.faiss_hnsw import FaissHNSW
 from quake.index_wrappers.quake import QuakeWrapper
@@ -46,221 +47,232 @@ INDEX_CLASSES = {
     "SCANN":   Scann,
     "HNSW":    FaissHNSW,
     "DiskANN": DiskANNDynamic,
-    "SVS":     Vamana,
+    "SVS":     Vamana, # Assuming Vamana is the class for "SVS"
 }
 
-
-def build_and_save_index(index_class, build_params, base_vecs, index_file):
-    """Build and save an index to disk."""
-    idx = index_class()
-    idx.build(base_vecs, **build_params)
-    idx.save(str(index_file))
-
-
-def extract_ids(res):
-    """Normalize returned prediction IDs to a NumPy array."""
-    if hasattr(res, "ids"):
-        arr = res.ids
-    elif hasattr(res, "I"):
-        arr = res.I
-    elif hasattr(res, "indices"):
-        arr = res.indices
-    else:
-        raise RuntimeError("Cannot extract predicted indices from search result.")
-    if isinstance(arr, torch.Tensor):
-        arr = arr.cpu().numpy()
-    return np.asarray(arr)
+# Setup logging (can be centralized in common_utils or main runner if preferred)
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s | %(levelname)7s | %(name)s | %(message)s",
+                    datefmt="%H:%M:%S")
+logger = logging.getLogger("numa_multi_query_exp")
 
 
-def run_experiment(cfg_path: str, output_dir: str):
-    cfg = yaml.safe_load(Path(cfg_path).read_text())
-    ds      = cfg["dataset"]
-    queries_n = ds["num_queries"]
-    k       = ds["k"]
-    trials  = cfg.get("trials", 5)
-    warmup  = cfg.get("warmup", 10)
-    indexes_cfg = cfg["indexes"]
-    csv_name = cfg.get("output", {}).get("results_csv", "numa_results.csv")
-    overwrite = cfg.get("overwrite", False)
+def run_experiment(cfg_path_str: str, output_dir_str: str):
+    cfg = common_utils.load_config(cfg_path_str)
 
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    dataset_cfg = cfg["dataset"]
+    num_queries_to_use = dataset_cfg["num_queries"]
+    k_val = dataset_cfg["k"]
 
-    print(f"[INFO] Loading dataset '{ds['name']}'...")
-    base_vecs, queries, gt = load_dataset(ds["name"])
-    queries = queries[:queries_n]
-    gt = gt[:queries_n] if gt is not None else None
+    num_trials = cfg.get("trials", 5)
+    num_warmup = cfg.get("warmup", 1) # Reduced default warmup, can be configured
+    indexes_config_list = cfg["indexes"]
+    output_csv_name = cfg.get("output", {}).get("results_csv", "numa_multi_query_results.csv")
+    force_overwrite = cfg.get("overwrite", False)
+    force_rebuild = cfg.get("force_rebuild", False)
 
-    # --- Build shared Quake base index once ---
-    quake_base_params = None
-    quake_base_index_file = out_dir / "Quake_base_index.bin"
-    for idx_cfg in indexes_cfg:
-        if idx_cfg["index"] == "Quake":
-            quake_base_params = dict(idx_cfg.get("build_params", {}))
-            quake_base_params.pop("num_workers", None)
-            quake_base_params.pop("use_numa", None)
+    main_output_dir = Path(output_dir_str)
+    main_output_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"Loading dataset '{dataset_cfg['name']}'...")
+    # Use common_utils.load_data, pass num_queries_to_use for slicing
+    base_vectors, query_vectors, gt_vectors = common_utils.load_data(
+        dataset_cfg["name"],
+        dataset_path="", # Assuming load_data handles default path or it's in dataset_cfg
+        nq_override=num_queries_to_use
+    )
+
+    # --- Build shared Quake base index once (specific to this experiment script) ---
+    quake_base_build_params = None
+    shared_quake_index_file = main_output_dir / "Quake_shared_base_index.bin" # More descriptive name
+
+    for idx_c in indexes_config_list:
+        if idx_c["index"] == "Quake":
+            # These are params for the *base* index, stripped of worker/NUMA specifics
+            quake_base_build_params = {k: v for k, v in idx_c.get("build_params", {}).items()
+                                       if k not in ["num_workers", "use_numa", "parent_num_workers"]}
             break
-    if quake_base_params and not quake_base_index_file.exists():
-        print(f"[BUILD] Quake (shared) base index ...")
-        build_and_save_index(QuakeWrapper, quake_base_params, base_vecs, quake_base_index_file)
-        print(f"[SAVE] Quake base index saved at {quake_base_index_file}")
 
-    all_rows = []
-
-    for idx_cfg in indexes_cfg:
-        name         = idx_cfg["name"]
-        idx_type     = idx_cfg["index"]
-        build_params = dict(idx_cfg.get("build_params", {}))
-        search_params= dict(idx_cfg.get("search_params", {}))
-        IndexClass   = INDEX_CLASSES.get(idx_type)
-        if IndexClass is None:
-            print(f"[WARN] Unknown index type: {idx_type}. Skipping.")
-            continue
-
-        idx_csv = out_dir / f"{name}_results.csv"
-        idx_file = quake_base_index_file if idx_type == "Quake" else out_dir / f"{name}_index.bin"
-
-        if idx_csv.exists() and not overwrite:
-            print(f"[SKIP] {name}: Results exist. Use overwrite: true to rerun.")
-            all_rows.append(pd.read_csv(idx_csv).iloc[0].to_dict())
-            continue
-
-        # Build non-Quake if necessary
-        if idx_type != "Quake" and not idx_file.exists():
-            print(f"[BUILD] {name} index...")
-            build_and_save_index(IndexClass, build_params, base_vecs, idx_file)
-            print(f"[SAVE] Index saved at {idx_file}")
-
-        # Load index
-        if idx_type == "Quake":
-            load_kwargs = {k: build_params[k] for k in ("use_numa","num_workers", "parent_num_workers") if k in build_params}
-            idx = QuakeWrapper(); idx.load(str(idx_file), **load_kwargs)
-        elif idx_type == "DiskANN":
-            idx = IndexClass(); build_params.pop("metric", None); idx.load(str(idx_file), **build_params)
+    if quake_base_build_params:
+        if not shared_quake_index_file.exists() or force_rebuild: # Respect overwrite for base index too
+            logger.info(f"Building shared Quake base index at {shared_quake_index_file}...")
+            # Using common_utils.prepare_index for this specialized build.
+            # It requires IndexClass, build_params, base_vectors, path, force_rebuild.
+            common_utils.prepare_index(
+                IndexClass=QuakeWrapper,
+                index_build_params=quake_base_build_params,
+                base_vectors=base_vectors,
+                index_file_path=shared_quake_index_file,
+                force_rebuild=force_rebuild, # Force rebuild if top-level overwrite is true
+                save_after_build=True
+            )
+            logger.info(f"Shared Quake base index saved at {shared_quake_index_file}")
         else:
-            idx = IndexClass(); idx.load(str(idx_file))
+            logger.info(f"Using existing shared Quake base index from {shared_quake_index_file}")
 
-        # Warmup (batch)
-        for _ in range(min(warmup,1)):
-            idx.search(queries, k, **search_params)
+    all_experiment_rows = []
 
-        # Prepare per-phase accumulators
-        child_buf_init_trials = []
-        child_copy_query_trials = []
-        child_enqueue_trials  = []
-        child_wait_trials     = []
-        child_agg_trials      = []
-        child_total_trials    = []
-        parent_buf_init_trials= []
-        parent_copy_query_trials = []
-        parent_enqueue_trials = []
-        parent_wait_trials    = []
-        parent_agg_trials     = []
-        parent_total_trials   = []
-        recall_trials         = []
+    for idx_conf in indexes_config_list:
+        index_name = idx_conf["name"]
+        index_type_str = idx_conf["index"]
+        current_build_params = dict(idx_conf.get("build_params", {}))
+        current_search_params = dict(idx_conf.get("search_params", {}))
 
-        # Benchmark Trials (batch)
-        for t in range(trials):
-            res = idx.search(queries, k, **search_params)
-            ti  = res.timing_info
+        IndexCls = INDEX_CLASSES.get(index_type_str)
+        if IndexCls is None or (IndexCls == Scann and Scann is None): # Handle optional Scann
+            logger.warning(f"Index type '{index_type_str}' for '{index_name}' is not available or unknown. Skipping.")
+            continue
 
-            # Child (worker_scan) timings
-            child_buf_init_trials.append(ti.buffer_init_time_ns / 1e6)
-            child_copy_query_trials.append(ti.copy_query_time_ns / 1e6)
-            child_enqueue_trials .append(ti.job_enqueue_time_ns   / 1e6)
-            child_wait_trials    .append(ti.job_wait_time_ns      / 1e6)
-            child_agg_trials     .append(ti.result_aggregate_time_ns / 1e6)
-            child_total_trials   .append(ti.total_time_ns         / 1e6)
+        per_index_csv_path = main_output_dir / f"{index_name}_results.csv"
 
-            # Parent timings
-            pi = getattr(ti, "parent_info", None)
-            if pi:
-                parent_buf_init_trials.append(pi.buffer_init_time_ns / 1e6)
-                parent_copy_query_trials.append(pi.copy_query_time_ns / 1e6)
-                parent_enqueue_trials .append(pi.job_enqueue_time_ns   / 1e6)
-                parent_wait_trials    .append(pi.job_wait_time_ns      / 1e6)
-                parent_agg_trials     .append(pi.result_aggregate_time_ns / 1e6)
-                parent_total_trials   .append(pi.total_time_ns         / 1e6)
-            else:
-                parent_buf_init_trials.append(0.0)
-                parent_copy_query_trials.append(0.0)
-                parent_enqueue_trials .append(0.0)
-                parent_wait_trials    .append(0.0)
-                parent_agg_trials     .append(0.0)
-                parent_total_trials   .append(0.0)
+        # Determine actual index file path (shared for Quake, specific for others)
+        actual_index_file_path = shared_quake_index_file if index_type_str == "Quake" else main_output_dir / f"{index_name}_index.bin"
 
-            # Recall for this trial
-            if gt is not None:
-                preds_arr = extract_ids(res)
-                recall    = float(compute_recall(preds_arr, gt, k).mean())
-                recall_trials.append(recall)
-                print(f" [{name} trial {t+1}/{trials}] child_total={child_total_trials[-1]:.2f} ms, parent_total={parent_total_trials[-1]:.2f} ms | recall@{k} {recall:.4f}")
-            else:
-                print(f" [{name} trial {t+1}/{trials}] child_total={child_total_trials[-1]:.2f} ms, parent_total={parent_total_trials[-1]:.2f} ms")
+        if per_index_csv_path.exists() and not force_overwrite:
+            logger.info(f"Results for {index_name} exist. Use overwrite:true to rerun. Loading cached.")
+            try:
+                # Ensure only one row is taken if multiple exist from partial runs.
+                cached_df = pd.read_csv(per_index_csv_path)
+                if not cached_df.empty:
+                    all_experiment_rows.append(cached_df.iloc[0].to_dict())
+            except Exception as e:
+                logger.error(f"Could not load cached results for {index_name} from {per_index_csv_path}: {e}")
+            continue
 
-        # Aggregate metrics
-        mean_lat   = float(np.mean(child_total_trials))
-        std_lat    = float(np.std(child_total_trials))
-        mean_recall= float(np.mean(recall_trials)) if recall_trials else np.nan
-        n_workers  = build_params.get("num_workers", None)
+        logger.info(f"Processing index: {index_name} (Type: {index_type_str})")
 
-        row = {
-            "index":               name,
-            "n_workers":           n_workers,
-            f"recall_at_{k}":      mean_recall,
-            "mean_latency_ms":     mean_lat,
-            "std_latency_ms":      std_lat,
-            "child_buffer_init_ms":float(np.mean(child_buf_init_trials)),
-            "child_copy_query_ms": float(np.mean(child_copy_query_trials)),
-            "child_enqueue_ms":    float(np.mean(child_enqueue_trials)),
-            "child_wait_ms":       float(np.mean(child_wait_trials)),
-            "child_aggregate_ms":  float(np.mean(child_agg_trials)),
-            "child_total_ms":      float(np.mean(child_total_trials)),
-            "parent_buffer_init_ms":float(np.mean(parent_buf_init_trials)),
-            "parent_copy_query_ms": float(np.mean(parent_copy_query_trials)),
-            "parent_enqueue_ms":   float(np.mean(parent_enqueue_trials)),
-            "parent_wait_ms":      float(np.mean(parent_wait_trials)),
-            "parent_aggregate_ms": float(np.mean(parent_agg_trials)),
-            "parent_total_ms":     float(np.mean(parent_total_trials)),
+        # Load or build index
+        idx_instance = None
+        if index_type_str == "Quake":
+            if not shared_quake_index_file.exists():
+                logger.error(f"Shared Quake base index {shared_quake_index_file} not found for {index_name}. Skipping.")
+                continue
+            idx_instance = QuakeWrapper()
+            # These are load-time parameters for Quake specified in each config entry
+            quake_load_kwargs = {
+                k: current_build_params[k] for k in
+                ("use_numa", "num_workers", "parent_num_workers") if k in current_build_params
+            }
+            logger.info(f"Loading Quake index {index_name} from shared base with params: {quake_load_kwargs}")
+            idx_instance.load(str(shared_quake_index_file), **quake_load_kwargs)
+        else: # For non-Quake indexes
+            # DiskANN needs metric popped from build_params before load, if present during build
+            diskann_load_params = current_build_params.copy()
+            if index_type_str == "DiskANN": diskann_load_params.pop("metric", None)
+
+            idx_instance = common_utils.prepare_index(
+                IndexClass=IndexCls,
+                index_build_params=current_build_params,
+                base_vectors=base_vectors, # Needed if building
+                index_file_path=actual_index_file_path,
+                force_rebuild=force_rebuild, # Rebuild this specific non-Quake index if needed
+                load_kwargs=diskann_load_params if index_type_str == "DiskANN" else None,
+                save_after_build=True
+            )
+
+        if idx_instance is None: # Should not happen if logic is correct
+            logger.error(f"Failed to load or build index {index_name}. Skipping.")
+            continue
+
+        logger.info(f"Warmup for {index_name} ({num_warmup} iterations)...")
+        for _ in range(num_warmup): # Batched search for warmup
+            _ = idx_instance.search(query_vectors, k_val, **current_search_params)
+
+        # Benchmark Trials (batch search)
+        trial_timings = {
+            "child_total_ms": [], "parent_total_ms": [], "recall": [],
+            "child_buffer_init_ms": [], "child_copy_query_ms": [], "child_enqueue_ms": [],
+            "child_wait_ms": [], "child_aggregate_ms": [],
+            "parent_buffer_init_ms": [], "parent_copy_query_ms": [], "parent_enqueue_ms": [],
+            "parent_wait_ms": [], "parent_aggregate_ms": []
         }
-        all_rows.append(row)
-        pd.DataFrame([row]).to_csv(idx_csv, index=False)
 
-    # Save unified CSV
-    df = pd.DataFrame(all_rows)
-    out_csv = out_dir / csv_name
-    df.to_csv(out_csv, index=False)
-    print(f"\n[RESULT] Results written to {out_csv}")
+        logger.info(f"Running benchmark for {index_name} ({num_trials} trials)...")
+        for t_idx in range(num_trials):
+            search_result = idx_instance.search(query_vectors, k_val, **current_search_params)
+            timing_info = search_result.timing_info # Assuming this is always present for Quake
 
-    # Plot batch total latency (child only)
-    plt.figure()
-    for idx_name in df["index"].unique():
-        sub = df[df["index"]==idx_name]
-        label = f"{idx_name}" if pd.isna(sub["n_workers"]).all() else f"{idx_name} (n_workers={int(sub['n_workers'].iloc[0])})"
-        plt.errorbar(
-            sub["n_workers"], sub["child_total_ms"],
-            yerr=sub["child_total_ms"].std(),
-            marker="o", capsize=5, label=label
-        )
-    plt.xscale("symlog", base=2)
-    plt.xlabel("Num Workers")
-    plt.ylabel("Mean Child Batch Latency (ms)")
-    plt.title("Batch Query Child Total Latency")
-    plt.legend(); plt.tight_layout()
-    plt.savefig(out_dir / f"{out_csv.stem}_batch_latency.png")
-    print(f"[PLOT] Saved to {out_dir / f'{out_csv.stem}_batch_latency.png'}")
+            # Collect detailed timings if available (primarily for Quake)
+            for key in trial_timings:
+                if key.startswith("child_") and hasattr(timing_info, key.replace("_ms", "_time_ns").replace("child_", "")):
+                    trial_timings[key].append(getattr(timing_info, key.replace("_ms", "_time_ns").replace("child_", "")) / 1e6)
+                elif key.startswith("parent_") and hasattr(timing_info, "parent_info") and timing_info.parent_info:
+                    parent_attr_name = key.replace("_ms", "_time_ns").replace("parent_", "")
+                    if hasattr(timing_info.parent_info, parent_attr_name):
+                        trial_timings[key].append(getattr(timing_info.parent_info, parent_attr_name) / 1e6)
+                    else:
+                        trial_timings[key].append(0.0) # Parent info might not have all fields
+                elif key == "recall" and gt_vectors is not None:
+                    pred_ids = search_result.ids
+                    current_recall = float(compute_recall(pred_ids, gt_vectors, k_val).mean())
+                    trial_timings["recall"].append(current_recall)
 
-    # Plot recall
-    if f"recall_at_{k}" in df.columns:
-        plt.figure()
-        for idx_name in df["index"].unique():
-            sub = df[df["index"]==idx_name]
-            label = f"{idx_name}" if pd.isna(sub["n_workers"]).all() else f"{idx_name} (n_workers={int(sub['n_workers'].iloc[0])})"
-            plt.plot(sub["n_workers"], sub[f"recall_at_{k}"], marker="o", label=label)
-        plt.xscale("symlog", base=2)
-        plt.xlabel("Num Workers")
-        plt.ylabel(f"Recall@{k}")
-        plt.title(f"Recall@{k} (batch)")
-        plt.legend(); plt.tight_layout()
-        plt.savefig(out_dir / f"{out_csv.stem}_batch_recall.png")
-        print(f"[PLOT] Recall plot saved to {out_dir / f'{out_csv.stem}_batch_recall.png'}")
+            log_msg_trial = f"  [{index_name} trial {t_idx+1}/{num_trials}] "
+            if trial_timings["child_total_ms"]: log_msg_trial += f"child_total={trial_timings['child_total_ms'][-1]:.2f}ms "
+            if trial_timings["parent_total_ms"] and trial_timings['parent_total_ms'][-1] > 0: log_msg_trial += f"parent_total={trial_timings['parent_total_ms'][-1]:.2f}ms "
+            if trial_timings["recall"]: log_msg_trial += f"| recall@{k_val}={trial_timings['recall'][-1]:.4f}"
+            logger.info(log_msg_trial)
+
+
+        # Aggregate metrics from trials
+        final_row = {"index": index_name, "n_workers": current_build_params.get("num_workers")}
+        for key, values in trial_timings.items():
+            if values:
+                final_row[f"mean_{key}"] = float(np.mean(values))
+                final_row[f"std_{key}"] = float(np.std(values))
+            else: # Handle cases where timings might not be available (e.g. non-Quake, or no GT)
+                final_row[f"mean_{key}"] = np.nan
+                final_row[f"std_{key}"] = np.nan
+
+        # Rename for CSV consistency if needed, e.g., mean_child_total_ms to mean_latency_ms
+        if "mean_child_total_ms" in final_row:
+            final_row["mean_latency_ms"] = final_row.pop("mean_child_total_ms")
+        if "std_child_total_ms" in final_row:
+            final_row["std_latency_ms"] = final_row.pop("std_child_total_ms")
+        if f"mean_recall" in final_row: # Ensure recall key matches expected format
+            final_row[f"recall_at_{k_val}"] = final_row.pop(f"mean_recall")
+            if f"std_recall" in final_row: # std for recall might not be needed in final summary
+                final_row.pop(f"std_recall")
+
+
+        all_experiment_rows.append(final_row)
+        common_utils.save_results_csv(pd.DataFrame([final_row]), per_index_csv_path) # Save per-index
+
+    # Save unified CSV for all indexes
+    if not all_experiment_rows:
+        logger.warning("No results collected. Skipping final CSV and plots.")
+        return
+
+    final_df = pd.DataFrame(all_experiment_rows)
+    unified_csv_path = main_output_dir / output_csv_name
+    common_utils.save_results_csv(final_df, unified_csv_path)
+    logger.info(f"Unified results written to {unified_csv_path}")
+
+    # Plotting (remains specific to this experiment's needs)
+    plot_suffix = Path(output_csv_name).stem
+
+    # Plot 1: Batch total latency (child_total_ms) vs. Num Workers
+    if "mean_latency_ms" in final_df.columns and "n_workers" in final_df.columns:
+        plt.figure(figsize=(8,6))
+        for idx_name_plot in final_df["index"].unique():
+            subset = final_df[final_df["index"] == idx_name_plot].sort_values(by="n_workers")
+            label = idx_name_plot # Simplified label
+            yerr_values = subset["std_latency_ms"] if "std_latency_ms" in subset else None
+            plt.errorbar(
+                subset["n_workers"].astype(int),
+                subset["mean_latency_ms"],
+                yerr=yerr_values,
+                marker="o", capsize=4, label=label, alpha=0.8, linestyle='-'
+            )
+        # plt.xscale("symlog", base=2) # May not be ideal if n_workers are not powers of 2 or include 0
+        plt.xlabel("Num Workers (Configuration)")
+        plt.ylabel(f"Mean Batch Query Latency (ms) - Child Total")
+        plt.title(f"NUMA Multi-Query: Latency vs. Num Workers ({dataset_cfg['name']})")
+        plt.legend(title="Index Configuration", bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True, linestyle=':', alpha=0.7)
+        plt.tight_layout(rect=[0,0,0.8,1]) # Adjust for legend
+        plt.savefig(main_output_dir / f"{plot_suffix}_batch_latency.png", dpi=150)
+        logger.info(f"Latency plot saved to {main_output_dir / f'{plot_suffix}_batch_latency.png'}")
+        plt.close()
+
+    logger.info("NUMA Multi-Query experiment finished.")

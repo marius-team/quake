@@ -1,12 +1,13 @@
 # numa_latency_experiment.yaml
 dataset:
   name: sift1m
-  num_queries: 10000
+  num_queries: 1000
   k: 100
 
 trials: 3
 warmup: 1
-overwrite: true  # Set to true to force all indexes to rerun
+overwrite: false  # Set to true to force all indexes to rerun
+force_rebuild: false  # Set to true to force all indexes to rebuild
 
 indexes:
   - name: Quake_0
@@ -26,7 +27,7 @@ indexes:
       nc: 1000
       metric: l2
       num_workers: 1
-      parent_num_workers: 1
+      parent_num_workers: 0
       use_numa: false
     search_params:
       nprobe: 20
