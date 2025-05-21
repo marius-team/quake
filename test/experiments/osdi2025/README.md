@@ -51,7 +51,7 @@ To just evaluate Quake use this.
 
 1.  **Clone the Repository:**
     ```bash
-    git clone [https://github.com/marius-team/quake.git](https://github.com/marius-team/quake.git)
+    git clone https://github.com/marius-team/quake.git
     cd quake
     git checkout osdi2025
     git submodule update --init --recursive
