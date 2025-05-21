@@ -261,7 +261,8 @@ def run_experiment(config_path_str: str, output_dir_str: str) -> None:
         vecs=base_vecs,
         build_params_dict=l0_build_params_dict,
         index_file_path=base_child_index_path,
-        force_rebuild=overwrite_cfg.get("index", False)
+        force_rebuild=overwrite_cfg.get("index", False),
+        load=False
     )
     logger.info(f"Base L0 index prepared at {base_child_index_path}")
 

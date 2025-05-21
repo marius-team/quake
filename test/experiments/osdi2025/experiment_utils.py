@@ -35,10 +35,11 @@ def prepare_quake_index(
         force_rebuild: bool = False,
         num_workers_load: int = 0,
         num_parent_workers_load: int = 0,
-        use_numa: bool = False
+        use_numa: bool = False,
+        load: bool = True
 ) -> QuakeIndex:
     idx = QuakeIndex()
-    if index_file_path.exists() and not force_rebuild:
+    if index_file_path.exists() and not force_rebuild and load:
         logger.info(f"Loading index from {index_file_path}")
         idx.load(str(index_file_path), num_workers_load, use_numa, num_parent_workers_load)
     else:
