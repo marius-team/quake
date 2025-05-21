@@ -111,9 +111,9 @@ OMP_NUM_THREADS=1 python3 -m test.experiments.osdi2025.experiment_runner \
     ```
     Outputs will be in `test/experiments/osdi2025/kick_the_tires/results/sift1m/`.
 
-### Quick Reproduction
+### Reproduction of Main Quake Components
 
-These experiments should take less than 10 minutes to run in total if the datasets/indexes have been prepared ahead of time. Otherwise it will take 30-60 minutes on the first run.
+These experiments should take less than hour (mostly in maintenance_ablation) to run in total if the datasets/indexes have been prepared ahead of time. Otherwise it will take 2 hours on the first run.
 
 1. Reproduction of APS (Figure 6 in `paper/Quake.pdf`)
 
@@ -135,7 +135,7 @@ These experiments should take less than 10 minutes to run in total if the datase
         --config msturing10m
     ```
 
-3. Maintenance Ablation Study (Table 6 in `paper/Quake-Revision.pdf`)
+3. Maintenance Ablation Study (Table 6 in `paper/Quake-Revision.pdf`) 
 
     This removes critical pieces of the Quake maintenance policy and measure its effect on workload performance.
 

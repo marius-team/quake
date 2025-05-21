@@ -93,10 +93,6 @@ plot:
     Quake-NoRefineNoReject: {color: "#8c564b", linestyle: "-",  marker: "s"}
     Quake-NoCost:     {color: "#d627bb", linestyle: "-",  marker: "D"}
     Quake-NoCostNoRefine: {color: "#ff7f0e", linestyle: "-",  marker: "+"}
-    Quake-NoRejectSplit: {color: "#7f7f7f", linestyle: "-",  marker: "H"}
-    Quake-NoRejectDelete: {color: "#bcbd22", linestyle: "-",  marker: "h"}
-    Quake-NoRejectNoDelete: {color: "#ffbb78", linestyle: "-",  marker: "P"}
-    Quake-NoRejectNoSplit: {color: "#ffbb78", linestyle: "-",  marker: "P"}
 
     LIRE:            {color: "#ffbb78", linestyle: "-",  marker: "P"}
 
