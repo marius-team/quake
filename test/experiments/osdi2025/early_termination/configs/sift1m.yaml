@@ -18,8 +18,8 @@ index:
 overwrite:
   index: false
   results: true
-#methods: ['LAET', 'Auncel', 'Oracle', 'FixedNProbe', 'APS', 'SPANN']
-methods: ['Auncel']
+methods: ['LAET', 'Auncel', 'Oracle', 'FixedNProbe', 'APS', 'SPANN']
+#methods: ['Auncel']
 
 paths:
   index_dir: data/sift1m/indexes
