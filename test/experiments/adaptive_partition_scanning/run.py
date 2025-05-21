@@ -43,6 +43,7 @@ def run_experiment(cfg_path: str, output_dir_str: str):
 
     for method in cfg["methods"]:
         for rt in exp_cfg["recall_targets"]:
+            logger.info(f"Method={method} RecallTarget={rt}")
             per_query_stats = [] # (nprobe, recall, time_ms)
 
             if method == "Oracle":
@@ -94,23 +95,12 @@ def run_experiment(cfg_path: str, output_dir_str: str):
             else:
                 raise ValueError(f"Unknown method: {method}")
 
-
             arr = np.array(per_query_stats, dtype=float)
-            mean_nprobe = arr[:,0].mean()
-            std_nprobe = arr[:,0].std()
-            mean_recall = arr[:,1].mean()
-            std_recall = arr[:,1].std()
-            mean_time_ms = arr[:,2].mean()
-            std_time_ms = arr[:,2].std()
-
-            logger.info(f"Method={method} RecallTarget={rt}, Recall={mean_recall:.4f} (std={std_recall:.4f}), "
-                        f"Time={mean_time_ms:.2f}ms (std={std_time_ms:.2f}ms), NProbe={mean_nprobe:.1f} (std={std_nprobe:.1f})")
-
             records.append({
                 "Method": method, "RecallTarget": rt,
-                "mean_nprobe": mean_nprobe, "std_nprobe": std_nprobe,
-                "mean_recall": mean_recall, "std_recall": std_recall,
-                "mean_time_ms": mean_time_ms, "std_time_ms": std_time_ms,
+                "mean_nprobe": arr[:,0].mean(), "std_nprobe": arr[:,0].std(),
+                "mean_recall": arr[:,1].mean(), "std_recall": arr[:,1].std(),
+                "mean_time_ms": arr[:,2].mean(), "std_time_ms": arr[:,2].std(),
             })
 
     results_df = pd.DataFrame(records)

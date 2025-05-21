@@ -10,6 +10,7 @@
 #include <quake_index.h>
 #include <geometry.h>
 #include <parallel.h>
+//#include "parallel_hashmap/btree.h"
 
 // Constructor
 QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
@@ -451,25 +452,25 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
             }
 
         } else {
-            std::unordered_map<int64_t, shared_ptr<vector<std::pair<int, int>>>> per_partition_query_ids; // for batched scan
+            std::unordered_map<int64_t, shared_ptr<vector<int>>> per_partition_query_ids; // for batched scan
+//            ska::flat_hash_map<int64_t, vector<int>> per_partition_query_ids_map;
+
             for (int64_t q = 0; q < nQ; q++) {
                 for (int64_t p = 0; p < partition_ids.size(1); p++) {
                     int64_t pid = pid_acc[q][p];
                     if (pid < 0) continue;
                     if (per_partition_query_ids[pid] == nullptr) {
-                        per_partition_query_ids[pid] = make_shared<vector<std::pair<int, int>>>();
+                        per_partition_query_ids[pid] = make_shared<vector<int>>();
                     }
-                    per_partition_query_ids[pid]->push_back({q, p});
+                    per_partition_query_ids[pid]->push_back(q);
                 }
             }
             for (auto &kv : per_partition_query_ids) {
 
-                auto qids_and_ranks = kv.second;
-                vector<int> qids(qids_and_ranks->size());
-                vector<int> ranks(qids_and_ranks->size());
-                for (size_t i = 0; i < qids_and_ranks->size(); ++i) {
-                    qids[i] = (*qids_and_ranks)[i].first;
-                    ranks[i] = (*qids_and_ranks)[i].second;
+                auto qids = kv.second;
+                vector<int> ranks(qids->size());
+                for (size_t i = 0; i < qids->size(); ++i) {
+                    ranks[i] = i;
                 }
 
                 ScanJob job;
@@ -478,7 +479,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job.k = params->k;
                 job.query_vector = x.data_ptr<float>();
                 job.num_queries = kv.second->size();
-                job.query_ids = make_shared<vector<int>>(qids);
+                job.query_ids = qids;
                 job.ranks = make_shared<vector<int>>(ranks);
                 int core_id = partition_manager_->get_partition_core_id(kv.first);
                 if (core_id < 0) {
