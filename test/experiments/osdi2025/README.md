@@ -10,19 +10,21 @@ The experiments are organized as follows:
 
 
 ```plaintext
-./test/experiments/osdi2025/
-├── common/                  \# Shared utilities for experiments
-│   └── experiment\_utils.py
-├── experiment\_runner.py     \# Main script to run any experiment
+quake/test/experiments/osdi2025/
+├── experiment_runner.py     \# Main script to run any experiment
+├── experiment_utils.py      \# Shared functionality across experiments
 ├── README.md                \# This file
-├── \<experiment\_name\>/       \# Directory for each specific experiment
+├── paper/                   \# PDF of the paper
+│   ├── Quake.pdf            \# Original Submission
+│   ├── Quake-Revision.pdf   \# Revised Version
+├── <experiment_name>/       \# Directory for each specific experiment
 │   ├── configs/             \# YAML configuration files for the experiment
-│   │   └── \<dataset\_config\>.yaml
+│   │   └── <dataset_config>.yaml
 │   └── run.py               \# Python script to execute the experiment logic
 └── ...                      \# Other experiment directories
 ```
 
-Each experiment directory (e.g., `aps_recall_targets`, `early_termination`) contains its specific logic in `run.py` and configurations in its `configs/` subdirectory. The `common/experiment_utils.py` module provides shared functionality for loading data, configurations, preparing indexes, and plotting, aiming to simplify individual experiment scripts.
+Each experiment directory (e.g., `aps_recall_targets`, `early_termination`) contains its specific logic in `run.py` and configurations in its `configs/` subdirectory. The `experiment_utils.py` module provides shared functionality for loading data, configurations, preparing indexes, and plotting, aiming to simplify individual experiment scripts.
 
 ## Installation
 
