@@ -3,6 +3,7 @@ import time
 import yaml
 import logging
 from pathlib import Path
+from typing import Dict, Any
 
 import torch
 import pandas as pd
@@ -12,6 +13,7 @@ import matplotlib.pyplot as plt
 from quake import QuakeIndex, IndexBuildParams, SearchParams
 from quake.datasets.ann_datasets import load_dataset as quake_load_dataset
 from quake.utils import compute_recall as quake_compute_recall
+from quake.workload_generator import DynamicWorkloadGenerator, WorkloadEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,102 @@ def run_search_trial(
     rec = quake_compute_recall(res.ids, gt_vector.unsqueeze(0), k_val).item()
     partitions_scanned = getattr(res.timing_info, "partitions_scanned", np.nan)
     return partitions_scanned, rec, elapsed_ns / 1e6 # nprobe, recall, time_ms
+
+def generate_dynamic_workload(
+        dataset_main_cfg: Dict[str, Any],
+        workload_generator_cfg: Dict[str, Any],
+        global_output_dir: Path,
+        overwrite_workload: bool
+) -> Path:
+    """
+    Loads dataset and generates the dynamic workload.
+    Returns the path to the workload directory (which is the global_output_dir).
+    """
+    log = logger # Use the logger defined in common_utils
+
+    log.info(f"Preparing dataset '{dataset_main_cfg['name']}' for dynamic workload.")
+    # Assuming common_utils.load_data is defined elsewhere in experiment_utils.py
+    base_vectors, query_vectors, _ = load_data(
+        dataset_main_cfg["name"], dataset_main_cfg.get("path", "")
+    )
+
+    log.info("Setting up DynamicWorkloadGenerator.")
+    generator = DynamicWorkloadGenerator(
+        workload_dir=global_output_dir,
+        base_vectors=base_vectors,
+        metric=dataset_main_cfg["metric"],
+        insert_ratio=workload_generator_cfg["insert_ratio"],
+        delete_ratio=workload_generator_cfg["delete_ratio"],
+        query_ratio=workload_generator_cfg["query_ratio"],
+        update_batch_size=workload_generator_cfg["update_batch_size"],
+        query_batch_size=workload_generator_cfg["query_batch_size"],
+        number_of_operations=workload_generator_cfg["number_of_operations"],
+        initial_size=workload_generator_cfg["initial_size"],
+        cluster_size=workload_generator_cfg["cluster_size"],
+        cluster_sample_distribution=workload_generator_cfg["cluster_sample_distribution"],
+        queries=query_vectors,
+        query_cluster_sample_distribution=workload_generator_cfg["query_cluster_sample_distribution"],
+        seed=workload_generator_cfg["seed"]
+    )
+
+    if not generator.workload_exists() or overwrite_workload:
+        log.info(f"Generating workload in {global_output_dir}...")
+        generator.generate_workload()
+    else:
+        log.info(f"Existing workload found in {global_output_dir} – generation skipped.")
+    return global_output_dir
+
+
+def evaluate_index_on_dynamic_workload(
+        index_config: Dict[str, Any],       # Single entry from the 'indexes' list in YAML
+        index_class_mapping: Dict[str, type], # Maps index type string to class (e.g., {"Quake": QuakeWrapper})
+        workload_data_dir: Path,            # Path where DynamicWorkloadGenerator output (operations, groundtruth) is stored
+        experiment_main_output_dir: Path, # Base output dir for the whole experiment (e.g., .../maintenance_ablation/results/sift1m/)
+        overwrite_idx_results: bool,
+        do_maintenance_flag: bool = False   # Specific to experiments that test maintenance
+):
+    """
+    Evaluates a single index configuration against a pre-generated dynamic workload.
+    Results are saved by WorkloadEvaluator in a subdirectory named after the index.
+    """
+    log = logger # Use the logger defined in common_utils
+    idx_name = index_config["name"]
+    index_type_str = index_config["index"]
+
+    # Determine the directory for this specific index's results
+    idx_specific_output_dir = experiment_main_output_dir / idx_name
+    idx_specific_output_dir.mkdir(parents=True, exist_ok=True)
+
+    per_index_results_csv = idx_specific_output_dir / "results.csv"
+
+    if per_index_results_csv.exists() and not overwrite_idx_results:
+        log.info(f"Results for {idx_name} exist at {per_index_results_csv} – skipping evaluation.")
+        return
+
+    log.info(f"Evaluating index configuration: {idx_name} (Type: {index_type_str})")
+
+    index_class_constructor = index_class_mapping.get(index_type_str)
+    if not index_class_constructor:
+        log.error(f"Unknown index type '{index_type_str}' in mapping for index '{idx_name}'. Skipping.")
+        return
+
+    index_instance = index_class_constructor()
+
+    evaluator = WorkloadEvaluator(
+        workload_dir=workload_data_dir,       # Where operation files are located
+        output_dir=idx_specific_output_dir  # Where this index's results.csv will be saved
+    )
+
+    evaluator.evaluate_workload(
+        name=idx_name,
+        index=index_instance,
+        build_params=index_config.get("build_params", {}),
+        search_params=index_config.get("search_params", {}),
+        m_params=index_config.get("maintenance_params", {}), # Pass maintenance_params
+        do_maintenance=do_maintenance_flag,
+    )
+    log.info(f"Finished evaluating {idx_name}. Results should be in {idx_specific_output_dir}")
+
 
 def save_results_csv(records: list, output_path: Path):
     df = pd.DataFrame(records)

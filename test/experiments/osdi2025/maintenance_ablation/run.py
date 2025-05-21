@@ -1,335 +1,339 @@
 #!/usr/bin/env python3
 """
-Quake maintenance–ablation runner
-─────────────────────────────────
-Extends the original “kick-the-tires” driver with:
-
-1.  *summary_table.csv*      – cumulative times + final partition count
-2.  *summary_table.md*       – Markdown, via **tabulate**
-3.  *time_breakdown.png*     – stacked bars (unchanged)
-4.  *unified_plot.png*       – nine-panel diagnostic (unchanged)
-
-Per-index artefacts (under <output>/<index>/):
-    results.csv              – per-operation log
-    time_breakdown.png       – per-index stacked bars
+Quake Maintenance Policy Ablation Study Runner
+───────────────────────────────────────────────
+This experiment evaluates different maintenance policy configurations within Quake
+under a dynamic workload involving inserts, deletes, and queries.
+It generates detailed reports including:
+1. Per-index CSV logs of operations.
+2. A 9-panel unified plot comparing various metrics across configurations.
+3. A stacked bar chart breaking down cumulative time per operation type.
+4. A summary table (CSV and Markdown) of key performance indicators.
 """
 from __future__ import annotations
 
-import argparse
 import logging
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Any # Added Any for type hinting
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import yaml
 from tabulate import tabulate
 from matplotlib.cm import get_cmap
 from matplotlib.lines import Line2D
 
-# ── quake wrappers ------------------------------------------------------------
-from quake.datasets.ann_datasets import load_dataset
-from quake.index_wrappers.faiss_ivf import FaissIVF
-from quake.index_wrappers.quake import QuakeWrapper
-from quake.workload_generator import DynamicWorkloadGenerator, WorkloadEvaluator
+# Common utilities
+import test.experiments.osdi2025.experiment_utils as common_utils
+
+# Quake specific imports
+from quake.index_wrappers.quake import QuakeWrapper # This experiment only uses QuakeWrapper
+# DynamicWorkloadGenerator and WorkloadEvaluator are now used within common_utils helpers primarily
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s | %(levelname)s | %(message)s")
 log = logging.getLogger(__name__)
 
-# ── constants -----------------------------------------------------------------
+# Constants for plotting remain specific to this experiment's visualization
 OP_STYLE = {
     "query":    dict(ls="-", marker="o", mfc="none", ms=4, lw=1.2),
     "insert":   dict(ls="-", marker="s", mfc="none", ms=4, lw=1.2),
     "delete":   dict(ls="-", marker="^", mfc="none", ms=4, lw=1.2),
     "maintain": dict(ls="None", marker="X", mfc="black", ms=5),
 }
-
 LAT_OPS = ["query", "insert", "delete", "maintain"]
 IDX_LAT_Q, IDX_LAT_I, IDX_LAT_D, IDX_LAT_M = 0, 1, 2, 3
 IDX_PART, IDX_RES, IDX_REC, IDX_TOT, IDX_SPL = 4, 5, 6, 7, 8
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Plot: unified nine-panel diagnostic
-# ══════════════════════════════════════════════════════════════════════════════
-def unified_plot(cfg: Dict, out_dir: Path) -> None:
+
+def unified_plot(cfg: Dict[str, Any], out_dir: Path) -> None:
     styles = cfg["plot"].get("styles", {})
     fig, axs2d = plt.subplots(3, 3, figsize=(18, 12), sharex="col")
     axs = axs2d.flatten()
 
-    # legend handles -----------------------------------------------------------
     idx_handles: List[Line2D] = []
-    for j, idx in enumerate(cfg["indexes"]):
-        nm, st = idx["name"], styles.get(idx["name"], {})
+    for j, idx_cfg in enumerate(cfg.get("indexes", [])): # Added .get for safety
+        nm, st = idx_cfg["name"], styles.get(idx_cfg["name"], {})
         idx_handles.append(Line2D([0], [0],
-                                  color=st.get("color", f"C{j}"),
+                                  color=st.get("color", f"C{j % 10}"),
                                   marker=st.get("marker", "o"),
                                   ls="", markersize=6, label=nm))
 
-    # traces -------------------------------------------------------------------
-    for j, idx in enumerate(cfg["indexes"]):
-        name = idx["name"]
+    max_ops_overall = 0
+
+    for j, idx_cfg in enumerate(cfg.get("indexes", [])):
+        name = idx_cfg["name"]
         st = styles.get(name, {})
-        colour = st.get("color", f"C{j}")
+        colour = st.get("color", f"C{j % 10}")
         marker = st.get("marker", "o")
 
-        csv = out_dir / name / "results.csv"
-        if not csv.exists():
-            log.warning("[unified_plot] %s missing – skipped.", csv)
+        csv_path = out_dir / name / "results.csv"
+        if not csv_path.exists():
+            log.warning("[unified_plot] Results CSV %s missing – skipped for this index.", csv_path)
             continue
-        df = pd.read_csv(csv)
+        try:
+            df = pd.read_csv(csv_path)
+            if df.empty:
+                log.warning(f"[unified_plot] Empty CSV: {csv_path}")
+                continue
+            if 'operation_number' in df.columns and not df['operation_number'].empty:
+                max_ops_overall = max(max_ops_overall, df.operation_number.max())
+        except pd.errors.EmptyDataError:
+            log.warning(f"[unified_plot] Could not read or empty CSV: {csv_path}")
+            continue
 
-        # latency --------------------------------------------------------------
-        for op, ax_idx in zip(LAT_OPS, [IDX_LAT_Q, IDX_LAT_I, IDX_LAT_D, IDX_LAT_M]):
-            ax = axs[ax_idx]
+        # Latency plots
+        for op, ax_idx_val in zip(LAT_OPS, [IDX_LAT_Q, IDX_LAT_I, IDX_LAT_D, IDX_LAT_M]):
+            ax = axs[ax_idx_val]
+            y_val_series = None
             if op == "maintain":
-                sub = df[df.maintenance_time_ms.fillna(0) > 0]
-                y = sub.maintenance_time_ms
-            else:
+                if 'maintenance_time_ms' in df.columns:
+                    sub = df[df.maintenance_time_ms.fillna(0) > 0]
+                    y_val_series = sub.maintenance_time_ms
+            elif 'operation_type' in df.columns and 'latency_ms' in df.columns:
                 sub = df[df.operation_type == op]
-                y = sub.latency_ms
-            if not sub.empty:
-                ax.plot(sub.operation_number, y, color=colour, **OP_STYLE[op])
+                y_val_series = sub.latency_ms
 
-        # partitions -----------------------------------------------------------
-        ax = axs[IDX_PART]
-        sub = df[df.n_list.notna()]
-        if not sub.empty:
-            ax.plot(sub.operation_number, sub.n_list,
-                    color=colour, marker=marker, lw=1.2)
+            if y_val_series is not None and not y_val_series.empty:
+                ax.plot(sub.operation_number, y_val_series, color=colour, **OP_STYLE[op])
 
-        # resident vectors -----------------------------------------------------
-        ax = axs[IDX_RES]
-        sub = df[df.n_resident.notna()]
-        if not sub.empty:
-            ax.plot(sub.operation_number, sub.n_resident,
-                    color=colour, marker=marker, lw=1.2)
+        # Other metric plots
+        plot_specs = [
+            (IDX_PART, 'n_list'), (IDX_RES, 'n_resident'),
+            (IDX_REC, 'recall', lambda d: (d.operation_type == "query") & d.recall.notna()),
+            (IDX_TOT, 'total_cumulative_time',
+             lambda d: pd.Series(np.cumsum(d.latency_ms.fillna(0) + d.maintenance_time_ms.fillna(0)), name='total_cumulative_time')),
+            (IDX_SPL, ['n_splits', 'n_deletes']) # Special handling for splits/deletes
+        ]
 
-        # recall ---------------------------------------------------------------
-        ax = axs[IDX_REC]
-        sub = df[(df.operation_type == "query") & df.recall.notna()]
-        if not sub.empty:
-            ax.plot(sub.operation_number, sub.recall,
-                    color=colour, marker=marker, lw=1.2)
+        for spec_item in plot_specs:
+            ax_idx_val = spec_item[0]
+            metric_name_or_list = spec_item[1]
+            condition_func = spec_item[2] if len(spec_item) > 2 else lambda d: d[metric_name_or_list].notna()
 
-        # running total time ---------------------------------------------------
-        ax = axs[IDX_TOT]
-        total_ms = df.latency_ms.fillna(0) + df.maintenance_time_ms.fillna(0)
-        ax.plot(df.operation_number, np.cumsum(total_ms),
-                color=colour, marker=marker, lw=1.2)
+            ax = axs[ax_idx_val]
 
-        # cumulative splits / deletes -----------------------------------------
-        ax = axs[IDX_SPL]
-        spl, dlt = df.n_splits.fillna(0), df.n_deletes.fillna(0)
-        if (spl > 0).any():
-            ax.step(df.operation_number, np.cumsum(spl),
-                    where="post", color=colour, ls="--", lw=1.2)
-        if (dlt > 0).any():
-            ax.step(df.operation_number, np.cumsum(dlt),
-                    where="post", color=colour, ls=":",  lw=1.2)
+            if ax_idx_val == IDX_TOT: # Cumulative time calculation
+                if 'latency_ms' in df.columns and 'maintenance_time_ms' in df.columns:
+                    total_ms_series = np.cumsum(df.latency_ms.fillna(0) + df.maintenance_time_ms.fillna(0))
+                    if not total_ms_series.empty:
+                        ax.plot(df.operation_number, total_ms_series, color=colour, marker=marker, lw=1.2)
+                continue
 
-    # titles / grids -----------------------------------------------------------
+            if ax_idx_val == IDX_SPL: # Splits and deletes
+                if 'operation_number' in df.columns:
+                    spl_series = df.n_splits.fillna(0) if 'n_splits' in df.columns else pd.Series(0, index=df.index)
+                    del_series = df.n_deletes.fillna(0) if 'n_deletes' in df.columns else pd.Series(0, index=df.index)
+                    if not df.empty:
+                        if (spl_series > 0).any(): ax.step(df.operation_number, np.cumsum(spl_series), where="post", color=colour, ls="--", lw=1.2)
+                        if (del_series > 0).any(): ax.step(df.operation_number, np.cumsum(del_series), where="post", color=colour, ls=":",  lw=1.2)
+                continue
+
+            # General case for other plots
+            if isinstance(metric_name_or_list, str) and metric_name_or_list in df.columns:
+                sub_df = df[condition_func(df)]
+                if not sub_df.empty:
+                    ax.plot(sub_df.operation_number, sub_df[metric_name_or_list], color=colour, marker=marker, lw=1.2)
+
     titles = {
-        IDX_LAT_Q: "Latency – Query",
-        IDX_LAT_I: "Latency – Insert",
-        IDX_LAT_D: "Latency – Delete",
-        IDX_LAT_M: "Latency – Maintain",
-        IDX_PART:  "# Partitions",
-        IDX_RES:   "Resident Vectors",
-        IDX_REC:   "Recall",
-        IDX_TOT:   "Running Total Time",
+        IDX_LAT_Q: "Latency – Query", IDX_LAT_I: "Latency – Insert",
+        IDX_LAT_D: "Latency – Delete", IDX_LAT_M: "Latency – Maintain",
+        IDX_PART:  "# Partitions", IDX_RES:   "Resident Vectors",
+        IDX_REC:   "Recall", IDX_TOT:   "Running Total Time (ms)",
         IDX_SPL:   "Cumulative Splits / Deletes",
     }
-    for i, ax in enumerate(axs):
-        ax.set_title(titles[i], fontsize=11)
-        ax.grid(alpha=0.25, zorder=0)
-        ax.set_axisbelow(True)
+    y_labels_map = {
+        IDX_PART: "Count", IDX_RES: "# Vectors", IDX_REC: "Recall",
+        IDX_TOT: "Cumulative Time (ms)", IDX_SPL: "Count"
+    }
+    for i, ax_val in enumerate(axs):
+        ax_val.set_title(titles[i], fontsize=11)
+        ax_val.grid(True, which="both", ls=":", alpha=0.7)
+        ax_val.set_axisbelow(True)
+        if i in y_labels_map: ax_val.set_ylabel(y_labels_map[i])
+        # Set x-label only for the bottom row of plots
+        if i // 3 == 2 : ax_val.set_xlabel("Operation #")
 
-    axs[IDX_PART].set_ylabel("count")
-    axs[IDX_RES].set_ylabel("# vectors")
-    axs[IDX_REC].set_ylabel("recall")
-    axs[IDX_TOT].set_ylabel("ms")
-    axs[IDX_SPL].set_ylabel("count")
+        is_latency_plot = i in [IDX_LAT_Q, IDX_LAT_I, IDX_LAT_D, IDX_LAT_M]
+        if is_latency_plot: ax_val.set_ylabel("Latency (ms)")
 
-    for idx in [IDX_PART, IDX_RES, IDX_REC, IDX_TOT, IDX_SPL]:
-        axs[idx].set_xlabel("Operation #")
 
-    all_ops = max((pd.read_csv(out_dir / idx["name"] / "results.csv").operation_number.max()
-                   for idx in cfg["indexes"]
-                   if (out_dir / idx["name"] / "results.csv").exists()),
-                  default=None)
-    if all_ops is not None:
-        for ax in axs:
-            ax.set_xlim(left=0, right=all_ops)
+    if max_ops_overall > 0:
+        for ax_val in axs:
+            ax_val.set_xlim(left=0, right=max_ops_overall)
 
-    fig.legend(idx_handles,
-               [h.get_label() for h in idx_handles],
-               loc="upper center", bbox_to_anchor=(0.5, 1.03),
+    fig.legend(idx_handles, [h.get_label() for h in idx_handles],
+               loc="upper center", bbox_to_anchor=(0.5, 1.035),
                ncol=min(4, len(idx_handles)),
-               fontsize=9, title="Index", frameon=False)
+               fontsize=9, title="Index Configuration", frameon=False)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
-    out_path = out_dir / "unified_plot.png"
-    plt.savefig(out_path, dpi=150)
-    log.info("[unified_plot] → %s", out_path)
-    plt.close()
+    plt.tight_layout(rect=[0, 0.03, 1, 0.97])
+    out_plot_path = out_dir / "unified_plot.png"
+    plt.savefig(out_plot_path, dpi=150)
+    log.info("Unified plot saved to %s", out_plot_path)
+    plt.close(fig)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Plot: stacked-bar time breakdown
-# ══════════════════════════════════════════════════════════════════════════════
-def make_time_breakdown(cfg: Dict, out_dir: Path) -> None:
+
+def make_time_breakdown(cfg: Dict[str, Any], out_dir: Path) -> None:
     categories = ["Search", "Insert", "Delete", "Maintain", "Total"]
-    idx_names = [idx["name"] for idx in cfg["indexes"]]
-    totals, recalls = {}, {}
+    totals_data, recall_data = {}, {}
     cmap = get_cmap("tab10")
 
-    for j, idx in enumerate(cfg["indexes"]):
-        name = idx["name"]; csv_path = out_dir / name / "results.csv"
+    for j, idx_cfg in enumerate(cfg.get("indexes", [])):
+        name = idx_cfg["name"]
+        csv_path = out_dir / name / "results.csv"
         if not csv_path.exists():
-            log.warning("[time_breakdown] missing %s – skipped", csv_path)
+            log.warning("[time_breakdown] %s missing – skipped", csv_path)
             continue
-        df = pd.read_csv(csv_path)
-        totals[name] = [
-            df[df.operation_type == "query"].latency_ms.sum(),
-            df[df.operation_type == "insert"].latency_ms.sum(),
-            df[df.operation_type == "delete"].latency_ms.sum(),
-            df.maintenance_time_ms.fillna(0).sum(),
+        try:
+            df = pd.read_csv(csv_path)
+            if df.empty: raise pd.errors.EmptyDataError
+        except pd.errors.EmptyDataError:
+            log.warning(f"[time_breakdown] Empty or unreadable CSV: {csv_path}")
+            continue
+
+        totals_data[name] = [
+            df[df.operation_type == "query"].latency_ms.sum() if 'operation_type' in df.columns else 0,
+            df[df.operation_type == "insert"].latency_ms.sum() if 'operation_type' in df.columns else 0,
+            df[df.operation_type == "delete"].latency_ms.sum() if 'operation_type' in df.columns else 0,
+            df.maintenance_time_ms.fillna(0).sum() if 'maintenance_time_ms' in df.columns else 0,
         ]
-        totals[name].append(sum(totals[name]))
-        recalls[name] = df[df.operation_type == "query"].recall.mean()
+        totals_data[name].append(sum(totals_data[name]))
 
-    n_idx, n_cats = len(totals), len(categories)
-    x = np.arange(n_cats); width = 0.8 / max(1, n_idx)
+        query_df = df[df.operation_type == "query"] if 'operation_type' in df.columns else pd.DataFrame()
+        recall_data[name] = query_df.recall.mean() if not query_df.empty and 'recall' in query_df else np.nan
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for j, (name, values) in enumerate(totals.items()):
-        style = cfg["plot"].get("styles", {}).get(name, {})
-        color = style.get("color", cmap(j % 10))
-        x_off = x + (j - (n_idx - 1) / 2) * width
-        ax.bar(x_off, values, width=width, label=name,
-               color=color, edgecolor="black")
-        ax.text(x_off[0], values[0] * 1.01,
-                f"R={recalls[name]:.3f}", ha="center",
-                va="bottom", fontsize=7, rotation=90, color=color)
 
-    ax.set_xticks(x); ax.set_xticklabels(categories)
-    ax.set_ylabel("Cumulative Time (ms)")
-    ax.set_title("Time Breakdown per Index")
-    ax.legend(title="Index", frameon=False)
+    if not totals_data:
+        log.info("[time_breakdown] No data available for time breakdown plot.")
+        return
+
+    n_idx, n_cats = len(totals_data), len(categories)
+    x_indices = np.arange(n_cats)
+    bar_width = 0.8 / max(1, n_idx)
+
+    fig, ax = plt.subplots(figsize=(max(10, n_idx * 1.5 + 2), 6))
+    for j, (name, values) in enumerate(totals_data.items()):
+        style = cfg.get("plot", {}).get("styles", {}).get(name, {})
+        color = style.get("color", cmap(j % cmap.N))
+        x_offset = x_indices + (j - (n_idx - 1) / 2) * bar_width
+        ax.bar(x_offset, values, width=bar_width, label=name, color=color, edgecolor="black")
+        current_recall = recall_data.get(name)
+        if pd.notna(current_recall) and values[0] > 0:
+            ax.text(x_offset[0], values[0] * 1.01, f"R={current_recall:.3f}",
+                    ha="center", va="bottom", fontsize=8, rotation=90, color='dimgrey') # Standard color for text
+
+    ax.set_xticks(x_indices)
+    ax.set_xticklabels(categories, fontsize=10)
+    ax.set_ylabel("Cumulative Time (ms)", fontsize=10)
+    ax.set_title("Time Breakdown per Index Configuration", fontsize=12)
+    ax.legend(title="Index Configuration", frameon=False, fontsize=9)
+    ax.grid(True, axis='y', linestyle=':', alpha=0.7)
     plt.tight_layout()
 
-    out_path = out_dir / "time_breakdown.png"
-    plt.savefig(out_path, dpi=150)
-    log.info("[time_breakdown] → %s", out_path)
-    plt.close()
+    out_plot_path = out_dir / "time_breakdown.png"
+    plt.savefig(out_plot_path, dpi=150)
+    log.info("Time breakdown plot saved to %s", out_plot_path)
+    plt.close(fig)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Summary table (CSV + Markdown)
-# ══════════════════════════════════════════════════════════════════════════════
-def produce_summary_table(cfg: Dict, out_dir: Path) -> None:
-    """
-    Write summary_table.csv and summary_table.md with columns:
-        Index | Search | Insert | Delete | Maintain | Total | Recall | Partitions
-    Times are cumulative milliseconds; Recall is mean over all queries.
-    """
+
+def produce_summary_table(cfg: Dict[str, Any], out_dir: Path) -> None:
     rows = []
-    for idx in cfg["indexes"]:
-        name     = idx["name"]
+    for idx_cfg in cfg.get("indexes", []):
+        name = idx_cfg["name"]
         csv_path = out_dir / name / "results.csv"
         if not csv_path.exists():
             log.warning("[summary_table] %s missing – skipped", csv_path)
             continue
+        try:
+            df = pd.read_csv(csv_path)
+            if df.empty: raise pd.errors.EmptyDataError
+        except pd.errors.EmptyDataError:
+            log.warning(f"[summary_table] Empty or unreadable CSV: {csv_path}")
+            continue
 
-        df = pd.read_csv(csv_path)
-        search   = df[df.operation_type == "query" ].latency_ms.sum()
-        insert   = df[df.operation_type == "insert"].latency_ms.sum()
-        delete   = df[df.operation_type == "delete"].latency_ms.sum()
-        maintain = df.maintenance_time_ms.fillna(0).sum()
-        total    = search + insert + delete + maintain
-        recall   = df[df.operation_type == "query"].recall.mean()  # ← NEW
-        n_part   = (df.n_list.dropna().iloc[-1]
-                    if not df.n_list.dropna().empty else None)
+        search_time = df[df.operation_type == "query"].latency_ms.sum() if 'operation_type' in df.columns else 0
+        insert_time = df[df.operation_type == "insert"].latency_ms.sum() if 'operation_type' in df.columns else 0
+        delete_time = df[df.operation_type == "delete"].latency_ms.sum() if 'operation_type' in df.columns else 0
+        maintain_time = df.maintenance_time_ms.fillna(0).sum() if 'maintenance_time_ms' in df.columns else 0
+        total_time = search_time + insert_time + delete_time + maintain_time
 
-        rows.append(dict(Index=name,
-                         Search=int(search),
-                         Insert=int(insert),
-                         Delete=int(delete),
-                         Maintain=int(maintain),
-                         Total=int(total),
-                         Recall=f"{recall:.4f}" if pd.notna(recall) else "—",
-                         Partitions=n_part))
+        query_df = df[df.operation_type == "query"] if 'operation_type' in df.columns else pd.DataFrame()
+        recall_val = query_df.recall.mean() if not query_df.empty and 'recall' in query_df else np.nan
+
+        n_list_series = df.n_list.dropna() if 'n_list' in df.columns else pd.Series(dtype=float) # ensure series exists
+        n_partitions_val = n_list_series.iloc[-1] if not n_list_series.empty else np.nan
+
+        rows.append(dict(
+            Index=name, Search=int(search_time), Insert=int(insert_time),
+            Delete=int(delete_time), Maintain=int(maintain_time), Total=int(total_time),
+            Recall=f"{recall_val:.4f}" if pd.notna(recall_val) else "—",
+            Partitions=int(n_partitions_val) if pd.notna(n_partitions_val) else "—"
+        ))
 
     if not rows:
-        log.warning("[summary_table] no data – nothing written")
+        log.info("[summary_table] No data for summary table.")
         return
 
-    df = pd.DataFrame(rows).sort_values("Index")
+    summary_df = pd.DataFrame(rows).sort_values("Index")
+    summary_csv_path = out_dir / "summary_table.csv"
+    common_utils.save_results_csv(summary_df, summary_csv_path) # Use common util
 
-    csv_path = out_dir / "summary_table.csv"
-    df.to_csv(csv_path, index=False)
-    log.info("[summary_table] → %s", csv_path)
+    summary_md_path = out_dir / "summary_table.md"
+    md_content = tabulate(summary_df, headers="keys", tablefmt="github", showindex=False)
+    summary_md_path.write_text(md_content + "\n")
+    log.info("Summary table (Markdown) saved to %s", summary_md_path)
+    log.info("\n%s", md_content)
 
-    md_path = out_dir / "summary_table.md"
-    md = tabulate(df, headers="keys", tablefmt="github", showindex=False)
-    md_path.write_text(md + "\n")
-    log.info("[summary_table] → %s", md_path)
-    log.info("\n%s", md)
-# ══════════════════════════════════════════════════════════════════════════════
-# Main orchestration
-# ══════════════════════════════════════════════════════════════════════════════
-def run_experiment(cfg_path: str, output_dir: str) -> None:
-    cfg = yaml.safe_load(Path(cfg_path).read_text())
-    out = Path(output_dir).expanduser(); out.mkdir(parents=True, exist_ok=True)
 
-    # 1. dataset & workload ----------------------------------------------------
-    if cfg["mode"] in {"build", "run"}:
-        ds = cfg["dataset"]
-        vecs, queries, _ = load_dataset(ds["name"], ds.get("path", ""))
-        gen = DynamicWorkloadGenerator(
-            workload_dir               = out,
-            base_vectors               = vecs,
-            metric                     = ds["metric"],
-            insert_ratio               = cfg["workload_generator"]["insert_ratio"],
-            delete_ratio               = cfg["workload_generator"]["delete_ratio"],
-            query_ratio                = cfg["workload_generator"]["query_ratio"],
-            update_batch_size          = cfg["workload_generator"]["update_batch_size"],
-            query_batch_size           = cfg["workload_generator"]["query_batch_size"],
-            number_of_operations       = cfg["workload_generator"]["number_of_operations"],
-            initial_size               = cfg["workload_generator"]["initial_size"],
-            cluster_size               = cfg["workload_generator"]["cluster_size"],
-            cluster_sample_distribution= cfg["workload_generator"]["cluster_sample_distribution"],
-            queries                    = queries,
-            query_cluster_sample_distribution=cfg["workload_generator"]["query_cluster_sample_distribution"],
-            seed                       = cfg["workload_generator"]["seed"])
-        if not gen.workload_exists() or cfg["overwrite"].get("workload", False):
-            log.info("Generating workload …")
-            gen.generate_workload()
-        else:
-            log.info("Existing workload found – generation skipped.")
+def run_experiment(cfg_path_str: str, output_dir_str: str) -> None:
+    cfg = common_utils.load_config(cfg_path_str)
+    main_output_dir = Path(output_dir_str).expanduser()
+    main_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 2. evaluate --------------------------------------------------------------
-    if cfg["mode"] == "run":
-        for idx in cfg["indexes"]:
-            name, res = idx["name"], out / idx["name"]
-            res.mkdir(parents=True, exist_ok=True)
-            csv = res / "results.csv"
-            if csv.exists() and not cfg["overwrite"].get("results", False):
-                log.info("%s: cached results – skipped.", name); continue
+    current_mode = cfg.get("mode", "run")
+    log.info(f"Running Maintenance Ablation experiment in mode: {current_mode}")
 
-            eval = WorkloadEvaluator(workload_dir=out, output_dir=res)
-            cls  = {"Quake": QuakeWrapper, "IVF": FaissIVF}[idx["index"]]
-            eval.evaluate_workload(
-                name          = name,
-                index         = cls(),
-                build_params  = idx.get("build_params", {}),
-                search_params = idx.get("search_params", {}),
-                m_params      = idx.get("maintenance_params", {}),
-                do_maintenance=True,
+    workload_actual_dir = main_output_dir # Workload files are stored at the top level of main_output_dir
+
+    # --- Phase 1: Dataset and Workload Generation ---
+    if current_mode in {"build", "run"}:
+        workload_actual_dir = common_utils.generate_dynamic_workload(
+            dataset_main_cfg=cfg["dataset"],
+            workload_generator_cfg=cfg["workload_generator"],
+            global_output_dir=main_output_dir, # Pass main_output_dir as the place to store workload files
+            overwrite_workload=cfg["overwrite"].get("workload", False)
+        )
+
+    # --- Phase 2: Index Evaluation ---
+    if current_mode == "run":
+        log.info("Starting index evaluation phase...")
+        # For this specific experiment, the index class is always QuakeWrapper
+        index_class_map = {"Quake": QuakeWrapper}
+
+        for index_conf in cfg.get("indexes", []):
+            common_utils.evaluate_index_on_dynamic_workload(
+                index_config=index_conf,
+                index_class_mapping=index_class_map,
+                workload_data_dir=workload_actual_dir, # Use the returned/set workload_actual_dir
+                experiment_main_output_dir=main_output_dir,
+                overwrite_idx_results=cfg["overwrite"].get("results", False),
+                do_maintenance_flag=True # This experiment always does maintenance
             )
 
-    # 3. global artefacts ------------------------------------------------------
-    if cfg["mode"] in {"run", "plot"}:
-        unified_plot(cfg, out)
-        make_time_breakdown(cfg, out)
-        produce_summary_table(cfg, out)
+    # --- Phase 3: Global Artifact Generation ---
+    if current_mode in {"run", "plot"}:
+        log.info("Generating global plots and summary tables...")
+        any_results_exist = any(
+            (main_output_dir / index_conf["name"] / "results.csv").exists()
+            for index_conf in cfg.get("indexes", [])
+        )
+
+        if any_results_exist:
+            unified_plot(cfg, main_output_dir)
+            make_time_breakdown(cfg, main_output_dir)
+            produce_summary_table(cfg, main_output_dir)
+        else:
+            log.warning("No results found to generate plots or summary tables. Skipping this step.")
+
+    log.info("Maintenance Ablation experiment finished for mode: %s", current_mode)
