@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def load_config(cfg_path: str) -> dict:
     return yaml.safe_load(Path(cfg_path).read_text())
 
-def load_data(dataset_name: str, dataset_path: str, nq_override: int = None):
+def load_data(dataset_name: str, dataset_path: str = "data/", nq_override: int = None):
     vecs, queries, gt = quake_load_dataset(dataset_name, dataset_path)
     if nq_override is not None and nq_override > 0 and nq_override < len(queries):
         queries = queries[:nq_override]

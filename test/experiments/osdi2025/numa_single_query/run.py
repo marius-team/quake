@@ -198,7 +198,6 @@ def run_experiment(cfg_path_str: str, output_dir_str: str) -> None:
     logger.info(f"Loading dataset '{dataset_cfg['name']}' for {num_queries} queries.")
     base_vectors, query_vectors, gt_vectors = common_utils.load_data(
         dataset_cfg["name"],
-        dataset_cfg.get("path", ""), # Allow path in dataset_cfg
         nq_override=num_queries
     )
 
