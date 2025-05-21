@@ -101,6 +101,6 @@ plot:
     LIRE:            {color: "#ffbb78", linestyle: "-",  marker: "P"}
 
 overwrite:
-  workload: true
+  workload: false
   index:   true
   results: true
