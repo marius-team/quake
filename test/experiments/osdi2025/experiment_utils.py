@@ -3,7 +3,10 @@ import time
 import yaml
 import logging
 from pathlib import Path
+import contextlib
+import sys
 from typing import Dict, Any, List
+import os
 
 import torch
 import pandas as pd
@@ -14,7 +17,6 @@ from quake import QuakeIndex, IndexBuildParams, SearchParams
 from quake.datasets.ann_datasets import load_dataset as quake_load_dataset
 from quake.utils import compute_recall as quake_compute_recall
 from quake.workload_generator import DynamicWorkloadGenerator, WorkloadEvaluator
-
 logger = logging.getLogger(__name__)
 
 def load_config(cfg_path: str) -> dict:
@@ -47,8 +49,8 @@ def prepare_quake_index(
         logger.info(f"Building index -> {index_file_path}")
         bp = IndexBuildParams()
         for key, value in build_params_dict.items():
-            if hasattr(bp, key):
-                setattr(bp, key, value)
+            setattr(bp, key, value)
+
         idx.build(vecs, torch.arange(len(vecs)), bp)
         index_file_path.parent.mkdir(parents=True, exist_ok=True)
         idx.save(str(index_file_path))
@@ -238,3 +240,58 @@ def expand_search_sweep(sweep_config: Dict[str, Any]) -> List[Dict[str, Any]]:
     else: # No sweep, just use base_params
         expanded_list.append(base_params)
     return expanded_list
+
+def create_index_build_params(**attrs) -> IndexBuildParams:
+    """Creates a Quake IndexBuildParams object from dictionary attributes."""
+    bp = IndexBuildParams()
+    if 'nc' in attrs and 'nlist' not in attrs: # Allow 'nc' as an alias for 'nlist'
+        attrs['nlist'] = attrs.pop('nc')
+
+    for k, v in attrs.items():
+        if hasattr(bp, k):
+            setattr(bp, k, v)
+        else:
+            logger.warning(f"Attribute '{k}' not found in IndexBuildParams. Ignoring.")
+    return bp
+
+def save_results_df(records: list, output_path: Path):
+    df = pd.DataFrame(records)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path, index=False)
+    logger.info(f"Results saved to {output_path}") # Already logs
+
+@contextlib.contextmanager
+def redirect_all_stdout_to_file(filepath: Path | str, mode: str = 'a'):
+    original_python_stdout = sys.stdout
+    original_c_stdout_fd = -1
+    saved_c_stdout_fd = -1
+    target_file = None
+
+    try:
+        original_c_stdout_fd = sys.stdout.fileno()
+        saved_c_stdout_fd = os.dup(original_c_stdout_fd)
+
+        target_file = open(filepath, mode)
+        target_file_fd = target_file.fileno()
+
+        os.dup2(target_file_fd, original_c_stdout_fd)
+        sys.stdout = target_file
+
+        yield
+
+    except Exception:
+        # util_logger.error(f"Exception during stdout redirection: {e}", exc_info=False) # Removed for brevity
+        raise # Re-raise the exception
+    finally:
+        if sys.stdout == target_file :
+            sys.stdout.flush()
+
+        if original_c_stdout_fd != -1 and saved_c_stdout_fd != -1:
+            os.dup2(saved_c_stdout_fd, original_c_stdout_fd)
+
+        sys.stdout = original_python_stdout
+
+        if target_file:
+            target_file.close()
+        if saved_c_stdout_fd != -1:
+            os.close(saved_c_stdout_fd)

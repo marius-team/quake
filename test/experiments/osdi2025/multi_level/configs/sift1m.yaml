@@ -1,0 +1,61 @@
+# General settings
+overwrite:
+  index_files: false # Set to true to force rebuild L0s on first run of this config
+  results_csv: true  # Re-runs searches and overwrites this config's output CSVs
+
+dataset:
+  name: sift1m       # Using sift1m for a quicker test
+  metric: l2
+  nq: 100             # Reduced number of queries for faster testing
+
+# --- L0 (Base Level) Definitions ---
+l0_definitions:
+  "L0_1k_config":  # L0 with 1000 centroids, suitable for sift1m
+    type: Quake
+    build_params:
+      nlist: 1000
+      num_workers: 0 # Adjust based on your test machine
+  "L0_0.5k_config": # A smaller L0
+    type: Quake
+    build_params:
+      nlist: 500
+      num_workers: 0
+
+# --- Global L0 Search Sweep ---
+# Applies to the L0 of ALL index_hierarchies
+global_l0_search_sweep:
+  nprobes: [1, 5, 10, 20] # Reduced list of nprobes for L0
+  k: 10
+  batch_size: 1
+
+# --- Index Hierarchy Definitions ---
+index_hierarchies:
+#  - name: "SingleLevel_L0_1k" # A single-level index using the 1k L0
+#    l0_ref: "L0_1k_config"
+#    # No parent_levels
+
+  - name: "Hier_L0_1k_L1_30_P5" # L0=1k, L1 groups L0's centroids, L1 nprobe=5
+    l0_ref: "L0_1k_config"
+    parent_levels:
+      - type: Quake # L1 configuration
+        build_params: {nlist: 30, num_workers: 0} # L1 nc groups centroids of L0
+        search_params: {nprobe: 5} # Fixed search params for L1 scan
+
+  - name: "Custom_SingleLevel_L0_0.5k" # Ad-hoc custom L0, used as single-level
+    custom_l0:
+      type: Quake
+      build_params: {nlist: 500, num_workers: 0} # nc should be custom_l0.build_params.nc
+
+# --- General Run Settings ---
+run_settings:
+  trials: 1                # Reduced trials for speed
+  warmup: 0                # No warmup for a quick test
+  default_batch_size: 1
+  omp_threads_build: "16"   # Adjust as needed
+  omp_threads_search: "1"
+
+# --- Plotting Styles ---
+plot_styles:
+  "SingleLevel_L0_1k": {color: "#1f77b4", marker: "o"}
+  "Hier_L0_1k_L1_30_P5": {color: "#ff7f0e", marker: "s"}
+  "Custom_SingleLevel_L0_0.5k": {color: "#2ca02c", marker: "D"}
