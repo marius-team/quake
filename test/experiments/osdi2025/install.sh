@@ -199,7 +199,7 @@ else
   git clone https://github.com/marius-team/quake.git "${QUAKE_FULL_PATH}"
   cd "${QUAKE_FULL_PATH}"
 fi
-git checkout osdi2025_debug
+git checkout osdi2025
 
 git config --global --add safe.directory "${QUAKE_FULL_PATH}" # For root's global config
 SUBMODULE_PATHS=("src/cpp/third_party/concurrentqueue" "src/cpp/third_party/faiss" "src/cpp/third_party/pybind11")
