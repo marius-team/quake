@@ -55,18 +55,6 @@ indexes:
       nprobe: 20
       batched_scan: true
 
-  - name: Quake_0_numa
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 0
-      use_numa: true
-    search_params:
-      nprobe: 20
-      batched_scan: false
-      n_threads: 16
-
   - name: Quake_1_numa
     index: Quake
     build_params:
@@ -76,7 +64,7 @@ indexes:
       use_numa: true
     search_params:
       nprobe: 20
-      batched_scan: false
+      batched_scan: true
 
   - name: Quake_4_numa
     index: Quake
@@ -87,7 +75,7 @@ indexes:
       use_numa: true
     search_params:
       nprobe: 20
-      batched_scan: false
+      batched_scan: true
 
   - name: Quake_16_numa
     index: Quake
@@ -98,7 +86,64 @@ indexes:
       use_numa: true
     search_params:
       nprobe: 20
+      batched_scan: true
+
+  - name: Quake_1_numa_no_batch
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: l2
+      num_workers: 1
+      use_numa: true
+    search_params:
+      nprobe: 20
       batched_scan: false
+
+  - name: Quake_2_numa_no_batch
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: l2
+      num_workers: 2
+      use_numa: true
+    search_params:
+      nprobe: 20
+      batched_scan: false
+
+  - name: Quake_4_numa_no_batch
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: l2
+      num_workers: 4
+      use_numa: true
+    search_params:
+      nprobe: 20
+      batched_scan: false
+
+  - name: Quake_8_numa_no_batch
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: l2
+      num_workers: 8
+      use_numa: true
+    search_params:
+      nprobe: 20
+      batched_scan: false
+
+
+  - name: Quake_16_numa_no_batch
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: l2
+      num_workers: 16
+      use_numa: true
+    search_params:
+      nprobe: 20
+      batched_scan: false
+
 
 #  - name: FaissIVF
 #    index: IVF
