@@ -57,6 +57,51 @@ def prepare_quake_index(
         logger.info(f"Index saved to {index_file_path}")
     return idx
 
+
+def prepare_wrapper_index(
+        IndexClass: type,
+        index_file_path: Path,
+        base_vectors: torch.Tensor,
+        build_params: Dict[str, Any],
+        force_rebuild: bool = False,
+        load: bool = True
+) -> object: # Returns an instance of the IndexClass
+
+    idx_instance = IndexClass()
+    index_file_path.parent.mkdir(parents=True, exist_ok=True)
+    build_params_copy = build_params.copy()
+
+    if index_file_path.exists() and not force_rebuild:
+        logger.info(f"Index file {index_file_path} exists and force_rebuild is False.")
+        if load:
+            logger.info(f"Loading index from {index_file_path}")
+            load_kwargs = {}
+            if "num_workers" in build_params_copy:
+                load_kwargs["num_workers"] = build_params_copy.get("num_workers")
+            if "use_numa" in build_params_copy:
+                load_kwargs["use_numa"] = build_params_copy.get("use_numa")
+            if "parent_num_workers" in build_params_copy:
+                load_kwargs["parent_num_workers"] = build_params_copy.get("parent_num_workers")
+
+            idx_instance.load(str(index_file_path), **load_kwargs)
+            logger.info(f"Loaded index from {index_file_path} with load_kwargs: {load_kwargs}")
+        else:
+            logger.info(f"Index file {index_file_path} exists, but load=False. Returning new, non-loaded instance.")
+    else:
+        if force_rebuild and index_file_path.exists():
+            logger.info(f"Force rebuilding index at {index_file_path}")
+        else:
+            logger.info(f"Building index at {index_file_path} (file did not exist).")
+
+        idx_instance.build(base_vectors, **build_params_copy)
+        idx_instance.save(str(index_file_path))
+        logger.info(f"Built and saved index to {index_file_path}")
+
+        if load:
+            logger.info(f"Index built. Instance is considered ready as per build_params (load=True).")
+
+    return idx_instance
+
 def create_search_params(**attrs) -> SearchParams:
     sp = SearchParams()
     for k, v in attrs.items():

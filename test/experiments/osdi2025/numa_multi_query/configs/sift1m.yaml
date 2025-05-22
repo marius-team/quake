@@ -6,7 +6,7 @@ dataset:
 
 trials: 3
 warmup: 1
-overwrite: false  # Set to true to force all indexes to rerun
+overwrite: true  # Set to true to force all indexes to rerun
 force_rebuild: false  # Set to true to force all indexes to rebuild
 
 indexes:

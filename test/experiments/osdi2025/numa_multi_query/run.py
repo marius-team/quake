@@ -95,15 +95,12 @@ def run_experiment(cfg_path_str: str, output_dir_str: str):
     if quake_base_build_params:
         if not shared_quake_index_file.exists() or force_rebuild: # Respect overwrite for base index too
             logger.info(f"Building shared Quake base index at {shared_quake_index_file}...")
-            # Using common_utils.prepare_index for this specialized build.
-            # It requires IndexClass, build_params, base_vectors, path, force_rebuild.
-            common_utils.prepare_index(
+            common_utils.prepare_wrapper_index(
                 IndexClass=QuakeWrapper,
-                index_build_params=quake_base_build_params,
-                base_vectors=base_vectors,
                 index_file_path=shared_quake_index_file,
+                build_params=quake_base_build_params,
+                base_vectors=base_vectors,
                 force_rebuild=force_rebuild, # Force rebuild if top-level overwrite is true
-                save_after_build=True
             )
             logger.info(f"Shared Quake base index saved at {shared_quake_index_file}")
         else:
