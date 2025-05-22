@@ -1,7 +1,7 @@
 # numa_latency_experiment.yaml
 dataset:
   name: sift1m
-  num_queries: 1000
+  num_queries: 10000
   k: 100
 
 trials: 3
