@@ -78,7 +78,6 @@ def run_experiment(cfg_path_str: str, output_dir_str: str):
     # Use common_utils.load_data, pass num_queries_to_use for slicing
     base_vectors, query_vectors, gt_vectors = common_utils.load_data(
         dataset_cfg["name"],
-        dataset_path="", # Assuming load_data handles default path or it's in dataset_cfg
         nq_override=num_queries_to_use
     )
 
