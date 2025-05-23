@@ -464,7 +464,11 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
             }
         }
 
-        bool scan_all = partition_ids.size(1) == partition_manager_->nlist();
+        int nlist = partition_manager_->nlist();
+        bool scan_all = false;
+        if (nlist == 1) {
+            scan_all = true;
+        }
 
         /* Emit ScanJobs, already split into ≤ MAX_SUBBATCH chunks -------------- */
         for (int64_t pid = 0; pid < (int64_t)qlist.size(); ++pid) {
