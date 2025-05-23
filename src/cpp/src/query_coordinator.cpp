@@ -66,6 +66,9 @@ void QueryCoordinator::allocate_core_resources(int core_idx,
     }
 }
 
+
+
+
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     CoreResources &res = core_resources_[core_index];
     int numa_node = 0;
@@ -79,10 +82,8 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     int i = 0;
     while (!stop_workers_) {
         int64_t jid = 0;
-        if (!res.job_queue.try_dequeue(jid)) {
-            std::this_thread::sleep_for(std::chrono::microseconds(20));
-            continue;
-        }
+
+        res.job_queue.wait_dequeue(jid);
 
         if (jid == -1) {
             break;
@@ -493,88 +494,99 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
     }
 }
 
-void QueryCoordinator::drain_and_apply_aps(Tensor x,
-                                           Tensor partition_ids,
-                                           bool use_aps,
-                                           float recall_target,
-                                           float aps_flush_period_us,
-                                           shared_ptr<SearchTimingInfo> timing)
+
+void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
+                                           Tensor                      partition_ids,
+                                           bool                        use_aps,
+                                           float                       recall_target,
+                                           float                       aps_flush_period_us,
+                                           std::shared_ptr<SearchTimingInfo> timing)
 {
-    // precompute boundary distances if needed
-    int nQ = x.size(0);
-    int D = x.size(1);
-    int nprobe = partition_ids.size(1);
-    vector<vector<float>> boundary_dist(nQ);
-    vector<float> query_radius(nQ, 0.0f);
-    vector<vector<float>> probs(nQ);
-    if (use_aps) {
+    const int64_t nQ      = x.size(0);
+    const int64_t D       = x.size(1);
+    const int64_t nprobe  = partition_ids.size(1);
+    const auto    aps_dur = std::chrono::microseconds(
+            static_cast<int64_t>(aps_flush_period_us));
 
-        for (int64_t q = 0; q < nQ; ++q) {
-            vector<int64_t> partition_ids_to_scan_vec = std::vector<int64_t>(partition_ids[q].data_ptr<int64_t>(),
-                                                                             partition_ids[q].data_ptr<int64_t>() + partition_ids[q].size(0));
-            vector<float *> cluster_centroids = parent_->partition_manager_->get_vectors(partition_ids_to_scan_vec);
-            boundary_dist[q] = compute_boundary_distances(x[q], cluster_centroids,  metric_ == faiss::METRIC_L2);
-        }
+    /* ------------------------------------------------------------------------ */
+    /*  Book-keeping                                                            */
+    /* ------------------------------------------------------------------------ */
+    std::vector<int> parts_left(nQ, 0);
+    std::atomic<int64_t> total_left{0};
 
+    for (int64_t q = 0; q < nQ; ++q) {
+        for (int64_t p = 0; p < nprobe; ++p)
+            if (!job_flags_[q][p]) { ++parts_left[q]; ++total_left; }
     }
 
-    auto last_flush = high_resolution_clock::now();
-
-    int64_t jobsReceived = 0;
-    while (true) {
-        // 1) drain all ready results
-        ResultJob rj;
-        while (result_queue_.try_dequeue(rj)) {
-            ++jobsReceived;
-            global_topk_buffer_pool_[rj.query_id]
-                    ->batch_add(rj.distances.data(),
-                                rj.indices.data(),
-                                (int)rj.indices.size());
-
-            job_flags_[rj.query_id][rj.rank] = true;
-        }
-        // 2) check done
-        bool all_done = true;
+    /*  APS pre-computations  -------------------------------------------------- */
+    std::vector<float>                query_radius(nQ, 0.0f);
+    std::vector<std::vector<float>>   boundary_dist(nQ);
+    std::vector<std::vector<float>>   probs(nQ);
+    if (use_aps) {
+        query_radius.resize(nQ);
+        boundary_dist.resize(nQ);
+        probs.resize(nQ);
         for (int64_t q = 0; q < nQ; ++q) {
-            for (int64_t p = 0; p < nprobe; ++p) {
-                if (!job_flags_[q][p]) {
-                    all_done = false;
-                    break;
+            std::vector<int64_t> pids(partition_ids[q].data_ptr<int64_t>(),
+                                      partition_ids[q].data_ptr<int64_t>()+nprobe);
+            auto centroids = parent_->partition_manager_->get_vectors(pids);
+            centroids.erase(std::remove(centroids.begin(), centroids.end(), nullptr),
+                            centroids.end());
+            boundary_dist[q] =
+                    compute_boundary_distances(x[q], centroids, metric_==faiss::METRIC_L2);
+        }
+    }
+
+    ResultJob rj;
+    while (total_left.load(std::memory_order_relaxed) > 0) {
+
+        /* -- Wait for result or APS timeout -- */
+        bool got_result = result_queue_.wait_dequeue_timed(rj, aps_dur);
+
+        if (got_result) {
+            do {   // Drain *all* currently available results.
+                auto &buf = global_topk_buffer_pool_[rj.query_id];
+                buf->batch_add(rj.distances.data(), rj.indices.data(),
+                               static_cast<int>(rj.indices.size()));
+
+                if (!job_flags_[rj.query_id][rj.rank]) {
+                    job_flags_[rj.query_id][rj.rank] = true;
+                    --parts_left[rj.query_id];
+                    --total_left;
+                }
+            } while (result_queue_.try_dequeue(rj));
+
+            continue;   // Skip APS; we just did useful work.
+        }
+
+        /* (b) Timeout fired → run APS once. */
+        if (use_aps) {
+            for (int64_t q = 0; q < nQ; ++q) {
+                if (parts_left[q] == 0) continue;
+
+                auto &buf = global_topk_buffer_pool_[q];
+                const float r = buf->get_kth_distance();
+                if (r != query_radius[q]) {
+                    query_radius[q] = r;
+                    probs[q] = compute_recall_profile(
+                            boundary_dist[q], r, D, {}, true, metric_==faiss::METRIC_L2);
+                }
+
+                float cum = 0.0f;
+                for (int64_t p = 0; p < nprobe; ++p)
+                    if (job_flags_[q][p]) cum += probs[q][p];
+
+                if (cum >= recall_target) {
+                    for (int64_t p = 0; p < nprobe; ++p)
+                        if (!job_flags_[q][p]) {
+                            job_flags_[q][p] = true;
+                            --parts_left[q];
+                            --total_left;
+                        }
                 }
             }
         }
-        if (all_done) break;
-
-        // 3) APS early-stop
-        if (use_aps && duration_cast<microseconds>(high_resolution_clock::now() - last_flush).count()
-                       > aps_flush_period_us)
-        {
-            for (int64_t q = 0; q < nQ; ++q) {
-                auto buf = global_topk_buffer_pool_[q];
-                    float r = buf->get_kth_distance();
-                    if (r != query_radius[q]) {
-                        query_radius[q] = r;
-                        probs[q] = compute_recall_profile(
-                                boundary_dist[q],
-                                r,
-                                D,
-                                {},
-                                true,
-                                metric_==faiss::METRIC_L2
-                        );
-                    }
-                    float cum=0;
-                    for (int i=0; i<(int)job_flags_[q].size(); ++i)
-                        if (job_flags_[q][i]) cum += probs[q][i];
-                    if (cum > recall_target) {
-                        // set all jobs to done
-                        for (int i=0; i<(int)job_flags_[q].size(); ++i)
-                            job_flags_[q][i] = true;
-                    }
-                }
-            }
-            last_flush = high_resolution_clock::now();
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
 }
 

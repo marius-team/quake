@@ -29,10 +29,11 @@ using torch::Tensor;
 static const int64_t DIM = 128;
 static const int64_t NUM_VECTORS = 100000;   // number of database vectors
 static const int64_t N_LIST = 1000;           // number of clusters for IVF
-static const int64_t NUM_QUERIES = 10;     // number of queries for search benchmark
-static const int64_t K = 10;                  // top-K neighbors
+static const int64_t NUM_QUERIES = 10000;     // number of queries for search benchmark
+static const int64_t K = 1;                  // top-K neighbors
 static const int64_t N_PROBE = 20;             // number of probes for IVF
 static const int64_t N_WORKERS = 12;           // number of workers for parallel query coordinator
+static const int64_t N_PARENT_WORKERS = 12;
 
 // Helper functions to generate random data and sequential IDs
 static Tensor generate_data(int64_t num, int64_t dim) {
@@ -117,6 +118,8 @@ protected:
         build_params->metric = "l2";
         build_params->niter = 3;
         build_params->num_workers = N_WORKERS;
+        build_params->parent_params = std::make_shared<IndexBuildParams>();
+        build_params->parent_params->num_workers = N_PARENT_WORKERS;
         index_->build(data_, ids_, build_params);
     }
 };
@@ -305,6 +308,8 @@ TEST_F(QuakeWorkerIVFBenchmark, SearchBatch) {
     search_params->k = K;
     search_params->nprobe = N_PROBE;
     search_params->batched_scan = true;
+    search_params->parent_params = std::make_shared<SearchParams>();
+    search_params->parent_params->batched_scan = true;
 
     index_->search(queries, search_params);
 

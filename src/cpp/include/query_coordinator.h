@@ -10,7 +10,9 @@
 #include <common.h>
 #include <list_scanning.h>
 #include <maintenance_policies.h>
+#include <sorting/readerwriterqueue.h>
 #include <concurrentqueue.h>
+#include "blockingconcurrentqueue.h"
 
 class QuakeIndex;
 class PartitionManager;
@@ -57,7 +59,8 @@ public:
     struct CoreResources {
         int core_id;
         std::vector<std::shared_ptr<TopkBuffer>> topk_buffer_pool;
-        moodycamel::ConcurrentQueue<int64_t> job_queue;
+//        moodycamel::ConcurrentQueue<int64_t> job_queue;
+        moodycamel::BlockingReaderWriterQueue<int64_t> job_queue;
 
         // Thread-local buffers for batched queries
         float*    batch_queries       = nullptr;  // batched query buffer (NUMA-allocated)
@@ -79,10 +82,10 @@ public:
         std::vector<int64_t>   indices;
     };
 
-
     vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.
     vector<NUMAResources> numa_resources_;
-    moodycamel::ConcurrentQueue<ResultJob> result_queue_;
+    moodycamel::BlockingConcurrentQueue<ResultJob> result_queue_;
+//    moodycamel::ConcurrentQueue<ResultJob> result_queue_;
 
     bool workers_initialized_ = false;                 ///< Flag indicating if worker threads are initialized.
     int num_workers_;                                  ///< Total number of worker threads.
