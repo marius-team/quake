@@ -253,13 +253,9 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         return;
     }
 
-    // Sub-batching
-    static constexpr int64_t MAX_SUBBATCH = 128;
-
     // 1) Prepare per-thread buffers *once* up to MAX_SUBBATCH
     size_t cap = std::min(100 * K, 10000);
-    int64_t queries_req = std::min(Q, MAX_SUBBATCH);
-
+    int64_t queries_req = Q;
 
     if (res.topk_buffer_pool.size() < (size_t)queries_req) {
         res.topk_buffer_pool.resize(queries_req);
@@ -288,12 +284,8 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         res.batch_res_capacity = max_r;
     }
 
-    // 2) Process in sub-batches
-    for (int64_t offset = 0; offset < Q; offset += MAX_SUBBATCH) {
-        int64_t chunk = std::min(Q - offset, MAX_SUBBATCH);
-
         // reset only the first 'chunk' TopK buffers
-        for (int64_t i = 0; i < chunk; ++i) {
+        for (int64_t i = 0; i < Q; ++i) {
             auto &buf = res.topk_buffer_pool[i];
             buf->set_k(K);
             buf->reset();
@@ -303,31 +295,30 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         float init_val = (metric_ == faiss::METRIC_INNER_PRODUCT)
                          ? -std::numeric_limits<float>::infinity()
                          :  std::numeric_limits<float>::infinity();
-        std::fill_n(res.batch_distances, chunk * K, init_val);
-        std::fill_n(res.batch_ids,       chunk * K, -1LL);
+        std::fill_n(res.batch_distances, Q * K, init_val);
+        std::fill_n(res.batch_ids,       Q * K, -1LL);
 
         // gather queries
         float *qptr = nullptr;
         if (job.scan_all) {
-            qptr = nr.local_query_buffer + offset * D;
+            qptr = nr.local_query_buffer;
         } else {
             float *dst = res.batch_queries;
-            for (int64_t i = 0; i < chunk; ++i) {
-                int qid = (*job.query_ids)[offset + i];
+            for (int64_t i = 0; i < Q; ++i) {
+                int qid = (*job.query_ids)[i];
                 const float *src = nr.local_query_buffer + size_t(qid) * D;
                 std::memcpy(dst + i * D, src, D * sizeof(float));
             }
             qptr = dst;
         }
         // run the scan on this chunk
-
         int64_t scan_setup_time = 0;
         int64_t scan_time = 0;
         int64_t scan_push_time = 0;
         batched_scan_list(
                 qptr,
                 codes, ids,
-                chunk, part_size, D,
+                Q, part_size, D,
                 res.topk_buffer_pool,
                 &scan_setup_time,
                 &scan_time,
@@ -343,10 +334,10 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
 
         // collect results for this chunk
         std::vector<ResultJob> results_batch;
-        results_batch.reserve(chunk);
-        for (int64_t i = 0; i < chunk; ++i) {
-            int global_q = (*job.query_ids)[offset + i];
-            int rank_q   = (*job.ranks)    [offset + i];
+        results_batch.reserve(Q);
+        for (int64_t i = 0; i < Q; ++i) {
+            int global_q = (*job.query_ids)[i];
+            int rank_q   = (*job.ranks)    [i];
             auto tv = res.topk_buffer_pool[i]->get_topk();
             auto ti = res.topk_buffer_pool[i]->get_topk_indices();
             results_batch.emplace_back(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
@@ -363,7 +354,6 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         );
         end = std::chrono::high_resolution_clock::now();
         res.enqueue_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-    }
 }
 
 void QueryCoordinator::init_global_buffers(int64_t nQ,
