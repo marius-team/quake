@@ -449,6 +449,9 @@ inline void batched_scan_list(const float *query_vecs,
                               int list_size,
                               int dim,
                               vector<shared_ptr<TopkBuffer>> &topk_buffers,
+                              int64_t *setup_time,
+                              int64_t *scan_time,
+                              int64_t *push_time,
                               MetricType metric = faiss::METRIC_L2,
                               float *distances = nullptr,
                               int64_t *labels = nullptr) {
@@ -456,6 +459,8 @@ inline void batched_scan_list(const float *query_vecs,
         // No list vectors to process;
         return;
     }
+
+    auto s1 = high_resolution_clock::now();
 
     // Ensure k does not exceed list_size
     int k = topk_buffers[0]->k_;
@@ -468,6 +473,8 @@ inline void batched_scan_list(const float *query_vecs,
         distances = (float *) malloc(num_queries * k_max * sizeof(float));
     }
 
+    auto s2 = high_resolution_clock::now();
+
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
         faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
@@ -477,6 +484,9 @@ inline void batched_scan_list(const float *query_vecs,
     } else {
         throw std::runtime_error("Metric type not supported");
     }
+
+    auto s3 = high_resolution_clock::now();
+
 
     // map the labels to the actual list_ids
     if (list_ids != nullptr) {
@@ -503,6 +513,12 @@ inline void batched_scan_list(const float *query_vecs,
         free(distances);
         free(labels);
     }
+
+    auto s4 = high_resolution_clock::now();
+
+    *setup_time = duration_cast<nanoseconds>(s2 - s1).count();
+    *scan_time = duration_cast<nanoseconds>(s3 - s2).count();
+    *push_time = duration_cast<nanoseconds>(s4 - s3).count();
 }
 
 // }

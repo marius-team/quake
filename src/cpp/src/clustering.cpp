@@ -280,6 +280,9 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
             vector<shared_ptr<TopkBuffer> > buffers = create_buffers(nvec, 1, false);
 
             // Use batched_scan_list to get nearest centroid for each vector.
+            int64_t scan_setup_time = 0;
+            int64_t scan_time = 0;
+            int64_t scan_push_time = 0;
             batched_scan_list(part_vecs,
                               centroids_ptr,
                               nullptr,
@@ -287,6 +290,9 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
                               n_clusters,
                               d,
                               buffers,
+                                &scan_setup_time,
+                                &scan_time,
+                                &scan_push_time,
                               metric);
 
             // For each vector in this partition, determine its assignment.

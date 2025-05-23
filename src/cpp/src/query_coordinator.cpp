@@ -234,6 +234,8 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
                                           CoreResources &res,
                                           NUMAResources &nr) {
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     // Total queries, Top-K, dimension, NUMA node
     int64_t Q    = job.num_queries;
     int     K    = job.k;
@@ -317,27 +319,27 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
             }
             qptr = dst;
         }
-
-        for (int64_t i = 0; i < chunk; i += 4) {
-            __builtin_prefetch(qptr + i * D, /* rw = */ 0, /* locality = */ 3);
-        }
-        // PREFETCH: warm up the partition codes and ids
-        __builtin_prefetch(codes, 0, 3);
-        __builtin_prefetch(ids,  0, 3);
-
-        auto start = std::chrono::high_resolution_clock::now();
         // run the scan on this chunk
+
+        int64_t scan_setup_time = 0;
+        int64_t scan_time = 0;
+        int64_t scan_push_time = 0;
         batched_scan_list(
                 qptr,
                 codes, ids,
                 chunk, part_size, D,
                 res.topk_buffer_pool,
+                &scan_setup_time,
+                &scan_time,
+                &scan_push_time,
                 metric_,
                 res.batch_distances,
                 res.batch_ids
         );
-        auto end = std::chrono::high_resolution_clock::now();
-        res.process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
+        res.scan_setup_time_ns += scan_setup_time;
+        res.scan_time_ns += scan_time;
+        res.scan_push_time_ns += scan_push_time;
 
         // collect results for this chunk
         std::vector<ResultJob> results_batch;
@@ -349,6 +351,10 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
             auto ti = res.topk_buffer_pool[i]->get_topk_indices();
             results_batch.emplace_back(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
         }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        res.process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
         start = std::chrono::high_resolution_clock::now();
         // enqueue this sub-batch in bulk
         result_queue_.enqueue_bulk(
@@ -680,11 +686,17 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     vector<int64_t> core_process_time_ns(num_workers_, 0);
     vector<int64_t> core_enqueue_time_ns(num_workers_, 0);
     vector<int64_t> core_job_time_ns(num_workers_, 0);
+    vector<int64_t> core_scan_setup_time_ns(num_workers_, 0);
+    vector<int64_t> core_scan_time_ns(num_workers_, 0);
+    vector<int64_t> core_scan_push_time_ns(num_workers_, 0);
     for (int i = 0; i < num_workers_; ++i) {
         core_wait_time_ns[i] = core_resources_[i].wait_time_ns;
         core_process_time_ns[i] = core_resources_[i].process_time_ns;
         core_enqueue_time_ns[i] = core_resources_[i].enqueue_time_ns;
         core_job_time_ns[i] = core_resources_[i].job_time_ns;
+        core_scan_setup_time_ns[i] = core_resources_[i].scan_setup_time_ns;
+        core_scan_time_ns[i] = core_resources_[i].scan_time_ns;
+        core_scan_push_time_ns[i] = core_resources_[i].scan_push_time_ns;
     }
 
     auto s1 = high_resolution_clock::now();
@@ -731,13 +743,21 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         core_process_time_ns[i] = core_resources_[i].process_time_ns - core_process_time_ns[i];
         core_enqueue_time_ns[i] = core_resources_[i].enqueue_time_ns - core_enqueue_time_ns[i];
         core_job_time_ns[i] = core_resources_[i].job_time_ns - core_job_time_ns[i];
+        core_scan_setup_time_ns[i] = core_resources_[i].scan_setup_time_ns - core_scan_setup_time_ns[i];
+        core_scan_time_ns[i] = core_resources_[i].scan_time_ns - core_scan_time_ns[i];
+        core_scan_push_time_ns[i] = core_resources_[i].scan_push_time_ns - core_scan_push_time_ns[i];
     }
 
 
     // print out the per-core resource timers;
     for (int i = 0; i < num_workers_; ++i) {
         std::cout << "[QueryCoordinator::worker_scan] Core " << i << ": "
+                    << "job_counter=" << core_resources_[i].job_counter << " "
+                    << "queries_counter=" << core_resources_[i].queries_counter << " "
                   << "wait_time_ms=" << (float) core_wait_time_ns[i] / 1e6 << " "
+                    << "scan_setup_time_ms=" << (float) core_scan_setup_time_ns[i] / 1e6 << " "
+                    << "scan_time_ms=" << (float) core_scan_time_ns[i] / 1e6 << " "
+        << "scan_push_time_ms=" << (float) core_scan_push_time_ns[i] / 1e6 << " "
                   << "process_time_ms=" << (float) core_process_time_ns[i] / 1e6 << " "
                   << "enqueue_time_ms=" << (float) core_enqueue_time_ns[i] / 1e6 << " "
                   << "job_time_ms=" << (float) core_job_time_ns[i] / 1e6 << std::endl;
@@ -1163,6 +1183,11 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
         vector<shared_ptr<TopkBuffer>> local_buffers = create_buffers(batch_size, k, (metric_ == faiss::METRIC_INNER_PRODUCT));
 
         // Perform a single batched scan on the partition.
+
+        int64_t scan_setup_time = 0;
+        int64_t scan_time = 0;
+        int64_t scan_push_time = 0;
+
         batched_scan_list(x_subset.data_ptr<float>(),
                           list_codes,
                           list_ids,
@@ -1170,6 +1195,9 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
                           list_size,
                           d,
                           local_buffers,
+                          &scan_setup_time,
+                            &scan_time,
+                            &scan_push_time,
                           metric_);
 
         // Merge the local results into the corresponding global buffers.

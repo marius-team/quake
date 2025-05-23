@@ -71,7 +71,10 @@ public:
         int64_t job_counter = 0; ///< Job counter for this core.
         int64_t queries_counter = 0; ///< Number of queries processed by this core.
         int64_t wait_time_ns = 0; ///< Time spent waiting for jobs.
-        int64_t process_time_ns = 0; ///< Time spent scanning.
+        int64_t process_time_ns = 0; ///< Time spent processing jobs.
+        int64_t scan_setup_time_ns = 0; ///< Time spent on scan setup.
+        int64_t scan_time_ns = 0; ///< Time spent on scanning.
+        int64_t scan_push_time_ns = 0; ///< Time spent pushing results.
         int64_t enqueue_time_ns = 0; ///< Time spent enqueuing.
         int64_t job_time_ns = 0; ///< Time spent on job processing (excluding waiting).
     };
