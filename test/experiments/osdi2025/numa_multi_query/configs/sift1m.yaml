@@ -1,8 +1,8 @@
 # numa_latency_experiment.yaml
 dataset:
   name: sift1m
-  num_queries: 1000
-  k: 100
+  num_queries: 10000
+  k: 1
 
 trials: 3
 warmup: 1
@@ -19,7 +19,7 @@ indexes:
       use_numa: false
       parent_num_workers: 1
     search_params:
-      nprobe: 200
+      nprobe: 20
       batched_scan: true
 #
 #  - name: Quake_16_numa

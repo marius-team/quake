@@ -765,7 +765,7 @@ void QueryCoordinator::shutdown_workers() {
     stop_workers_.store(true);
     // Enqueue a special shutdown job for each core.
     for (auto &res : numa_resources_) {
-        for (int i = 0; i < num_workers_; ++i)
+        for (int i = 0; i < num_workers_ * 5; ++i)
             res.job_queue.enqueue(-1);
     }
     // Join all worker threads.
