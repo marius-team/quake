@@ -15,57 +15,57 @@ indexes:
     build_params:
       nc: 1000
       metric: l2
-      num_workers: 16
+      num_workers: 12
       use_numa: false
-      parent_num_workers: 4
+      parent_num_workers: 1
     search_params:
-      nprobe: 20
+      nprobe: 200
       batched_scan: true
+#
+#  - name: Quake_16_numa
+#    index: Quake
+#    build_params:
+#      nc: 1000
+#      metric: l2
+#      num_workers: 16
+#      use_numa: true
+#      parent_num_workers: 4
+#    search_params:
+#      nprobe: 20
+#      batched_scan: true
+#
+#  - name: Quake_16_numa_no_batch
+#    index: Quake
+#    build_params:
+#      nc: 1000
+#      metric: l2
+#      num_workers: 16
+#      use_numa: true
+#      parent_num_workers: 4
+#    search_params:
+#      nprobe: 20
+#      batched_scan: false
 
-  - name: Quake_16_numa
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 16
-      use_numa: true
-      parent_num_workers: 4
-    search_params:
-      nprobe: 20
-      batched_scan: true
-
-  - name: Quake_16_numa_no_batch
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 16
-      use_numa: true
-      parent_num_workers: 4
-    search_params:
-      nprobe: 20
-      batched_scan: false
-
-  - name: FaissIVF
-    index: IVF
-    build_params:
-      nc: 1000
-      metric: l2
-    search_params:
-      nprobe: 20
-      omp_num_threads_search: 16
-
-
-  - name: FaissHNSW
-    index: HNSW
-    build_params:
-      m: 64
-      ef_construction: 128
-      metric: l2
-      omp_num_threads_build: 32
-    search_params:
-      ef_search: 128
-      omp_num_threads_search: 32
+#  - name: FaissIVF
+#    index: IVF
+#    build_params:
+#      nc: 1000
+#      metric: l2
+#    search_params:
+#      nprobe: 20
+#      omp_num_threads_search: 16
+#
+#
+#  - name: FaissHNSW
+#    index: HNSW
+#    build_params:
+#      m: 64
+#      ef_construction: 128
+#      metric: l2
+#      omp_num_threads_build: 32
+#    search_params:
+#      ef_search: 128
+#      omp_num_threads_search: 32
 
 #
 #  - name: SCANN

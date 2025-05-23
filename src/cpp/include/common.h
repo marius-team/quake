@@ -75,6 +75,7 @@ constexpr bool DEFAULT_PRECOMPUTED = true;               ///< Default flag to us
 constexpr float DEFAULT_INITIAL_SEARCH_FRACTION = 0.1f; ///< Default initial fraction of partitions to search.
 constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.001f;    ///< Default threshold to trigger recomputation of search parameters.
 constexpr int DEFAULT_APS_FLUSH_PERIOD_US = 5;         ///< Default period (in microseconds) for flushing the APS buffer.
+constexpr int MAX_SUBBATCH = 128;
 
 // Default constants for maintenance policy parameters
 constexpr const char* DEFAULT_MAINTENANCE_POLICY = "query_cost"; ///< Default maintenance policy type.

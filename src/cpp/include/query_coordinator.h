@@ -59,8 +59,6 @@ public:
     struct CoreResources {
         int core_id;
         std::vector<std::shared_ptr<TopkBuffer>> topk_buffer_pool;
-//        moodycamel::ConcurrentQueue<int64_t> job_queue;
-        moodycamel::BlockingReaderWriterQueue<int64_t> job_queue;
 
         // Thread-local buffers for batched queries
         float*    batch_queries       = nullptr;  // batched query buffer (NUMA-allocated)
@@ -68,11 +66,19 @@ public:
         int64_t*  batch_ids           = nullptr;  // scratch space for ids
         size_t    batch_q_capacity    = 0;  // number of floats in batch_queries
         size_t    batch_res_capacity  = 0;  // number of (k×Q) slots in distances & ids
+
+        int64_t job_counter = 0; ///< Job counter for this core.
+        int64_t queries_counter = 0; ///< Number of queries processed by this core.
+        int64_t wait_time_ns = 0; ///< Time spent waiting for jobs.
+        int64_t process_time_ns = 0; ///< Time spent scanning.
+        int64_t enqueue_time_ns = 0; ///< Time spent enqueuing.
+        int64_t job_time_ns = 0; ///< Time spent on job processing (excluding waiting).
     };
 
     struct NUMAResources {
         float* local_query_buffer = nullptr;
         size_t buffer_size = 0;
+        moodycamel::BlockingConcurrentQueue<int64_t> job_queue;
     };
 
     struct ResultJob {
@@ -102,7 +108,6 @@ public:
     vector<vector<std::atomic<bool>>> job_flags_; ///< Flags to track job completion
     std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.
     std::atomic<int64_t> job_process_time_ns = 0; ///< Time spent processing jobs.
-
 
     /**
     * @brief Constructs a QueryCoordinator.

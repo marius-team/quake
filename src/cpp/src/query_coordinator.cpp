@@ -80,17 +80,30 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     set_thread_affinity(core_index);
 
     int i = 0;
+    res.wait_time_ns = 0;
+    res.process_time_ns = 0;
+    res.enqueue_time_ns = 0;
+    res.job_time_ns = 0;
+
     while (!stop_workers_) {
         int64_t jid = 0;
 
-        res.job_queue.wait_dequeue(jid);
+        auto start = std::chrono::high_resolution_clock::now();
+        nr.job_queue.wait_dequeue(jid);
+        auto end = std::chrono::high_resolution_clock::now();
+
+        res.wait_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
         if (jid == -1) {
             break;
         }
 
+
         process_scan_job(job_buffer_[jid], res);
         i++;
+        end = std::chrono::high_resolution_clock::now();
+
+        res.job_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
     }
 }
 
@@ -140,6 +153,8 @@ void QueryCoordinator::process_scan_job(ScanJob job,
     } else {
         handle_batched_job(job, res, nr);
     }
+    res.queries_counter += job.num_queries;
+    res.job_counter++;
 }
 
 void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
@@ -217,6 +232,7 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
 void QueryCoordinator::handle_batched_job(const ScanJob &job,
                                           CoreResources &res,
                                           NUMAResources &nr) {
+
     // Total queries, Top-K, dimension, NUMA node
     int64_t Q    = job.num_queries;
     int     K    = job.k;
@@ -308,6 +324,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         __builtin_prefetch(codes, 0, 3);
         __builtin_prefetch(ids,  0, 3);
 
+        auto start = std::chrono::high_resolution_clock::now();
         // run the scan on this chunk
         batched_scan_list(
                 qptr,
@@ -318,6 +335,8 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
                 res.batch_distances,
                 res.batch_ids
         );
+        auto end = std::chrono::high_resolution_clock::now();
+        res.process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
         // collect results for this chunk
         std::vector<ResultJob> results_batch;
@@ -329,12 +348,14 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
             auto ti = res.topk_buffer_pool[i]->get_topk_indices();
             results_batch.emplace_back(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
         }
-
+        start = std::chrono::high_resolution_clock::now();
         // enqueue this sub-batch in bulk
         result_queue_.enqueue_bulk(
                 std::make_move_iterator(results_batch.begin()),
                 results_batch.size()
         );
+        end = std::chrono::high_resolution_clock::now();
+        res.enqueue_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
     }
 }
 
@@ -391,6 +412,11 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
 
     auto partition_ids_acc = partition_ids.accessor<int64_t,2>();
 
+    vector<int> core_to_numa(num_workers_);
+    for (int i = 0; i < num_workers_; ++i) {
+        core_to_numa[i] = cpu_numa_node(i);
+    }
+
     // flatten jobs
     next_job_id_ = 0;
     job_flags_.clear();
@@ -420,74 +446,54 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job.query_vector  = qptr;
                 job.rank          = p;
                 job_buffer_.push_back(job);
-                core_resources_[pid % num_workers_].job_queue.enqueue(next_job_id_);
+                numa_resources_[core_to_numa[pid % num_workers_]].job_queue.enqueue(next_job_id_);
                 next_job_id_++;
             }
         }
     } else {
-        job_buffer_.resize(partition_manager_->nlist());
-        auto pids = partition_manager_->get_partition_ids();
-        auto pids_acc = pids.accessor<int64_t, 1>();
-
-        if (pids.size(0) == partition_ids.size(1)) {
-            vector<int> all_query_ids = std::vector<int>(x.size(0));
-            std::iota(all_query_ids.begin(), all_query_ids.end(), 0);
-            shared_ptr<vector<int>> all_query_ids_ptr = make_shared<vector<int>>(all_query_ids);
-            for (int64_t i = 0; i < pids.size(0); i++) {
-                ScanJob job;
-                job.is_batched = true;
-                job.partition_id = pids_acc[i];
-                job.k = params->k;
-                job.query_vector = x.data_ptr<float>();
-                job.num_queries = x.size(0);
-                job.scan_all = true;
-                job.query_ids = all_query_ids_ptr;
-                job.ranks = make_shared<vector<int>>(x.size(0), i);
-                int core_id = partition_manager_->get_partition_core_id(pids_acc[i]);
-                if (core_id < 0) {
-                    throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
-                }
-                job_buffer_[next_job_id_] = job;
-                core_resources_[core_id].job_queue.enqueue(next_job_id_);
-                next_job_id_++;
+        /* Build per-partition query lists -------------------------------------- */
+        std::vector<std::vector<std::pair<int,int>>> qlist(partition_manager_->nlist());
+        for (int64_t q = 0; q < nQ; ++q) {
+            for (int p = 0; p < partition_ids.size(1); ++p) {
+                int64_t pid = pid_acc[q][p];
+                if (pid >= 0) qlist[pid].emplace_back(q, p);
             }
+        }
 
-        } else {
-            std::unordered_map<int64_t, shared_ptr<vector<std::pair<int, int>>>> per_partition_query_ids; // for batched scan
-            for (int64_t q = 0; q < nQ; q++) {
-                for (int64_t p = 0; p < partition_ids.size(1); p++) {
-                    int64_t pid = pid_acc[q][p];
-                    if (pid < 0) continue;
-                    if (per_partition_query_ids[pid] == nullptr) {
-                        per_partition_query_ids[pid] = make_shared<vector<std::pair<int, int>>>();
-                    }
-                    per_partition_query_ids[pid]->push_back({q, p});
-                }
-            }
-            for (auto &kv : per_partition_query_ids) {
+        /* Emit ScanJobs, already split into ≤ MAX_SUBBATCH chunks -------------- */
+        for (int64_t pid = 0; pid < (int64_t)qlist.size(); ++pid) {
+            auto &pairs = qlist[pid];
+            if (pairs.empty()) continue;
 
-                auto qids_and_ranks = kv.second;
-                vector<int> qids(qids_and_ranks->size());
-                vector<int> ranks(qids_and_ranks->size());
-                for (size_t i = 0; i < qids_and_ranks->size(); ++i) {
-                    qids[i] = (*qids_and_ranks)[i].first;
-                    ranks[i] = (*qids_and_ranks)[i].second;
+            for (size_t off = 0; off < pairs.size(); off += MAX_SUBBATCH) {
+                size_t chunk = std::min<size_t>(MAX_SUBBATCH, pairs.size() - off);
+
+                // Split query / rank vectors for this chunk.
+                auto qids  = std::make_shared<std::vector<int>>();
+                auto ranks = std::make_shared<std::vector<int>>();
+                qids ->reserve(chunk);
+                ranks->reserve(chunk);
+                for (size_t i = 0; i < chunk; ++i) {
+                    qids ->push_back(pairs[off + i].first);
+                    ranks->push_back(pairs[off + i].second);
                 }
 
                 ScanJob job;
-                job.is_batched = true;
-                job.partition_id = kv.first;
-                job.k = params->k;
-                job.query_vector = x.data_ptr<float>();
-                job.num_queries = kv.second->size();
-                job.query_ids = make_shared<vector<int>>(qids);
-                job.ranks = make_shared<vector<int>>(ranks);
-                int core_id = partition_manager_->get_partition_core_id(kv.first);
-                if (core_id < 0) {
-                    throw std::runtime_error("[QueryCoordinator::worker_scan] Invalid core ID.");
-                }
-                job_buffer_[next_job_id_] = job;
-                core_resources_[core_id].job_queue.enqueue(next_job_id_);
+                job.is_batched   = true;
+                job.partition_id = pid;
+                job.k            = params->k;
+                job.num_queries  = static_cast<int>(chunk);
+                job.query_vector = xptr;        // whole matrix; we gather later
+                job.query_ids    = qids;
+                job.ranks        = ranks;
+                job.scan_all     = (chunk == static_cast<size_t>(nQ)); // true only if every query in this chunk
+
+                job_buffer_.push_back(job);
+
+                // Choose NUMA queue by partition-to-core mapping.
+                int core = pid % num_workers_;
+                int node = core_to_numa[core];
+                numa_resources_[node].job_queue.enqueue(next_job_id_);
                 next_job_id_++;
             }
         }
@@ -640,6 +646,19 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     timing->n_clusters = partition_manager_->nlist();
     timing->search_params = params;
 
+
+    // get initial values of the per-core resource timers;
+    vector<int64_t> core_wait_time_ns(num_workers_, 0);
+    vector<int64_t> core_process_time_ns(num_workers_, 0);
+    vector<int64_t> core_enqueue_time_ns(num_workers_, 0);
+    vector<int64_t> core_job_time_ns(num_workers_, 0);
+    for (int i = 0; i < num_workers_; ++i) {
+        core_wait_time_ns[i] = core_resources_[i].wait_time_ns;
+        core_process_time_ns[i] = core_resources_[i].process_time_ns;
+        core_enqueue_time_ns[i] = core_resources_[i].enqueue_time_ns;
+        core_job_time_ns[i] = core_resources_[i].job_time_ns;
+    }
+
     auto s1 = high_resolution_clock::now();
 
     // 1) init global buffers & jobs_left
@@ -677,6 +696,33 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             duration_cast<nanoseconds>(s5 - s4).count();
     res->timing_info->result_aggregate_time_ns =
             duration_cast<nanoseconds>(s6 - s5).count();
+
+    // retrieve the final values of the per-core resource timers;
+    for (int i = 0; i < num_workers_; ++i) {
+        core_wait_time_ns[i] = core_resources_[i].wait_time_ns - core_wait_time_ns[i];
+        core_process_time_ns[i] = core_resources_[i].process_time_ns - core_process_time_ns[i];
+        core_enqueue_time_ns[i] = core_resources_[i].enqueue_time_ns - core_enqueue_time_ns[i];
+        core_job_time_ns[i] = core_resources_[i].job_time_ns - core_job_time_ns[i];
+    }
+
+
+    // print out the per-core resource timers;
+    for (int i = 0; i < num_workers_; ++i) {
+        std::cout << "[QueryCoordinator::worker_scan] Core " << i << ": "
+                  << "wait_time_ms=" << (float) core_wait_time_ns[i] / 1e6 << " "
+                  << "process_time_ms=" << (float) core_process_time_ns[i] / 1e6 << " "
+                  << "enqueue_time_ms=" << (float) core_enqueue_time_ns[i] / 1e6 << " "
+                  << "job_time_ms=" << (float) core_job_time_ns[i] / 1e6 << std::endl;
+    }
+
+    // print out the main thread timers;
+    std::cout << "[QueryCoordinator::worker_scan] Main thread: "
+              << "buffer_init_time_ms=" << (float) res->timing_info->buffer_init_time_ns / 1e6 << " "
+              << "copy_query_time_ms=" << (float) res->timing_info->copy_query_time_ns / 1e6 << " "
+              << "job_enqueue_time_ms=" << (float) res->timing_info->job_enqueue_time_ns / 1e6 << " "
+              << "job_wait_time_ms=" << (float) res->timing_info->job_wait_time_ns / 1e6 << " "
+              << "result_aggregate_time_ms=" << (float) res->timing_info->result_aggregate_time_ns / 1e6
+              << std::endl;
 
     return res;
 }
@@ -718,8 +764,9 @@ void QueryCoordinator::shutdown_workers() {
 
     stop_workers_.store(true);
     // Enqueue a special shutdown job for each core.
-    for (auto &res : core_resources_) {
-        res.job_queue.enqueue(-1);
+    for (auto &res : numa_resources_) {
+        for (int i = 0; i < num_workers_; ++i)
+            res.job_queue.enqueue(-1);
     }
     // Join all worker threads.
     for (auto &thr : worker_threads_) {
