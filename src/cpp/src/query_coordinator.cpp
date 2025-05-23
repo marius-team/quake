@@ -115,14 +115,6 @@ void QueryCoordinator::process_scan_job(ScanJob job,
 #endif
     NUMAResources &nr = numa_resources_[numa_node];
 
-    auto enqueue_empty_batch = [&](const ScanJob& j) {
-        const auto& qids  = *j.query_ids;
-        const auto& ranks = *j.ranks;      // same length as qids
-        for (size_t idx = 0; idx < qids.size(); ++idx) {
-            result_queue_.enqueue(ResultJob{qids[idx], ranks[idx], {}, {}});
-        }
-    };
-
     // Attempt to fetch partition data; if the list doesn't exist, catch and enqueue empty results.
     const float   *codes = nullptr;
     const int64_t *ids   = nullptr;
@@ -135,7 +127,9 @@ void QueryCoordinator::process_scan_job(ScanJob job,
         std::cerr << "[process_scan_job] Partition " << job.partition_id
                   << " invalid: " << e.what() << ". Returning empty result(s).\n";
         if (job.is_batched) {
-            enqueue_empty_batch(job);
+            for (int64_t i = 0; i < job.num_queries; ++i) {
+                result_queue_.enqueue(ResultJob{(*job.query_ids)[i], (*job.ranks)[i], {}, {}});
+            }
         } else {
             result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
         }
@@ -145,7 +139,9 @@ void QueryCoordinator::process_scan_job(ScanJob job,
     if (part_size == 0) {
         // empty => enqueue zero‐work per query
         if (job.is_batched) {
-            enqueue_empty_batch(job);
+            for (int64_t i = 0; i < job.num_queries; ++i) {
+                result_queue_.enqueue(ResultJob{(*job.query_ids)[i], (*job.ranks)[i], {}, {}});
+            }
         } else {
             result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
         }
@@ -244,20 +240,14 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     int     D    = partition_manager_->d();
     int     node = cpu_numa_node(res.core_id);
 
-    auto enqueue_empty_batch = [&](const ScanJob& j) {
-        const auto& qids  = *j.query_ids;
-        const auto& ranks = *j.ranks;      // same length as qids
-        for (size_t idx = 0; idx < qids.size(); ++idx) {
-            result_queue_.enqueue(ResultJob{qids[idx], ranks[idx], {}, {}});
-        }
-    };
-
     // Fetch partition data
     const float   *codes     = (float *) partition_manager_->partition_store_->get_codes(job.partition_id);
     const int64_t *ids       = partition_manager_->partition_store_->get_ids(job.partition_id);
     int64_t        part_size = partition_manager_->partition_store_->list_size(job.partition_id);
     if (!codes || !ids || part_size <= 0) {
-        enqueue_empty_batch(job);
+        for (int64_t i = 0; i < Q; ++i) {
+            result_queue_.enqueue(ResultJob{(*job.query_ids)[i], (*job.ranks)[i], {}, {}});
+        }
         return;
     }
 
