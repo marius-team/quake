@@ -10,39 +10,6 @@ overwrite: true  # Set to true to force all indexes to rerun
 force_rebuild: false  # Set to true to force all indexes to rebuild
 
 indexes:
-  - name: Quake_0
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 0
-      use_numa: false
-    search_params:
-      nprobe: 20
-      batched_scan: true
-
-  - name: Quake_1
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 1
-      use_numa: false
-    search_params:
-      nprobe: 20
-      batched_scan: true
-
-  - name: Quake_4
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 4
-      use_numa: false
-    search_params:
-      nprobe: 20
-      batched_scan: true
-
   - name: Quake_16
     index: Quake
     build_params:
@@ -50,28 +17,6 @@ indexes:
       metric: l2
       num_workers: 16
       use_numa: false
-    search_params:
-      nprobe: 20
-      batched_scan: true
-
-  - name: Quake_1_numa
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 1
-      use_numa: true
-    search_params:
-      nprobe: 20
-      batched_scan: true
-
-  - name: Quake_4_numa
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 4
-      use_numa: true
     search_params:
       nprobe: 20
       batched_scan: true
@@ -87,51 +32,6 @@ indexes:
       nprobe: 20
       batched_scan: true
 
-  - name: Quake_1_numa_no_batch
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 1
-      use_numa: true
-    search_params:
-      nprobe: 20
-      batched_scan: false
-
-  - name: Quake_2_numa_no_batch
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 2
-      use_numa: true
-    search_params:
-      nprobe: 20
-      batched_scan: false
-
-  - name: Quake_4_numa_no_batch
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 4
-      use_numa: true
-    search_params:
-      nprobe: 20
-      batched_scan: false
-
-  - name: Quake_8_numa_no_batch
-    index: Quake
-    build_params:
-      nc: 1000
-      metric: l2
-      num_workers: 8
-      use_numa: true
-    search_params:
-      nprobe: 20
-      batched_scan: false
-
-
   - name: Quake_16_numa_no_batch
     index: Quake
     build_params:
@@ -143,7 +43,6 @@ indexes:
       nprobe: 20
       batched_scan: false
 
-
   - name: FaissIVF
     index: IVF
     build_params:
@@ -151,7 +50,7 @@ indexes:
       metric: l2
     search_params:
       nprobe: 20
-      omp_num_threads_search: 1
+      omp_num_threads_search: 16
 #
 #  - name: SCANN
 #    index: SCANN

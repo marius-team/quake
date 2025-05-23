@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import torch
 import os
+import faiss # Import faiss at the top level as it's now a hard dependency for thread setting
 
 import test.experiments.osdi2025.experiment_utils as common_utils
 from quake.utils import compute_recall
@@ -27,40 +28,36 @@ INDEX_CLASSES = {
 }
 logger = logging.getLogger("numa_multi_query_orchestrator")
 
+def _apply_faiss_thread_settings(config_threads_str: str, task_name_info: str):
+    num_threads = int(config_threads_str)
+    faiss.omp_set_num_threads(num_threads)
+    print(f"[{task_name_info}] Called faiss.omp_set_num_threads({num_threads}).")
+
+
 def task_build_index(
         index_config: dict, dataset_cfg: dict, global_run_params: dict,
         index_file_path: Path
 ):
     index_name = index_config["name"]
-    index_type_str = index_config["index"]
-    original_omp_threads = os.environ.get("OMP_NUM_THREADS")
 
     print(f"[{index_name} BUILD_TASK] Process ID: {os.getpid()}. Target file: {index_file_path}")
-    # Make a copy to safely pop omp_threads param
     current_build_params = dict(index_config.get("build_params", {}))
-    omp_build_threads = str(current_build_params.pop("omp_num_threads_build", "1")) # Pop the param
-    os.environ["OMP_NUM_THREADS"] = omp_build_threads
-    print(f"[{index_name} BUILD_TASK] Set OMP_NUM_THREADS={omp_build_threads}.")
+    omp_build_threads_config_val = str(current_build_params.pop("omp_num_threads_build", "1"))
+
+    _apply_faiss_thread_settings(omp_build_threads_config_val, f"{index_name} BUILD_TASK")
 
     base_vectors, _, _ = common_utils.load_data(
         dataset_cfg["name"], nq_override=1)
 
-    IndexCls = INDEX_CLASSES.get(index_type_str)
+    IndexCls = INDEX_CLASSES.get(index_config["index"])
     if IndexCls is None or (IndexCls == Scann and Scann is None): # type: ignore
-        if original_omp_threads is not None: os.environ["OMP_NUM_THREADS"] = original_omp_threads
-        else: os.environ.pop("OMP_NUM_THREADS", None)
-        return {"error": f"Index type '{index_type_str}' unavailable.", "index_file_path": str(index_file_path)}
+        return {"error": f"Index type '{index_config['index']}' unavailable.", "index_file_path": str(index_file_path)}
 
-    print(f"[{index_name} BUILD_TASK] Calling prepare_wrapper_index (build phase)...")
-    # current_build_params now does NOT contain omp_num_threads_build
     idx_instance_for_build = common_utils.prepare_wrapper_index(
         IndexCls, index_file_path, base_vectors, current_build_params,
         global_run_params["force_rebuild_indices"], load=False
     )
     del base_vectors
-
-    if original_omp_threads is not None: os.environ["OMP_NUM_THREADS"] = original_omp_threads
-    else: os.environ.pop("OMP_NUM_THREADS", None)
 
     if idx_instance_for_build is None :
         return {"error": f"Index build failed for {index_name}.", "index_file_path": str(index_file_path)}
@@ -75,54 +72,43 @@ def task_search_index(
 ):
     index_name = index_config["name"]
     index_type_str = index_config["index"]
-    original_omp_threads = os.environ.get("OMP_NUM_THREADS")
 
     print(f"[{index_name} SEARCH_TASK] Process ID: {os.getpid()}. Loading index from: {index_file_path}")
-    # These params are for loading the index instance, or for search
     current_build_params_for_load = dict(index_config.get("build_params", {}))
-    current_search_params = dict(index_config.get("search_params", {}))
+    current_search_params_for_method = dict(index_config.get("search_params", {}))
 
-    # Pop omp_num_threads_search before passing current_search_params to idx_instance.search
-    omp_search_threads = str(current_search_params.pop("omp_num_threads_search", "1"))
-    os.environ["OMP_NUM_THREADS"] = omp_search_threads
-    print(f"[{index_name} SEARCH_TASK] Set OMP_NUM_THREADS={omp_search_threads}.")
+    omp_search_threads_config_val = str(current_search_params_for_method.pop("omp_num_threads_search", "1"))
+    _apply_faiss_thread_settings(omp_search_threads_config_val, f"{index_name} SEARCH_TASK")
 
     _, query_vectors, gt_vectors = common_utils.load_data(
         dataset_cfg["name"], nq_override=dataset_cfg.get("num_queries"))
 
     IndexCls = INDEX_CLASSES.get(index_type_str)
     if IndexCls is None or (IndexCls == Scann and Scann is None): # type: ignore
-        if original_omp_threads is not None: os.environ["OMP_NUM_THREADS"] = original_omp_threads
-        else: os.environ.pop("OMP_NUM_THREADS", None)
         return {"error": f"Index type '{index_type_str}' unavailable for search."}
 
-    if not Path(index_file_path).exists(): # Ensure Path object for exists()
-        if original_omp_threads is not None: os.environ["OMP_NUM_THREADS"] = original_omp_threads
-        else: os.environ.pop("OMP_NUM_THREADS", None)
+    if not Path(index_file_path).exists():
         return {"error": f"Index file {index_file_path} not found for search."}
 
     idx_instance = IndexCls()
     load_kwargs = {}
-    # Params like num_workers for Quake load are typically in "build_params" section of YAML
     if "num_workers" in current_build_params_for_load: load_kwargs["num_workers"] = current_build_params_for_load.get("num_workers")
     if "use_numa" in current_build_params_for_load: load_kwargs["use_numa"] = current_build_params_for_load.get("use_numa")
     if "parent_num_workers" in current_build_params_for_load: load_kwargs["parent_num_workers"] = current_build_params_for_load.get("parent_num_workers")
 
-    print(f"[{index_name} SEARCH_TASK] Loading index with kwargs: {load_kwargs}")
     idx_instance.load(str(index_file_path), **load_kwargs)
+    print(f"[{index_name} SEARCH_TASK] Index loaded with kwargs: {load_kwargs}")
 
     k_val = global_run_params["k_val"]
     print(f"[{index_name} SEARCH_TASK] Warmup ({global_run_params['num_warmup']} iterations)...")
-    # current_search_params now does NOT contain omp_num_threads_search
     for _ in range(global_run_params['num_warmup']):
-        _ = idx_instance.search(query_vectors, k_val, **current_search_params)
+        _ = idx_instance.search(query_vectors, k_val, **current_search_params_for_method)
 
     trial_latencies_ms = []
     trial_recalls = []
     print(f"[{index_name} SEARCH_TASK] Benchmarking ({global_run_params['num_trials']} trials)...")
     for i in range(global_run_params['num_trials']):
-        # current_search_params now does NOT contain omp_num_threads_search
-        search_result = idx_instance.search(query_vectors, k_val, **current_search_params)
+        search_result = idx_instance.search(query_vectors, k_val, **current_search_params_for_method)
         latency_ms = np.nan
         timing_info = getattr(search_result, "timing_info", None)
         if timing_info and hasattr(timing_info, "total_time_ns"): latency_ms = getattr(timing_info, "total_time_ns") / 1e6
@@ -134,9 +120,6 @@ def task_search_index(
             try: recall_val = float(compute_recall(search_result.ids, gt_vectors, k_val).mean())
             except Exception: pass
         trial_recalls.append(recall_val)
-
-    if original_omp_threads is not None: os.environ["OMP_NUM_THREADS"] = original_omp_threads
-    else: os.environ.pop("OMP_NUM_THREADS", None)
 
     print(f"[{index_name} SEARCH_TASK] Individual trial results (Latency, Recall@K={k_val}):")
     for i in range(len(trial_latencies_ms)):
@@ -152,10 +135,10 @@ def task_search_index(
     final_row[f"mean_recall_at_{k_val}"] = float(np.mean(valid_recalls)) if valid_recalls else np.nan
     final_row[f"std_recall_at_{k_val}"] = float(np.std(valid_recalls)) if valid_recalls else np.nan
 
-    n_threads_or_workers = int(omp_search_threads)
-    if index_type_str == "Quake" and "num_workers" in current_build_params_for_load :
-        n_threads_or_workers = current_build_params_for_load.get("num_workers", n_threads_or_workers)
-    final_row["n_config_concurrency"] = n_threads_or_workers
+    n_concurrency_param = int(omp_search_threads_config_val)
+    if index_type_str == "Quake" and "num_workers" in current_build_params_for_load : # type: ignore
+        n_concurrency_param = current_build_params_for_load.get("num_workers", n_concurrency_param) # type: ignore
+    final_row["n_config_concurrency"] = n_concurrency_param
 
     print(f"[{index_name} SEARCH_TASK] Benchmark task finished.")
     return final_row
@@ -178,7 +161,7 @@ def run_experiment(cfg_path_str: str, output_dir_str: str):
         "enable_glances": cfg.get("enable_glances_monitoring", False)
     }
     indexes_config_list = cfg["indexes"]
-    output_csv_name = cfg.get("output", {}).get("results_csv", "numa_multi_query_results.csv") # Changed from single_query
+    output_csv_name = cfg.get("output", {}).get("results_csv", "numa_multi_query_results.csv")
 
     all_experiment_rows = []
     for idx_conf in indexes_config_list:
@@ -195,6 +178,8 @@ def run_experiment(cfg_path_str: str, output_dir_str: str):
 
         logger.info(f"Orchestrator: Submitting BUILD task for index: {index_name}")
         build_log_file = process_logs_dir / f"{index_name}_build_process.log"
+        # OMP settings are now handled inside the tasks by _apply_faiss_thread_settings
+        # Other env_vars can still be passed if needed.
         build_env_vars = idx_conf.get("build_env_vars", {})
         process_timeout = idx_conf.get("process_timeout", cfg.get("default_process_timeout", 7200))
 
@@ -211,7 +196,7 @@ def run_experiment(cfg_path_str: str, output_dir_str: str):
             continue
 
         logger.info(f"BUILD task for {index_name} succeeded. Index file: {build_result.get('data',{}).get('index_file_path')}")
-        built_index_file_path = Path(build_result.get("data",{}).get("index_file_path", index_file_path)) # Use confirmed path
+        built_index_file_path = Path(build_result.get("data",{}).get("index_file_path", index_file_path))
 
         logger.info(f"Orchestrator: Submitting SEARCH task for index: {index_name}")
         search_log_file = process_logs_dir / f"{index_name}_search_process.log"
@@ -244,7 +229,6 @@ def run_experiment(cfg_path_str: str, output_dir_str: str):
 
     plot_suffix = Path(output_csv_name).stem
     plot_x_param = "n_config_concurrency"
-    # Ensure 'index' column is valid before attempting groupby for plotting
     plot_df = final_df.dropna(subset=['index', plot_x_param]).copy()
     if not plot_df.empty:
         plot_df.loc[:, plot_x_param] = pd.to_numeric(plot_df[plot_x_param], errors='coerce').fillna(-1).astype(int)
