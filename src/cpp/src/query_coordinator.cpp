@@ -115,6 +115,14 @@ void QueryCoordinator::process_scan_job(ScanJob job,
 #endif
     NUMAResources &nr = numa_resources_[numa_node];
 
+    auto enqueue_empty_batch = [&](const ScanJob& j) {
+        const auto& qids  = *j.query_ids;
+        const auto& ranks = *j.ranks;      // same length as qids
+        for (size_t idx = 0; idx < qids.size(); ++idx) {
+            result_queue_.enqueue(ResultJob{qids[idx], ranks[idx], {}, {}});
+        }
+    };
+
     // Attempt to fetch partition data; if the list doesn't exist, catch and enqueue empty results.
     const float   *codes = nullptr;
     const int64_t *ids   = nullptr;
@@ -127,9 +135,7 @@ void QueryCoordinator::process_scan_job(ScanJob job,
         std::cerr << "[process_scan_job] Partition " << job.partition_id
                   << " invalid: " << e.what() << ". Returning empty result(s).\n";
         if (job.is_batched) {
-            for (int64_t q : *job.query_ids) {
-                result_queue_.enqueue(ResultJob{(int)q, 0, {}, {}});
-            }
+            enqueue_empty_batch(job);
         } else {
             result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
         }
@@ -139,9 +145,7 @@ void QueryCoordinator::process_scan_job(ScanJob job,
     if (part_size == 0) {
         // empty => enqueue zero‐work per query
         if (job.is_batched) {
-            for (int64_t q : *job.query_ids) {
-                result_queue_.enqueue(ResultJob{(int)q, 0, {}, {}});
-            }
+            enqueue_empty_batch(job);
         } else {
             result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
         }
@@ -765,7 +769,7 @@ void QueryCoordinator::shutdown_workers() {
     stop_workers_.store(true);
     // Enqueue a special shutdown job for each core.
     for (auto &res : numa_resources_) {
-        for (int i = 0; i < num_workers_ * 5; ++i)
+        for (int i = 0; i < num_workers_; ++i)
             res.job_queue.enqueue(-1);
     }
     // Join all worker threads.
