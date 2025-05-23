@@ -79,7 +79,7 @@ public:
     struct NUMAResources {
         float* local_query_buffer = nullptr;
         size_t buffer_size = 0;
-        moodycamel::BlockingConcurrentQueue<int64_t> job_queue;
+        moodycamel::ConcurrentQueue<int64_t> job_queue;
     };
 
     struct ResultJob {

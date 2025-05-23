@@ -89,7 +89,19 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         int64_t jid = 0;
 
         auto start = std::chrono::high_resolution_clock::now();
-        nr.job_queue.wait_dequeue(jid);
+
+        bool success = nr.job_queue.try_dequeue(jid);
+        if (!success) {
+            if (jobs_in_flight_ == 0) {
+                std::this_thread::yield();
+                continue;
+            } else {
+                std::this_thread::sleep_for(std::chrono::microseconds(1));
+                continue;
+            }
+        }
+
+        // nr.job_queue.wait_dequeue(jid);
         auto end = std::chrono::high_resolution_clock::now();
 
         res.wait_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
@@ -446,7 +458,6 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job.query_id      = (int)q;
                 job.partition_id  = pid;
                 job.k             = params->k;
-                job.query_vector  = qptr;
                 job.rank          = p;
                 job_buffer_.push_back(job);
                 numa_resources_[core_to_numa[pid % num_workers_]].job_queue.enqueue(next_job_id_);
@@ -488,25 +499,42 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                     ranks->push_back(pairs[off + i].second);
                 }
 
-                ScanJob job;
-                job.is_batched   = true;
-                job.job_id        = next_job_id_;
-                job.partition_id = pid;
-                job.k            = params->k;
-                job.num_queries  = static_cast<int>(chunk);
-                job.query_vector = xptr;        // whole matrix; we gather later
-                job.query_ids    = qids;
-                job.ranks        = ranks;
-                job.scan_all     = scan_all;
+                if (chunk < MIN_BATCH_SCAN_SIZE) {
+                    for (size_t i = 0; i < chunk; ++i) {
+                        int qid = qids->at(i);
+                        int rank = ranks->at(i);
+                        ScanJob job;
+                        job.is_batched   = false;
+                        job.job_id       = next_job_id_;
+                        job.partition_id = pid;
+                        job.k           = params->k;
+                        job.rank         = rank;
+                        job.query_id     = qid;
+                        job_buffer_.push_back(job);
+                        numa_resources_[core_to_numa[pid % num_workers_]].job_queue.enqueue(next_job_id_);
+                        next_job_id_++;
+                        jobs_in_flight_++;
+                    }
+                } else {
+                    ScanJob job;
+                    job.is_batched   = true;
+                    job.job_id        = next_job_id_;
+                    job.partition_id = pid;
+                    job.k            = params->k;
+                    job.num_queries  = static_cast<int>(chunk);
+                    job.query_ids    = qids;
+                    job.ranks        = ranks;
+                    job.scan_all     = scan_all;
 
-                job_buffer_.push_back(job);
+                    job_buffer_.push_back(job);
 
-                // Choose NUMA queue by partition-to-core mapping.
-                int core = pid % num_workers_;
-                int node = core_to_numa[core];
-                numa_resources_[node].job_queue.enqueue(next_job_id_);
-                next_job_id_++;
-                jobs_in_flight_++;
+                    // Choose NUMA queue by partition-to-core mapping.
+                    int core = pid % num_workers_;
+                    int node = core_to_numa[core];
+                    numa_resources_[node].job_queue.enqueue(next_job_id_);
+                    next_job_id_++;
+                    jobs_in_flight_++;
+                }
             }
         }
     }
