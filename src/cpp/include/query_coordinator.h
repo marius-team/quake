@@ -79,7 +79,7 @@ public:
     struct NUMAResources {
         float* local_query_buffer = nullptr;
         size_t buffer_size = 0;
-        moodycamel::ConcurrentQueue<int64_t> job_queue;
+        moodycamel::BlockingConcurrentQueue<int64_t> job_queue;
     };
 
     struct ResultJob {
@@ -104,9 +104,6 @@ public:
     std::atomic<int> stop_workers_;                    ///< Flag to signal workers to terminate.
     std::atomic<int> jobs_in_flight_;                  ///< Number of jobs in flight.
     bool debug_ = false;                               ///< Debug mode flag.
-    std::condition_variable_any jobs_cv_;   // parks idle workers
-    std::mutex                  jobs_mu_;   // only for the CV
-
 
     std::vector<ScanJob> job_buffer_;
     int   next_job_id_ = 0; ///< ID for the next job to be processed.

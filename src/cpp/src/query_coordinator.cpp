@@ -89,36 +89,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         int64_t jid = 0;
 
         auto start = std::chrono::high_resolution_clock::now();
-
-
-        if (nr.job_queue.try_dequeue(jid))          // fast-path
-        {
-            if (jid == -1) break;                   // poison → shutdown
-            process_scan_job(job_buffer_[jid], res);
-            if (jobs_in_flight_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-                /* this was the last job in the batch – nothing to do;
-                   main thread will reset jobs_in_flight_ to 0 before the
-                   next batch anyway                                            */
-            }
-            continue;
-        }
-
-        /* queue empty → check global counter */
-        if (jobs_in_flight_.load(std::memory_order_acquire) != 0) {
-            /* other workers are still draining → yield to avoid thrashing
-               the same empty queue                                           */
-            std::this_thread::yield();
-            continue;
-        }
-
-        /* REALLY nothing left – park this thread until a producer wakes us */
-        std::unique_lock<std::mutex> lk(jobs_mu_);
-        jobs_cv_.wait(lk, [&]{
-            return stop_workers_.load(std::memory_order_relaxed) ||
-                   jobs_in_flight_.load(std::memory_order_relaxed) != 0;
-        });
-
-        // nr.job_queue.wait_dequeue(jid);
+        nr.job_queue.wait_dequeue(jid);
         auto end = std::chrono::high_resolution_clock::now();
 
         res.wait_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
@@ -730,7 +701,6 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 
     // 3) enqueue jobs
     enqueue_scan_jobs(x, partition_ids, params);
-    jobs_cv_.notify_all();
 
     auto s4 = high_resolution_clock::now();
 
