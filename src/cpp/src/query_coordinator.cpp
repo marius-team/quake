@@ -159,6 +159,7 @@ void QueryCoordinator::process_scan_job(ScanJob job,
     }
     res.queries_counter += job.num_queries;
     res.job_counter++;
+    jobs_in_flight_--;
 }
 
 void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
@@ -439,6 +440,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
         }
     }
     job_buffer_.clear();
+    job_buffer_.reserve(nQ * partition_ids.size(1));
 
     auto pid_acc = partition_ids.accessor<int64_t,2>();
     if (!params->batched_scan) {
@@ -449,6 +451,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 int64_t pid = pid_acc[q][p];
                 if (pid < 0) continue;
                 ScanJob job;
+                job.job_id        = next_job_id_;
                 job.is_batched    = false;
                 job.query_id      = (int)q;
                 job.partition_id  = pid;
@@ -458,6 +461,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job_buffer_.push_back(job);
                 numa_resources_[core_to_numa[pid % num_workers_]].job_queue.enqueue(next_job_id_);
                 next_job_id_++;
+                jobs_in_flight_++;
             }
         }
     } else {
@@ -492,6 +496,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
 
                 ScanJob job;
                 job.is_batched   = true;
+                job.job_id        = next_job_id_;
                 job.partition_id = pid;
                 job.k            = params->k;
                 job.num_queries  = static_cast<int>(chunk);
@@ -507,6 +512,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 int node = core_to_numa[core];
                 numa_resources_[node].job_queue.enqueue(next_job_id_);
                 next_job_id_++;
+                jobs_in_flight_++;
             }
         }
     }

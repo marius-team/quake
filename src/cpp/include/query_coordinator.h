@@ -23,6 +23,7 @@ class PartitionManager;
  * A ScanJob encapsulates all parameters required to perform a scan on a given index partition.
  */
 struct ScanJob {
+    int64_t job_id;               ///< Unique identifier for the job.
     int64_t partition_id;         ///< The identifier of the partition to be scanned.
     int k;                        ///< The number of neighbors (Top-K) to return.
     const float* query_vector;    ///< Pointer to the query vector.
@@ -101,6 +102,7 @@ public:
     std::mutex global_mutex_;                          ///< Mutex for global synchronization.
     std::condition_variable global_cv_;                ///< Condition variable for thread coordination.
     std::atomic<int> stop_workers_;                    ///< Flag to signal workers to terminate.
+    std::atomic<int> jobs_in_flight_;                  ///< Number of jobs in flight.
     bool debug_ = false;                               ///< Debug mode flag.
 
     std::vector<ScanJob> job_buffer_;
