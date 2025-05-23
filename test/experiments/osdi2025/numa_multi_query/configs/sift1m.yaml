@@ -17,7 +17,7 @@ indexes:
       metric: l2
       num_workers: 12
       use_numa: false
-      parent_num_workers: 1
+      parent_num_workers: 8
     search_params:
       nprobe: 20
       batched_scan: true

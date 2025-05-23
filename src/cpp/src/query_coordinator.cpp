@@ -243,14 +243,20 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     int     D    = partition_manager_->d();
     int     node = cpu_numa_node(res.core_id);
 
+    auto enqueue_empty_batch = [&](const ScanJob& j) {
+        const auto& qids  = *j.query_ids;
+        const auto& ranks = *j.ranks;      // same length as qids
+        for (size_t idx = 0; idx < qids.size(); ++idx) {
+            result_queue_.enqueue(ResultJob{qids[idx], ranks[idx], {}, {}});
+        }
+    };
+
     // Fetch partition data
     const float   *codes     = (float *) partition_manager_->partition_store_->get_codes(job.partition_id);
     const int64_t *ids       = partition_manager_->partition_store_->get_ids(job.partition_id);
     int64_t        part_size = partition_manager_->partition_store_->list_size(job.partition_id);
     if (!codes || !ids || part_size <= 0) {
-        for (int64_t q : *job.query_ids) {
-            result_queue_.enqueue(ResultJob{(int)q, 0, {}, {}});
-        }
+        enqueue_empty_batch(job);
         return;
     }
 
@@ -464,6 +470,8 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
             }
         }
 
+        bool scan_all = partition_ids.size(1) == partition_manager_->nlist();
+
         /* Emit ScanJobs, already split into ≤ MAX_SUBBATCH chunks -------------- */
         for (int64_t pid = 0; pid < (int64_t)qlist.size(); ++pid) {
             auto &pairs = qlist[pid];
@@ -490,7 +498,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job.query_vector = xptr;        // whole matrix; we gather later
                 job.query_ids    = qids;
                 job.ranks        = ranks;
-                job.scan_all     = (chunk == static_cast<size_t>(nQ)); // true only if every query in this chunk
+                job.scan_all     = scan_all;
 
                 job_buffer_.push_back(job);
 
