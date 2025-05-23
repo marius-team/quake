@@ -53,6 +53,8 @@ def task_build_index(
     if IndexCls is None or (IndexCls == Scann and Scann is None): # type: ignore
         return {"error": f"Index type '{index_config['index']}' unavailable.", "index_file_path": str(index_file_path)}
 
+    current_build_params.pop("num_parent_workers", None)
+
     idx_instance_for_build = common_utils.prepare_wrapper_index(
         IndexCls, index_file_path, base_vectors, current_build_params,
         global_run_params["force_rebuild_indices"], load=False

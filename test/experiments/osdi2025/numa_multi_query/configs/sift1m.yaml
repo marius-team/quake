@@ -16,11 +16,11 @@ indexes:
       nc: 1000
       metric: l2
       num_workers: 12
-      use_numa: false
+      use_numa: true
       parent_num_workers: 12
     search_params:
       nprobe: 20
-      batched_scan: false
+      batched_scan: true
 #
 #  - name: Quake_16_numa
 #    index: Quake
@@ -56,16 +56,16 @@ indexes:
 #      omp_num_threads_search: 16
 #
 #
-#  - name: FaissHNSW
-#    index: HNSW
-#    build_params:
-#      m: 64
-#      ef_construction: 128
-#      metric: l2
-#      omp_num_threads_build: 32
-#    search_params:
-#      ef_search: 128
-#      omp_num_threads_search: 32
+  - name: FaissHNSW
+    index: HNSW
+    build_params:
+      m: 64
+      ef_construction: 128
+      metric: l2
+      omp_num_threads_build: 16
+    search_params:
+      ef_search: 128
+      omp_num_threads_search: 16
 
 #
 #  - name: SCANN
