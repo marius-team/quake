@@ -96,7 +96,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
                 std::this_thread::yield();
                 continue;
             } else {
-                std::this_thread::sleep_for(std::chrono::microseconds(1));
+                std::this_thread::sleep_for(std::chrono::microseconds(5));
                 continue;
             }
         }
