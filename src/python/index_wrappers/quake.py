@@ -152,7 +152,8 @@ class QuakeWrapper(IndexWrapper):
         n_threads=1,
         parent=None,
         sample_prefix=0,
-        sample_stride=5
+        sample_stride=5,
+        batch_size=128,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Find the k-nearest neighbors of the query vectors.
@@ -175,12 +176,17 @@ class QuakeWrapper(IndexWrapper):
         search_params.num_threads = n_threads
         search_params.sample_prefix = sample_prefix
         search_params.sample_stride = sample_stride
+        search_params.batch_size = batch_size
+
+        print(parent)
 
         if parent is not None:
             search_params.parent_params = quake.SearchParams()
             search_params.parent_params.nprobe = parent.get("nprobe", 1)
             search_params.parent_params.recall_target = parent.get("recall_target", -1)
             search_params.parent_params.initial_search_fraction = parent.get("initial_search_fraction", 0.05)
+            search_params.parent_params.batch_size = parent.get("batch_size", 128)
+            search_params.parent_params.batched_scan = parent.get("batched_scan", search_params.batched_scan)
 
         return self.index.search(query, search_params)
 

@@ -189,6 +189,8 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Threshold to trigger recomputation of APS. default = ") + std::to_string(DEFAULT_RECOMPUTE_THRESHOLD)).c_str())
         .def_readwrite("aps_flush_period_us", &SearchParams::aps_flush_period_us,
              (std::string("APS flush period in microseconds. default = ") + std::to_string(DEFAULT_APS_FLUSH_PERIOD_US)).c_str())
+        .def_readwrite("batch_size", &SearchParams::batch_size,
+             (std::string("Batch size for batched scan. default = ") + std::to_string(MAX_SUBBATCH)).c_str())
         .def_readwrite("k_factor", &SearchParams::k_factor,
              "Factor to adjust the number of neighbors to return.")
         .def_readwrite("track_hits", &SearchParams::track_hits,

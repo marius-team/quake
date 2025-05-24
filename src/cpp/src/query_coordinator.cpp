@@ -100,6 +100,7 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
 
         process_scan_job(job_buffer_[jid], res);
+        jobs_in_flight_.fetch_sub(1, std::memory_order_relaxed);
         i++;
         end = std::chrono::high_resolution_clock::now();
 
@@ -155,7 +156,6 @@ void QueryCoordinator::process_scan_job(ScanJob job,
     }
     res.queries_counter += job.num_queries;
     res.job_counter++;
-    jobs_in_flight_--;
 }
 
 void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
@@ -253,7 +253,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         return;
     }
 
-    // 1) Prepare per-thread buffers *once* up to MAX_SUBBATCH
+    // 1) Prepare per-thread buffers *once*
     size_t cap = std::min(100 * K, 10000);
     int64_t queries_req = Q;
 
@@ -446,7 +446,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job_buffer_.push_back(job);
                 numa_resources_[core_to_numa[pid % num_workers_]].job_queue.enqueue(next_job_id_);
                 next_job_id_++;
-                jobs_in_flight_++;
+                jobs_in_flight_.fetch_add(1, std::memory_order_relaxed);
             }
         }
     } else {
@@ -465,13 +465,13 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
             scan_all = true;
         }
 
-        /* Emit ScanJobs, already split into ≤ MAX_SUBBATCH chunks -------------- */
+        /* Emit ScanJobs, already split into ≤ params->batch_size chunks -------------- */
         for (int64_t pid = 0; pid < (int64_t)qlist.size(); ++pid) {
             auto &pairs = qlist[pid];
             if (pairs.empty()) continue;
 
-            for (size_t off = 0; off < pairs.size(); off += MAX_SUBBATCH) {
-                size_t chunk = std::min<size_t>(MAX_SUBBATCH, pairs.size() - off);
+            for (size_t off = 0; off < pairs.size(); off += params->batch_size) {
+                size_t chunk = std::min<size_t>(params->batch_size, pairs.size() - off);
 
                 // Split query / rank vectors for this chunk.
                 auto qids  = std::make_shared<std::vector<int>>();
@@ -497,7 +497,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                         job_buffer_.push_back(job);
                         numa_resources_[core_to_numa[pid % num_workers_]].job_queue.enqueue(next_job_id_);
                         next_job_id_++;
-                        jobs_in_flight_++;
+                        jobs_in_flight_.fetch_add(1, std::memory_order_relaxed);
                     }
                 } else {
                     ScanJob job;
@@ -517,7 +517,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                     int node = core_to_numa[core];
                     numa_resources_[node].job_queue.enqueue(next_job_id_);
                     next_job_id_++;
-                    jobs_in_flight_++;
+                    jobs_in_flight_.fetch_add(1, std::memory_order_relaxed);
                 }
             }
         }
@@ -1043,7 +1043,6 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
             if (x.size(0) > 10) {
                 parent_search_params->batched_scan = true;
             }
-
         } else {
             parent_search_params = search_params->parent_params;
         }

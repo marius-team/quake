@@ -178,6 +178,7 @@ struct SearchParams {
     int num_threads = 1; // number of threads to use for search within a single worker
     float k_factor = 1.0f;
     bool batched_scan = DEFAULT_BATCHED_SCAN;
+    int batch_size = MAX_SUBBATCH;
 
     bool track_hits = true;
 
