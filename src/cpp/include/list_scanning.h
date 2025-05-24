@@ -14,6 +14,7 @@
 #include "sorting/floyd_rivest_select.h"
 #include "sorting/heap_select.h"
 #include "parallel.h"
+#include "blas_dist.h"
 
 inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     Tensor num_correct = torch::zeros(ids.size(0), torch::kInt64);
@@ -452,9 +453,13 @@ inline void batched_scan_list(const float *query_vecs,
                               int64_t *setup_time,
                               int64_t *scan_time,
                               int64_t *push_time,
-                              MetricType metric = faiss::METRIC_L2,
-                              float *distances = nullptr,
-                              int64_t *labels = nullptr) {
+                              MetricType metric,
+                              float *distances,
+                              int64_t *labels,
+                              float *ip_block,
+                                float *norms_x,
+                                float *norms_y_buf,
+                              int blas_db_bs = BLAS_DB_BS) {
     if (list_size == 0 || list_vecs == nullptr) {
         // No list vectors to process;
         return;
@@ -475,12 +480,43 @@ inline void batched_scan_list(const float *query_vecs,
 
     auto s2 = high_resolution_clock::now();
 
+    // inline void knn_L2sqr_buf(
+    //     const float* x,
+    //     const float* y,
+    //     size_t d,
+    //     size_t nx,
+    //     size_t ny,
+    //     size_t k,
+    //     float* vals,
+    //     int64_t* ids,
+    //     float* ip_block,
+    //     float* norms_x,
+    //     float* norms_y_buf,
+    //     size_t db_blas_bs = distance_compute_blas_database_bs,
+    //     const float* y_norms = nullptr,
+    //     const IDSelector* sel = nullptr)
+    // {
+
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
         faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
     } else if (metric == faiss::METRIC_L2) {
-        faiss::float_maxheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
-        faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
+        // faiss::float_maxheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
+        faiss::knn_L2sqr_buf(
+                query_vecs,
+                list_vecs,
+                dim,
+                num_queries,
+                list_size,
+                k_max,
+                distances,
+                labels,
+                ip_block,
+                norms_x,
+                norms_y_buf,
+                blas_db_bs
+        );
+        // faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
     } else {
         throw std::runtime_error("Metric type not supported");
     }
@@ -520,6 +556,7 @@ inline void batched_scan_list(const float *query_vecs,
     *scan_time = duration_cast<nanoseconds>(s3 - s2).count();
     *push_time = duration_cast<nanoseconds>(s4 - s3).count();
 }
+
 
 // }
 #endif //LIST_SCANNING_H

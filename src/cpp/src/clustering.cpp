@@ -9,6 +9,7 @@
 #include "faiss/Clustering.h"
 #include "index_partition.h"
 #include <list_scanning.h>
+#include <query_coordinator.h>
 
 #ifdef QUAKE_ENABLE_GPU
 #include <c10/cuda/CUDAStream.h>
@@ -232,6 +233,35 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
     MetricType metric,
     int refinement_iterations) {
 
+    // static void ensure_blas_buffers(QueryCoordinator::CoreResources& res,
+    //                             size_t max_q,
+    //                             size_t db_bs,
+    //                             int    node)
+    // {
+    //     const size_t ip_need = db_bs * max_q;
+    //     if (res.blas_ip_capacity < ip_need) {
+    //         quake_free(res.blas_ip_block, res.blas_ip_capacity * sizeof(float));
+    //         res.blas_ip_block    = static_cast<float*>(quake_alloc(ip_need * sizeof(float), node));
+    //         res.blas_ip_capacity = ip_need;
+    //     }
+    //     if (res.blas_norms_x_cap < max_q) {
+    //         quake_free(res.blas_norms_x, res.blas_norms_x_cap * sizeof(float));
+    //         res.blas_norms_x     = static_cast<float*>(quake_alloc(max_q * sizeof(float), node));
+    //         res.blas_norms_x_cap = max_q;
+    //     }
+    //     if (res.blas_norms_y_cap < db_bs) {
+    //         quake_free(res.blas_norms_y, res.blas_norms_y_cap * sizeof(float));
+    //         res.blas_norms_y     = static_cast<float*>(quake_alloc(db_bs * sizeof(float), node));
+    //         res.blas_norms_y_cap = db_bs;
+    //     }
+    // }
+
+    const size_t ip_need = BLAS_DB_BS * centroids.size(0);
+    float * blas_ip_block = static_cast<float*>(quake_alloc(ip_need * sizeof(float), 0));
+    float * blas_norms_x = static_cast<float*>(quake_alloc(BLAS_DB_BS * sizeof(float), 0));
+    float * blas_norms_y = static_cast<float*>(quake_alloc(BLAS_DB_BS * sizeof(float), 0));
+
+
     // Determine number of clusters and dimension.
     int n_clusters = centroids.size(0);
     int d = centroids.size(1);
@@ -283,6 +313,7 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
             int64_t scan_setup_time = 0;
             int64_t scan_time = 0;
             int64_t scan_push_time = 0;
+
             batched_scan_list(part_vecs,
                               centroids_ptr,
                               nullptr,
@@ -293,7 +324,13 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
                                 &scan_setup_time,
                                 &scan_time,
                                 &scan_push_time,
-                              metric);
+                                metric,
+                                /* distances*/ nullptr,
+                                /* labels   */ nullptr,
+                                /* BLAS scratch */ blas_ip_block,
+                                                  blas_norms_x,
+                                                  blas_norms_y,
+                                BLAS_DB_BS);
 
             // For each vector in this partition, determine its assignment.
             for (int i = 0; i < nvec; i++) {

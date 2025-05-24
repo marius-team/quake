@@ -12,6 +12,29 @@
 #include <parallel.h>
 //#include "parallel_hashmap/btree.h"
 
+static void ensure_blas_buffers(QueryCoordinator::CoreResources& res,
+                                size_t max_q,
+                                size_t db_bs,
+                                int    node)
+{
+    const size_t ip_need = db_bs * max_q;
+    if (res.blas_ip_capacity < ip_need) {
+        quake_free(res.blas_ip_block, res.blas_ip_capacity * sizeof(float));
+        res.blas_ip_block    = static_cast<float*>(quake_alloc(ip_need * sizeof(float), node));
+        res.blas_ip_capacity = ip_need;
+    }
+    if (res.blas_norms_x_cap < max_q) {
+        quake_free(res.blas_norms_x, res.blas_norms_x_cap * sizeof(float));
+        res.blas_norms_x     = static_cast<float*>(quake_alloc(max_q * sizeof(float), node));
+        res.blas_norms_x_cap = max_q;
+    }
+    if (res.blas_norms_y_cap < db_bs) {
+        quake_free(res.blas_norms_y, res.blas_norms_y_cap * sizeof(float));
+        res.blas_norms_y     = static_cast<float*>(quake_alloc(db_bs * sizeof(float), node));
+        res.blas_norms_y_cap = db_bs;
+    }
+}
+
 // Constructor
 QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
                                    shared_ptr<PartitionManager> partition_manager,
@@ -268,6 +291,8 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         }
     }
 
+    ensure_blas_buffers(res, Q, BLAS_DB_BS, node);
+
     size_t max_q = size_t(queries_req) * D;
     if (res.batch_q_capacity < max_q) {
         quake_free(res.batch_queries, res.batch_q_capacity * sizeof(float));
@@ -315,18 +340,21 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         int64_t scan_setup_time = 0;
         int64_t scan_time = 0;
         int64_t scan_push_time = 0;
-        batched_scan_list(
-                qptr,
-                codes, ids,
-                Q, part_size, D,
-                res.topk_buffer_pool,
-                &scan_setup_time,
-                &scan_time,
-                &scan_push_time,
-                metric_,
-                res.batch_distances,
-                res.batch_ids
-        );
+    batched_scan_list(
+            qptr,
+            codes, ids,
+            Q, part_size, D,
+            res.topk_buffer_pool,
+            &scan_setup_time,
+            &scan_time,
+            &scan_push_time,
+            metric_,
+            /* distances*/ res.batch_distances,
+            /* labels   */ res.batch_ids,
+            /* BLAS scratch */ res.blas_ip_block,
+                              res.blas_norms_x,
+                              res.blas_norms_y,
+            BLAS_DB_BS);
 
         res.scan_setup_time_ns += scan_setup_time;
         res.scan_time_ns += scan_time;
@@ -1120,6 +1148,9 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
         return empty_res;
     }
 
+    static CoreResources serial_res;                    // one per process
+    ensure_blas_buffers(serial_res, x.size(0), BLAS_DB_BS, /*node=*/0);
+
     // Timing info (could be extended as needed)
     auto timing_info = std::make_shared<SearchTimingInfo>();
     auto start = high_resolution_clock::now();
@@ -1185,9 +1216,15 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
                           d,
                           local_buffers,
                           &scan_setup_time,
-                            &scan_time,
-                            &scan_push_time,
-                          metric_);
+                          &scan_time,
+                          &scan_push_time,
+                          metric_,
+                          /* distances*/ nullptr,
+                          /* labels   */ nullptr,
+                          /* BLAS scratch */ serial_res.blas_ip_block,
+                                            serial_res.blas_norms_x,
+                                            serial_res.blas_norms_y,
+                          BLAS_DB_BS);
 
         // Merge the local results into the corresponding global buffers.
         for (int i = 0; i < batch_size; i++) {

@@ -68,6 +68,15 @@ public:
         size_t    batch_q_capacity    = 0;  // number of floats in batch_queries
         size_t    batch_res_capacity  = 0;  // number of (k×Q) slots in distances & ids
 
+        float* blas_ip_block   = nullptr;  // capacity: db_blas_bs * max_Q
+        size_t blas_ip_capacity = 0;       // # floats
+
+        float* blas_norms_x    = nullptr;  // capacity: max_Q
+        size_t blas_norms_x_cap = 0;
+
+        float* blas_norms_y    = nullptr;  // capacity: db_blas_bs  (re-used per chunk)
+        size_t blas_norms_y_cap = 0;
+
         int64_t job_counter = 0; ///< Job counter for this core.
         int64_t queries_counter = 0; ///< Number of queries processed by this core.
         int64_t wait_time_ns = 0; ///< Time spent waiting for jobs.

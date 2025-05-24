@@ -77,6 +77,7 @@ constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.001f;    ///< Default threshold 
 constexpr int DEFAULT_APS_FLUSH_PERIOD_US = 5;         ///< Default period (in microseconds) for flushing the APS buffer.
 constexpr int MAX_SUBBATCH = 128;
 constexpr int MIN_BATCH_SCAN_SIZE = 5; ///< Minimum batch size for scanning partitions.
+constexpr int BLAS_DB_BS = 1024 * 16;;
 
 // Default constants for maintenance policy parameters
 constexpr const char* DEFAULT_MAINTENANCE_POLICY = "query_cost"; ///< Default maintenance policy type.
