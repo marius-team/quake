@@ -472,7 +472,7 @@ inline void l2_blas(
         float*        __restrict    ip_block,     // nx * bs_y
         float*        __restrict    norms_x,      // bs_x
         float*        __restrict    norms_y,
-        float*                      pivot)      // db_blas_bs
+        vector<std::atomic<float>*>   pivot)      // db_blas_bs
 {
     if (nx == 0 || ny == 0) return;
 
@@ -495,27 +495,27 @@ inline void l2_blas(
             faiss::fvec_norms_L2sqr(norms_y, y + j0 * d, d, db_chunk);
 
             // use torch matmul
-            // Tensor x_chunk = torch::from_blob((void*)(x + i0 * d), {(int64_t)  q_chunk, (int64_t)  d}, torch::kFloat32);
-            // Tensor y_chunk = torch::from_blob((void*)(y + j0 * d), {(int64_t)  db_chunk, (int64_t) d}, torch::kFloat32);
-            // Tensor out = torch::from_blob(ip_block, {(int64_t) q_chunk, (int64_t)  db_chunk}, torch::kFloat32);
-            //
-            // torch::matmul_out(out, x_chunk, y_chunk.t());
+            Tensor x_chunk = torch::from_blob((void*)(x + i0 * d), {(int64_t)  q_chunk, (int64_t)  d}, torch::kFloat32);
+            Tensor y_chunk = torch::from_blob((void*)(y + j0 * d), {(int64_t)  db_chunk, (int64_t) d}, torch::kFloat32);
+            Tensor out = torch::from_blob(ip_block, {(int64_t) q_chunk, (int64_t)  db_chunk}, torch::kFloat32);
+
+            torch::matmul_out(out, x_chunk, y_chunk.t());
 
             // /* SGEMM */
-            {
-                const float one = 1.f;
-                float zero = 0.f;
-                FINTEGER nyi = FINTEGER(db_chunk);
-                FINTEGER nxi = FINTEGER(q_chunk);
-                FINTEGER di  = FINTEGER(d);
-                sgemm_("Transpose","Not transpose",
-                       &nyi,&nxi,&di,
-                       &one,
-                       y + j0 * d, &di,
-                       x + i0 * d, &di,
-                       &zero,
-                       ip_block,    &nyi);
-            }
+            // {
+            //     const float one = 1.f;
+            //     float zero = 0.f;
+            //     FINTEGER nyi = FINTEGER(db_chunk);
+            //     FINTEGER nxi = FINTEGER(q_chunk);
+            //     FINTEGER di  = FINTEGER(d);
+            //     sgemm_("Transpose","Not transpose",
+            //            &nyi,&nxi,&di,
+            //            &one,
+            //            y + j0 * d, &di,
+            //            x + i0 * d, &di,
+            //            &zero,
+            //            ip_block,    &nyi);
+            // }
 
             /* IP → L2² */
             if (k > 1) {
@@ -528,10 +528,11 @@ inline void l2_blas(
                     }
 
                     // collect distances closer than pivot
-                    if (pivot) {
+                    if (pivot.size() > 0) {
+                        float curr_pivot = pivot[qi]->load(std::memory_order_relaxed);
                         line_ptr = ip_block + qi * db_chunk; // Reset line_ptr to the start of the current column
                         for (size_t pj = 0; pj < db_chunk; ++pj) {
-                            if (*line_ptr < pivot[qi]) {
+                            if (*line_ptr < curr_pivot) {
                                 topk_buffers[qi]->add(*line_ptr, list_ids_ptr[j0 + pj]);
                             }
                             line_ptr++; // Move to the next element in the column
@@ -583,7 +584,7 @@ inline void batched_scan_list(const float *query_vecs,
                                 float *norms_x,
                                 float *norms_y_buf,
                               int blas_db_bs = BLAS_DB_BS,
-                              vector<float> pivots = {}) {
+                              vector<std::atomic<float>*> pivots = {}) {
     if (list_size == 0 || list_vecs == nullptr) {
         // No list vectors to process;
         return;
@@ -604,11 +605,6 @@ inline void batched_scan_list(const float *query_vecs,
 
     auto s2 = high_resolution_clock::now();
 
-    float *pivot_ptr = nullptr;
-    if (!pivots.empty()) {
-        pivot_ptr = pivots.data();
-    }
-
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
         faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
@@ -627,7 +623,7 @@ inline void batched_scan_list(const float *query_vecs,
                 ip_block,
                 norms_x,
                 norms_y_buf,
-                pivot_ptr
+                pivots
         );
         // faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
     } else {

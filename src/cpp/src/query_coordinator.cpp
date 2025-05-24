@@ -238,8 +238,8 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
                   metric_);
 
         // If scan_list completes, enqueue its results
-        auto tv = buf->get_topk();
-        auto ti = buf->get_topk_indices();
+        auto tv = buf->get_topk(false);
+        auto ti = buf->get_topk_indices(false);
         result_queue_.enqueue(ResultJob{job.query_id, job.rank, std::move(tv), std::move(ti)});
 
     } catch (const std::exception& e) {
@@ -340,11 +340,11 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     }
 
 
-    vector<float> pivots;
+    vector<std::atomic<float> *> pivots;
     pivots.resize(job.num_queries);
     for (int64_t i = 0; i < Q; ++i) {
         int qid = (*job.query_ids)[i];
-        pivots[i] = query_dist_pivots_[qid].load(std::memory_order_relaxed);
+        pivots[i] = &query_dist_pivots_[qid];
     }
 
     // run the scan on this chunk
@@ -877,6 +877,7 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
     // set main thread on separate thread from workers
     int num_cores_on_machine = std::thread::hardware_concurrency();
     set_thread_affinity(num_cores % num_cores_on_machine);
+    // set_thread_affinity(0);
 }
 
 // Shutdown Worker Threads
