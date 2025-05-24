@@ -111,7 +111,7 @@ public:
     int num_workers_;                                  ///< Total number of worker threads.
     vector<std::thread> worker_threads_;               ///< Container for worker threads.
     vector<int64_t> worker_job_counter_;               ///< Job counters for each worker.
-    vector<shared_ptr<TopkBuffer>> global_topk_buffer_pool_; ///< Global aggregator buffers.
+    shared_ptr<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>> global_topk_buffer_pool_; ///< Global aggregator buffers.
     std::mutex global_mutex_;                          ///< Mutex for global synchronization.
     std::condition_variable global_cv_;                ///< Condition variable for thread coordination.
     std::atomic<int> stop_workers_;                    ///< Flag to signal workers to terminate.

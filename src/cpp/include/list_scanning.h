@@ -180,7 +180,7 @@ public:
         if (++head_ == capacity_) flush();
     }
 
-    void batch_add(T *distances, I *indices, int num_values) {
+    float batch_add(T *distances, I *indices, int num_values) {
         int pos = 0;
         while (pos < num_values) {
             int available = capacity_ - head_;
@@ -260,8 +260,8 @@ public:
     }
 
 
-    std::vector<T> get_topk() {
-        flush();
+    std::vector<T> get_topk(bool sort = true) {
+        if (sort || head_ > k_) flush();
         int n = head_;
         std::vector<T> out;
         out.reserve(n);
@@ -282,8 +282,8 @@ public:
         return vals_[k_ - 1];
     }
 
-    std::vector<I> get_topk_indices() {
-        flush();
+    std::vector<I> get_topk_indices(bool sort = true) {
+        if (sort || head_ > k_) flush();
         int n = head_;
         std::vector<I> out;
         out.reserve(n);

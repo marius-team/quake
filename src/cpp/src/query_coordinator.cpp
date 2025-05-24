@@ -380,8 +380,8 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         for (int64_t i = 0; i < Q; ++i) {
             int global_q = (*job.query_ids)[i];
             int rank_q   = (*job.ranks)    [i];
-            auto tv = res.topk_buffer_pool[i]->get_topk();
-            auto ti = res.topk_buffer_pool[i]->get_topk_indices();
+            auto tv = res.topk_buffer_pool[i]->get_topk(false);
+            auto ti = res.topk_buffer_pool[i]->get_topk_indices(false);
             results_batch.emplace_back(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
         }
 
@@ -401,24 +401,34 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
     std::lock_guard<std::mutex> lg(global_mutex_);
     // resize or reset
 
-    size_t cap = std::min(100 * K, 10000);
-    if (global_topk_buffer_pool_.size() < (size_t) nQ) {
-        size_t old = global_topk_buffer_pool_.size();
-        global_topk_buffer_pool_.resize(nQ);
-        for (int64_t q = old; q < nQ; ++q) {
-            global_topk_buffer_pool_[q] = std::make_shared<TopkBuffer>(
-                    K,
-                    metric_ == faiss::METRIC_INNER_PRODUCT,
-                    /*cap=*/cap,
-                    /*node=*/0
-            );
-        }
-    } else {
-        for (int64_t q = 0; q < nQ; ++q) {
-            global_topk_buffer_pool_[q]->set_k(K);
-            global_topk_buffer_pool_[q]->reset();
-        }
-    }
+    // size_t cap = std::min(100 * K, 10000);
+    // faiss::HeapArray<faiss::CMin<float, int64_t>>(nQ) };
+    float * vals = (float *) quake_alloc(nQ * K * sizeof(float), 0);
+    int64_t * ids = (int64_t *) quake_alloc(nQ * K * sizeof(int64_t), 0);
+    std::fill_n(vals, nQ * K,
+        std::numeric_limits<float>::infinity());
+    std::fill_n(ids,  nQ * K, -1);
+
+    global_topk_buffer_pool_ = make_shared<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>>(
+            nQ, vals, ids, K);
+    global_topk_buffer_pool_->begin_multiple(0, nQ);
+    // if (global_topk_buffer_pool_.size() < (size_t) nQ) {
+    //     size_t old = global_topk_buffer_pool_.size();
+    //     global_topk_buffer_pool_.resize(nQ);
+    //     for (int64_t q = old; q < nQ; ++q) {
+    //         global_topk_buffer_pool_[q] = std::make_shared<TopkBuffer>(
+    //                 K,
+    //                 metric_ == faiss::METRIC_INNER_PRODUCT,
+    //                 /*cap=*/cap,
+    //                 /*node=*/0
+    //         );
+    //     }
+    // } else {
+    //     for (int64_t q = 0; q < nQ; ++q) {
+    //         global_topk_buffer_pool_[q]->set_k(K);
+    //         global_topk_buffer_pool_[q]->reset();
+    //     }
+    // }
 
     // set pivots to -1;
     float max_val = (metric_ == faiss::METRIC_INNER_PRODUCT)
@@ -617,6 +627,14 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
 
     vector<int> per_query_result_count(nQ, 0);
 
+    vector<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>::SingleResultHandler>
+        handlers;
+    handlers.reserve(nQ);
+    for (int64_t q = 0; q < nQ; ++q) {
+        handlers.emplace_back(*global_topk_buffer_pool_);
+        handlers[q].begin(q);        // ← reset & heapify for query q
+    }
+
     ResultJob rj;
     while (total_left.load(std::memory_order_relaxed) > 0) {
 
@@ -625,16 +643,13 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
 
         if (got_result) {
             do {   // Drain *all* currently available results.
-                auto &buf = global_topk_buffer_pool_[rj.query_id];
-                buf->batch_add(rj.distances.data(), rj.indices.data(),
-                               static_cast<int>(rj.indices.size()));
+                for (int64_t i = 0; i < rj.distances.size(); ++i) {
+                    handlers[rj.query_id].add_result(rj.distances[i], rj.indices[i]);
+                }
+                query_dist_pivots_[rj.query_id].store(
+                        handlers[rj.query_id].threshold, std::memory_order_relaxed);
 
                 per_query_result_count[rj.query_id]++;
-
-                if (per_query_result_count[rj.query_id] % 5 == 0) {
-                    query_dist_pivots_[rj.query_id].store(global_topk_buffer_pool_[rj.query_id]->flush(),
-                    std::memory_order_relaxed);
-                }
 
                 if (!job_flags_[rj.query_id][rj.rank]) {
                     job_flags_[rj.query_id][rj.rank] = true;
@@ -650,34 +665,41 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
             continue;   // Skip APS; we just did useful work.
         }
 
+
         /* (b) Timeout fired → run APS once. */
-        if (use_aps) {
-            for (int64_t q = 0; q < nQ; ++q) {
-                if (parts_left[q] == 0) continue;
-
-                auto &buf = global_topk_buffer_pool_[q];
-                const float r = buf->get_kth_distance();
-                if (r != query_radius[q]) {
-                    query_radius[q] = r;
-                    probs[q] = compute_recall_profile(
-                            boundary_dist[q], r, D, {}, true, metric_==faiss::METRIC_L2);
-                }
-
-                float cum = 0.0f;
-                for (int64_t p = 0; p < nprobe; ++p)
-                    if (job_flags_[q][p]) cum += probs[q][p];
-
-                if (cum >= recall_target) {
-                    for (int64_t p = 0; p < nprobe; ++p)
-                        if (!job_flags_[q][p]) {
-                            job_flags_[q][p] = true;
-                            --parts_left[q];
-                            --total_left;
-                        }
-                }
-            }
-        }
+        // if (use_aps) {
+        //     for (int64_t q = 0; q < nQ; ++q) {
+        //         if (parts_left[q] == 0) continue;
+        //
+        //         auto &buf = global_topk_buffer_pool_[q];
+        //         const float r = buf->get_kth_distance();
+        //         if (r != query_radius[q]) {
+        //             query_radius[q] = r;
+        //             probs[q] = compute_recall_profile(
+        //                     boundary_dist[q], r, D, {}, true, metric_==faiss::METRIC_L2);
+        //         }
+        //
+        //         float cum = 0.0f;
+        //         for (int64_t p = 0; p < nprobe; ++p)
+        //             if (job_flags_[q][p]) cum += probs[q][p];
+        //
+        //         if (cum >= recall_target) {
+        //             for (int64_t p = 0; p < nprobe; ++p)
+        //                 if (!job_flags_[q][p]) {
+        //                     job_flags_[q][p] = true;
+        //                     --parts_left[q];
+        //                     --total_left;
+        //                 }
+        //         }
+        //     }
+        // }
     }
+
+    // end the handlers
+    for (int64_t q = 0; q < nQ; ++q) {
+        handlers[q].end();
+    }
+
 }
 
 std::shared_ptr<SearchResult>
@@ -690,12 +712,18 @@ QueryCoordinator::aggregate_scan_results(int64_t nQ,
     auto id_acc = out_ids.accessor<int64_t,2>();
     auto d_acc  = out_dists.accessor<float,2>();
     for (int64_t q = 0; q < nQ; ++q) {
-        auto tv = global_topk_buffer_pool_[q]->get_topk();
-        auto ti = global_topk_buffer_pool_[q]->get_topk_indices();
-        for (int i = 0; i < (int)ti.size() && i < K; ++i) {
-            id_acc[q][i]  = ti[i];
-            d_acc [q][i]  = tv[i];
+
+        for (int64_t i = 0; i < K; ++i) {
+            id_acc[q][i]  = global_topk_buffer_pool_->heap_ids_tab[q * K + i];
+            d_acc [q][i]  = global_topk_buffer_pool_->heap_dis_tab[q * K + i];
         }
+
+        // auto tv = global_topk_buffer_pool_[q]->get_topk();
+        // auto ti = global_topk_buffer_pool_[q]->get_topk_indices();
+        // for (int i = 0; i < (int)ti.size() && i < K; ++i) {
+        //     id_acc[q][i]  = ti[i];
+        //     d_acc [q][i]  = tv[i];
+        // }
     }
 
     auto res = std::make_shared<SearchResult>();
