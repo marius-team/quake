@@ -471,7 +471,8 @@ inline void l2_blas(
         vector<shared_ptr<TopkBuffer>> &topk_buffers,
         float*        __restrict    ip_block,     // nx * bs_y
         float*        __restrict    norms_x,      // bs_x
-        float*        __restrict    norms_y)      // db_blas_bs
+        float*        __restrict    norms_y,
+        float*                      pivot)      // db_blas_bs
 {
     if (nx == 0 || ny == 0) return;
 
@@ -526,7 +527,18 @@ inline void l2_blas(
                         line_ptr++; // Move to the next element in the column
                     }
 
-                    topk_buffers[qi]->batch_add(ip_block + qi * db_chunk, list_ids_ptr + j0, db_chunk);
+                    // collect distances closer than pivot
+                    if (pivot) {
+                        line_ptr = ip_block + qi * db_chunk; // Reset line_ptr to the start of the current column
+                        for (size_t pj = 0; pj < db_chunk; ++pj) {
+                            if (*line_ptr < pivot[qi]) {
+                                topk_buffers[qi]->add(*line_ptr, list_ids_ptr[j0 + pj]);
+                            }
+                            line_ptr++; // Move to the next element in the column
+                        }
+                    } else {
+                        topk_buffers[qi]->batch_add(ip_block + qi * db_chunk, list_ids_ptr + j0, db_chunk);
+                    }
                 }
             } else if (k == 1) {
                 for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
@@ -570,7 +582,8 @@ inline void batched_scan_list(const float *query_vecs,
                               float *ip_block,
                                 float *norms_x,
                                 float *norms_y_buf,
-                              int blas_db_bs = BLAS_DB_BS) {
+                              int blas_db_bs = BLAS_DB_BS,
+                              vector<float> pivots = {}) {
     if (list_size == 0 || list_vecs == nullptr) {
         // No list vectors to process;
         return;
@@ -591,6 +604,11 @@ inline void batched_scan_list(const float *query_vecs,
 
     auto s2 = high_resolution_clock::now();
 
+    float *pivot_ptr = nullptr;
+    if (!pivots.empty()) {
+        pivot_ptr = pivots.data();
+    }
+
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
         faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
@@ -608,7 +626,8 @@ inline void batched_scan_list(const float *query_vecs,
                 topk_buffers,
                 ip_block,
                 norms_x,
-                norms_y_buf
+                norms_y_buf,
+                pivot_ptr
         );
         // faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
     } else {

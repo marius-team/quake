@@ -309,40 +309,48 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         res.batch_res_capacity = max_r;
     }
 
-        // reset only the first 'chunk' TopK buffers
+    // reset only the first 'chunk' TopK buffers
+    for (int64_t i = 0; i < Q; ++i) {
+        auto &buf = res.topk_buffer_pool[i];
+        buf->set_k(K);
+        buf->reset();
+    }
+
+    // // init only the first chunk*K slots in scratch
+    // float init_val = (metric_ == faiss::METRIC_INNER_PRODUCT)
+    //                  ? -std::numeric_limits<float>::infinity()
+    //                  :  std::numeric_limits<float>::infinity();
+    // std::fill_n(res.batch_distances, Q * K, init_val);
+    // std::fill_n(res.batch_ids,       Q * K, -1LL);
+
+    // auto
+
+    // gather queries
+    float *qptr = nullptr;
+    if (job.scan_all) {
+        qptr = nr.local_query_buffer;
+    } else {
+        float *dst = res.batch_queries;
         for (int64_t i = 0; i < Q; ++i) {
-            auto &buf = res.topk_buffer_pool[i];
-            buf->set_k(K);
-            buf->reset();
+            int qid = (*job.query_ids)[i];
+            const float *src = nr.local_query_buffer + size_t(qid) * D;
+            std::memcpy(dst + i * D, src, D * sizeof(float));
         }
+        qptr = dst;
+    }
 
-        // // init only the first chunk*K slots in scratch
-        // float init_val = (metric_ == faiss::METRIC_INNER_PRODUCT)
-        //                  ? -std::numeric_limits<float>::infinity()
-        //                  :  std::numeric_limits<float>::infinity();
-        // std::fill_n(res.batch_distances, Q * K, init_val);
-        // std::fill_n(res.batch_ids,       Q * K, -1LL);
 
-        // auto
+    vector<float> pivots;
+    pivots.resize(job.num_queries);
+    for (int64_t i = 0; i < Q; ++i) {
+        int qid = (*job.query_ids)[i];
+        pivots[i] = query_dist_pivots_[qid].load(std::memory_order_relaxed);
+    }
 
-        // gather queries
-        float *qptr = nullptr;
-        if (job.scan_all) {
-            qptr = nr.local_query_buffer;
-        } else {
-            float *dst = res.batch_queries;
-            for (int64_t i = 0; i < Q; ++i) {
-                int qid = (*job.query_ids)[i];
-                const float *src = nr.local_query_buffer + size_t(qid) * D;
-                std::memcpy(dst + i * D, src, D * sizeof(float));
-            }
-            qptr = dst;
-        }
-
-        // run the scan on this chunk
-        int64_t scan_setup_time = 0;
-        int64_t scan_time = 0;
-        int64_t scan_push_time = 0;
+    // run the scan on this chunk
+    int64_t scan_setup_time = 0;
+    int64_t scan_time = 0;
+    int64_t scan_push_time = 0;
     batched_scan_list(
             qptr,
             codes, ids,
@@ -357,7 +365,8 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
             /* BLAS scratch */ res.blas_ip_block,
                               res.blas_norms_x,
                               res.blas_norms_y,
-            BLAS_DB_BS);
+            BLAS_DB_BS,
+            pivots);
 
 
         res.scan_setup_time_ns += scan_setup_time;
@@ -409,6 +418,15 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
             global_topk_buffer_pool_[q]->set_k(K);
             global_topk_buffer_pool_[q]->reset();
         }
+    }
+
+    // set pivots to -1;
+    float max_val = (metric_ == faiss::METRIC_INNER_PRODUCT)
+                  ? -std::numeric_limits<float>::infinity()
+                  :  std::numeric_limits<float>::infinity();
+    query_dist_pivots_ = vector<std::atomic<float>>(nQ);
+    for (int64_t q = 0; q < nQ; ++q) {
+        query_dist_pivots_[q].store(max_val, std::memory_order_relaxed);
     }
 }
 
@@ -597,6 +615,8 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
         }
     }
 
+    vector<int> per_query_result_count(nQ, 0);
+
     ResultJob rj;
     while (total_left.load(std::memory_order_relaxed) > 0) {
 
@@ -609,15 +629,22 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
                 buf->batch_add(rj.distances.data(), rj.indices.data(),
                                static_cast<int>(rj.indices.size()));
 
+                per_query_result_count[rj.query_id]++;
+
+                if (per_query_result_count[rj.query_id] % 5 == 0) {
+                    query_dist_pivots_[rj.query_id].store(global_topk_buffer_pool_[rj.query_id]->flush(),
+                    std::memory_order_relaxed);
+                }
+
                 if (!job_flags_[rj.query_id][rj.rank]) {
                     job_flags_[rj.query_id][rj.rank] = true;
                     --parts_left[rj.query_id];
                     --total_left;
                 }
 
-                if (parts_left[rj.query_id] == 0) {
-                    global_topk_buffer_pool_[rj.query_id]->flush();
-                }
+                // if (parts_left[rj.query_id] == 0) {
+                //     global_topk_buffer_pool_[rj.query_id]->flush();
+                // }
             } while (result_queue_.try_dequeue(rj));
 
             continue;   // Skip APS; we just did useful work.

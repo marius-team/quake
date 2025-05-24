@@ -120,6 +120,7 @@ public:
 
     std::vector<ScanJob> job_buffer_;
     int   next_job_id_ = 0; ///< ID for the next job to be processed.
+    vector<std::atomic<float>> query_dist_pivots_; ///< Pivots for each query to speed up sorting
     vector<vector<std::atomic<bool>>> job_flags_; ///< Flags to track job completion
     std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.
     std::atomic<int64_t> job_process_time_ns = 0; ///< Time spent processing jobs.
