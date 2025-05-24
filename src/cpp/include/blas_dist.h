@@ -78,13 +78,12 @@ void exhaustive_L2sqr_blas_buf(
             }
 
             /* IP → L2² */
-#pragma omp parallel for if ((q_chunk*db_chunk) > 16384)
-            for (int64_t qi = 0; qi < (int64_t)q_chunk; ++qi) {
-                float* line = ip_block + qi * db_chunk;
-                const float xn = norms_x[qi];
-                for (size_t pj = 0; pj < db_chunk; ++pj, ++line) {
-                    float d2 = xn + norms_y[pj] - 2.f * (*line);
-                    *line = (d2 < 0.f || !std::isfinite(d2)) ? 0.f : d2;
+            for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
+                const float current_norm_x = norms_x[qi];
+                for (size_t pj = 0; pj < db_chunk; ++pj) {
+                    *line_ptr = std::fma(-2.f, *line_ptr, current_norm_x + norms_y[pj]);
+                    line_ptr++; // Move to the next element in the column
                 }
             }
             res.add_results(j0, j1, ip_block);

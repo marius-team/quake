@@ -81,6 +81,7 @@ public:
         int64_t queries_counter = 0; ///< Number of queries processed by this core.
         int64_t wait_time_ns = 0; ///< Time spent waiting for jobs.
         int64_t process_time_ns = 0; ///< Time spent processing jobs.
+        int64_t process_preamble_time_ns = 0; ///< Time spent on job processing (excluding waiting).
         int64_t scan_setup_time_ns = 0; ///< Time spent on scan setup.
         int64_t scan_time_ns = 0; ///< Time spent on scanning.
         int64_t scan_push_time_ns = 0; ///< Time spent pushing results.
@@ -276,7 +277,9 @@ private:
 
     std::shared_ptr<SearchResult>
     aggregate_scan_results(int64_t nQ, int K,
-                           shared_ptr<SearchTimingInfo> timing);
+                           shared_ptr<SearchTimingInfo> timing,
+                           Tensor out_ids,
+                            Tensor out_dists);
     };
 
 #endif //QUERY_COORDINATOR_H

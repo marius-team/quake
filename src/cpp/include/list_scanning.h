@@ -41,6 +41,13 @@ inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     return recall;
 }
 
+template<typename T>
+inline bool better(bool desc, T a, T b) noexcept
+{ return desc ? (a > b) : (a < b); }
+
+//======================================================================
+// 1. Fast specialised buffer for k == 1
+//======================================================================
 template<typename T, typename I>
 class TypedTopKBuffer {
 public:
@@ -118,6 +125,14 @@ public:
         }
         k_ = new_k;
         reset();
+    }
+
+    int k() const {
+        return k_;
+    }
+
+    int capacity() const {
+        return capacity_;
     }
 
     void alloc() {
@@ -294,7 +309,7 @@ inline vector<shared_ptr<TopkBuffer>> create_buffers(int batch_size, int k, bool
 
 inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer>> buffers) {
     int n = buffers.size();
-    int k = buffers[0]->k_;
+    int k = buffers[0]->k();
     Tensor topk_distances = torch::empty({n, k}, torch::kFloat32);
     Tensor topk_indices = torch::empty({n, k}, torch::kInt64);
 
@@ -443,6 +458,102 @@ inline void scan_list(const float *query_vec,
 //     }
 // }
 
+
+inline void l2_blas(
+        const float*   __restrict x,
+        const float*   __restrict y,
+        const int64_t  *list_ids,
+        size_t                      d,
+        size_t                      nx,
+        size_t                      ny,
+        size_t                      db_blas_bs,   // = bs_y
+        size_t                      k,
+        vector<shared_ptr<TopkBuffer>> &topk_buffers,
+        float*        __restrict    ip_block,     // nx * bs_y
+        float*        __restrict    norms_x,      // bs_x
+        float*        __restrict    norms_y)      // db_blas_bs
+{
+    if (nx == 0 || ny == 0) return;
+
+    constexpr size_t bs_x = 256;
+    const     size_t bs_y = db_blas_bs;
+    int64_t *list_ids_ptr = (int64_t *) list_ids;
+
+    for (size_t i0 = 0; i0 < nx; i0 += bs_x) {
+        const size_t i1 = std::min(i0 + bs_x, nx);
+        const size_t q_chunk = i1 - i0;
+
+        /* ‖x‖² for this query block */
+        faiss::fvec_norms_L2sqr(norms_x, x + i0 * d, d, q_chunk);
+
+        for (size_t j0 = 0; j0 < ny; j0 += bs_y) {
+            const size_t j1      = std::min(j0 + bs_y, ny);
+            const size_t db_chunk = j1 - j0;
+
+            /* ‖y‖² for this database block */
+            faiss::fvec_norms_L2sqr(norms_y, y + j0 * d, d, db_chunk);
+
+            // use torch matmul
+            Tensor x_chunk = torch::from_blob((void*)(x + i0 * d), {(int64_t)  q_chunk, (int64_t)  d}, torch::kFloat32);
+            Tensor y_chunk = torch::from_blob((void*)(y + j0 * d), {(int64_t)  db_chunk, (int64_t) d}, torch::kFloat32);
+            Tensor out = torch::from_blob(ip_block, {(int64_t) q_chunk, (int64_t)  db_chunk}, torch::kFloat32);
+
+            torch::matmul_out(out, x_chunk, y_chunk.t());
+
+            // /* SGEMM */
+            // {
+            //     const float one = 1.f;
+            //     float zero = 0.f;
+            //     FINTEGER nyi = FINTEGER(db_chunk);
+            //     FINTEGER nxi = FINTEGER(q_chunk);
+            //     FINTEGER di  = FINTEGER(d);
+            //     sgemm_("Transpose","Not transpose",
+            //            &nyi,&nxi,&di,
+            //            &one,
+            //            y + j0 * d, &di,
+            //            x + i0 * d, &di,
+            //            &zero,
+            //            ip_block,    &nyi);
+            // }
+
+            /* IP → L2² */
+            if (k > 1) {
+                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                    float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
+                    const float current_norm_x = norms_x[qi];
+                    for (size_t pj = 0; pj < db_chunk; ++pj) {
+                        *line_ptr = std::sqrt(std::fma(-2.f, *line_ptr, current_norm_x + norms_y[pj]));
+                        line_ptr++; // Move to the next element in the column
+                    }
+
+                    topk_buffers[qi]->batch_add(ip_block + qi * db_chunk, list_ids_ptr + j0, db_chunk);
+                }
+            } else if (k == 1) {
+                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                    float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
+                    const float current_norm_x = norms_x[qi];
+                    for (size_t pj = 0; pj < db_chunk; ++pj) {
+                        *line_ptr = std::sqrt(std::fma(-2.f, *line_ptr, current_norm_x + norms_y[pj]));
+                        line_ptr++; // Move to the next element in the column
+                    }
+
+                    float best_dist = std::numeric_limits<float>::infinity();
+                    int64_t best_id = -1;
+                    line_ptr = ip_block + qi * db_chunk; // Reset line_ptr to the start of the current column
+                    for (size_t pj = 0; pj < db_chunk; ++pj) {
+                        if (*line_ptr < best_dist) {
+                            best_dist = *line_ptr;
+                            best_id = list_ids_ptr[j0 + pj];
+                        }
+                        line_ptr++; // Move to the next element in the column
+                    }
+                    topk_buffers[qi]->add(best_dist, best_id);
+                }
+            }
+        }
+    }
+}
+
 inline void batched_scan_list(const float *query_vecs,
                               const float *list_vecs,
                               const int64_t *list_ids,
@@ -468,7 +579,7 @@ inline void batched_scan_list(const float *query_vecs,
     auto s1 = high_resolution_clock::now();
 
     // Ensure k does not exceed list_size
-    int k = topk_buffers[0]->k_;
+    int k = topk_buffers[0]->k();
     int k_max = std::min(k, list_size);
 
     bool alloc_results = false;
@@ -480,41 +591,24 @@ inline void batched_scan_list(const float *query_vecs,
 
     auto s2 = high_resolution_clock::now();
 
-    // inline void knn_L2sqr_buf(
-    //     const float* x,
-    //     const float* y,
-    //     size_t d,
-    //     size_t nx,
-    //     size_t ny,
-    //     size_t k,
-    //     float* vals,
-    //     int64_t* ids,
-    //     float* ip_block,
-    //     float* norms_x,
-    //     float* norms_y_buf,
-    //     size_t db_blas_bs = distance_compute_blas_database_bs,
-    //     const float* y_norms = nullptr,
-    //     const IDSelector* sel = nullptr)
-    // {
-
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
         faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
     } else if (metric == faiss::METRIC_L2) {
         // faiss::float_maxheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
-        faiss::knn_L2sqr_buf(
+        l2_blas(
                 query_vecs,
                 list_vecs,
+                list_ids,
                 dim,
                 num_queries,
                 list_size,
+                blas_db_bs,
                 k_max,
-                distances,
-                labels,
+                topk_buffers,
                 ip_block,
                 norms_x,
-                norms_y_buf,
-                blas_db_bs
+                norms_y_buf
         );
         // faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
     } else {
@@ -523,32 +617,6 @@ inline void batched_scan_list(const float *query_vecs,
 
     auto s3 = high_resolution_clock::now();
 
-
-    // map the labels to the actual list_ids
-    if (list_ids != nullptr) {
-        for (int i = 0; i < num_queries; i++) {
-            for (int j = 0; j < k_max; j++) {
-                labels[i * k_max + j] = list_ids[labels[i * k_max + j]];
-            }
-        }
-    }
-
-    // if the metric is l2, convert the distances to sqrt
-    if (metric == faiss::METRIC_L2) {
-        for (int i = 0; i < num_queries * k_max; i++) {
-            distances[i] = sqrt(distances[i]);
-        }
-    }
-
-    // add distances to the topk buffers
-    for (int i = 0; i < num_queries; i++) {
-        topk_buffers[i]->batch_add(distances + i * k_max, labels + i * k_max, k_max);
-    }
-
-    if (alloc_results) {
-        free(distances);
-        free(labels);
-    }
 
     auto s4 = high_resolution_clock::now();
 
