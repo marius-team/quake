@@ -495,27 +495,27 @@ inline void l2_blas(
             faiss::fvec_norms_L2sqr(norms_y, y + j0 * d, d, db_chunk);
 
             // use torch matmul
-            Tensor x_chunk = torch::from_blob((void*)(x + i0 * d), {(int64_t)  q_chunk, (int64_t)  d}, torch::kFloat32);
-            Tensor y_chunk = torch::from_blob((void*)(y + j0 * d), {(int64_t)  db_chunk, (int64_t) d}, torch::kFloat32);
-            Tensor out = torch::from_blob(ip_block, {(int64_t) q_chunk, (int64_t)  db_chunk}, torch::kFloat32);
+            // Tensor x_chunk = torch::from_blob((void*)(x + i0 * d), {(int64_t)  q_chunk, (int64_t)  d}, torch::kFloat32);
+            // Tensor y_chunk = torch::from_blob((void*)(y + j0 * d), {(int64_t)  db_chunk, (int64_t) d}, torch::kFloat32);
+            // Tensor out = torch::from_blob(ip_block, {(int64_t) q_chunk, (int64_t)  db_chunk}, torch::kFloat32);
+            //
+            // torch::matmul_out(out, x_chunk, y_chunk.t());
 
-            torch::matmul_out(out, x_chunk, y_chunk.t());
-
-            // /* SGEMM */
-            // {
-            //     const float one = 1.f;
-            //     float zero = 0.f;
-            //     FINTEGER nyi = FINTEGER(db_chunk);
-            //     FINTEGER nxi = FINTEGER(q_chunk);
-            //     FINTEGER di  = FINTEGER(d);
-            //     sgemm_("Transpose","Not transpose",
-            //            &nyi,&nxi,&di,
-            //            &one,
-            //            y + j0 * d, &di,
-            //            x + i0 * d, &di,
-            //            &zero,
-            //            ip_block,    &nyi);
-            // }
+            /* SGEMM */
+            {
+                const float one = 1.f;
+                float zero = 0.f;
+                FINTEGER nyi = FINTEGER(db_chunk);
+                FINTEGER nxi = FINTEGER(q_chunk);
+                FINTEGER di  = FINTEGER(d);
+                sgemm_("Transpose","Not transpose",
+                       &nyi,&nxi,&di,
+                       &one,
+                       y + j0 * d, &di,
+                       x + i0 * d, &di,
+                       &zero,
+                       ip_block,    &nyi);
+            }
 
             /* IP → L2² */
             if (k > 1) {
@@ -545,15 +545,12 @@ inline void l2_blas(
                 for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
                     float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
                     const float current_norm_x = norms_x[qi];
-                    for (size_t pj = 0; pj < db_chunk; ++pj) {
-                        *line_ptr = std::sqrt(std::fma(-2.f, *line_ptr, current_norm_x + norms_y[pj]));
-                        line_ptr++; // Move to the next element in the column
-                    }
 
                     float best_dist = std::numeric_limits<float>::infinity();
                     int64_t best_id = -1;
-                    line_ptr = ip_block + qi * db_chunk; // Reset line_ptr to the start of the current column
+
                     for (size_t pj = 0; pj < db_chunk; ++pj) {
+                        *line_ptr = std::sqrt(std::fma(-2.f, *line_ptr, current_norm_x + norms_y[pj]));
                         if (*line_ptr < best_dist) {
                             best_dist = *line_ptr;
                             best_id = list_ids_ptr[j0 + pj];
