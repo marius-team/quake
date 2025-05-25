@@ -538,22 +538,26 @@ inline void l2_blas(
             faiss::fvec_norms_L2sqr(norms_y, y + j0 * d, d, db_chunk);
 
             // use torch matmul
+            Tensor x_tensor = torch::from_blob((void*) x + i0 * d, {q_chunk, d}, torch::kFloat32);
+            Tensor y_tensor = torch::from_blob((void*) y + j0 * d, {db_chunk, d}, torch::kFloat32);
+            Tensor ip_tensor = torch::from_blob(ip_block, {q_chunk, db_chunk}, torch::kFloat32);
+            torch::matmul_out(ip_tensor, x_tensor, y_tensor.transpose(0, 1));
 
             /* SGEMM */
-            {
-                const float one = 1.f;
-                float zero = 0.f;
-                FINTEGER nyi = FINTEGER(db_chunk);
-                FINTEGER nxi = FINTEGER(q_chunk);
-                FINTEGER di  = FINTEGER(d);
-                sgemm_("Transpose","Not transpose",
-                       &nyi,&nxi,&di,
-                       &one,
-                       y + j0 * d, &di,
-                       x + i0 * d, &di,
-                       &zero,
-                       ip_block,    &nyi);
-            }
+            // {
+            //     const float one = 1.f;
+            //     float zero = 0.f;
+            //     FINTEGER nyi = FINTEGER(db_chunk);
+            //     FINTEGER nxi = FINTEGER(q_chunk);
+            //     FINTEGER di  = FINTEGER(d);
+            //     sgemm_("Transpose","Not transpose",
+            //            &nyi,&nxi,&di,
+            //            &one,
+            //            y + j0 * d, &di,
+            //            x + i0 * d, &di,
+            //            &zero,
+            //            ip_block,    &nyi);
+            // }
 
             /* IP → L2² */
             if (k > 1) {
