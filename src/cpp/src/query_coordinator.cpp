@@ -410,17 +410,17 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
 
     // print out debug timing info s1, ... s5
     std::cout << "QueryCoordinator::handle_batched_job: "
-              << "wait: " << res.wait_time_ns
-              << ", preamble: " << res.process_preamble_time_ns
-              << ", process: " << res.process_time_ns
-              << ", scan: " << res.scan_time_ns
-              << ", enqueue: " << res.enqueue_time_ns
-              << ", job: " << res.job_time_ns
-              << ", s1: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s1 - start).count()
-              << ", s2: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s2 - s1).count()
-              << ", s3: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s3 - s2).count()
-              << ", s4: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s4 - s3).count()
-              << ", s5: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - s4).count()
+              << "job_id: " << job.job_id
+                << ", core_id: " << res.core_id
+                << ", num_queries: " << job.num_queries
+                << ", partition_id: " << job.partition_id
+                << ", k: " << job.k
+                << ", rank: " << job.rank
+                << ", numa_node: " << node
+              << ", preamble: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s2 - s1).count()
+              << ", query copy: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s3 - s2).count()
+              << ", scan: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s4 - s3).count()
+              << ", enqueue: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - s4).count()
               << std::endl;
 }
 
