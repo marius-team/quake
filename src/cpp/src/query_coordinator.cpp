@@ -24,16 +24,22 @@ static void ensure_blas_buffers(QueryCoordinator::CoreResources& res,
         quake_free(res.blas_ip_block, res.blas_ip_capacity * sizeof(float));
         res.blas_ip_block    = static_cast<float*>(quake_alloc(ip_need * sizeof(float), node));
         res.blas_ip_capacity = ip_need;
+        // zero out the new memory
+        memset(res.blas_ip_block, 0, ip_need * sizeof(float));
     }
     if (res.blas_norms_x_cap < max_q) {
         quake_free(res.blas_norms_x, res.blas_norms_x_cap * sizeof(float));
         res.blas_norms_x     = static_cast<float*>(quake_alloc(max_q * sizeof(float), node));
         res.blas_norms_x_cap = max_q;
+        // zero out the new memory
+        memset(res.blas_norms_x, 0, max_q * sizeof(float));
     }
     if (res.blas_norms_y_cap < db_bs) {
         quake_free(res.blas_norms_y, res.blas_norms_y_cap * sizeof(float));
         res.blas_norms_y     = static_cast<float*>(quake_alloc(db_bs * sizeof(float), node));
         res.blas_norms_y_cap = db_bs;
+        // zero out the new memory
+        memset(res.blas_norms_y, 0, db_bs * sizeof(float));
     }
 }
 
