@@ -105,7 +105,7 @@ inline bool set_thread_affinity(int core_id) {
 
     // Verifies if the memory at memory_address is on the same NUMA node as the current CPU.
     // variable_name is for logging/debugging by the caller if verification fails.
-    inline bool verify_numa_locality(const void* memory_address, const char* /*variable_name*/) {
+    inline bool verify_numa_locality(const void* memory_address, const char* variable_name) {
         if (numa_available() < 0) return true; // NUMA not available, assume locality
         if (get_num_numa_nodes() <= 1) return true; // Single NUMA node system
 
