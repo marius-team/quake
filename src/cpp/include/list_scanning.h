@@ -594,17 +594,18 @@ inline void l2_blas(
                     float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
                     const float current_norm_x = norms_x[qi];
                     for (size_t pj = 0; pj < db_chunk; ++pj) {
-                        *line_ptr = std::sqrt(std::fma(-2.f, *line_ptr, current_norm_x + norms_y[pj]));
+                        *line_ptr = current_norm_x + norms_y[pj] - 2.f * (*line_ptr);
                         line_ptr++; // Move to the next element in the column
                     }
 
                     // collect distances closer than pivot
                     if (pivot.size() > 0) {
                         float curr_pivot = pivot[qi]->load(std::memory_order_relaxed);
+                        curr_pivot = curr_pivot * curr_pivot; // Convert to squared distance
                         line_ptr = ip_block + qi * db_chunk; // Reset line_ptr to the start of the current column
                         for (size_t pj = 0; pj < db_chunk; ++pj) {
                             if (*line_ptr < curr_pivot) {
-                                topk_buffers[qi]->add(*line_ptr, list_ids_ptr[j0 + pj]);
+                                topk_buffers[qi]->add(std::sqrt(*line_ptr), list_ids_ptr[j0 + pj]);
                             }
                             line_ptr++; // Move to the next element in the column
                         }
