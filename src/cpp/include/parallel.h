@@ -49,6 +49,7 @@ inline bool set_thread_affinity(int core_id) {
     if (ptr == nullptr || ptr == MAP_FAILED) {
       throw std::bad_alloc();
     }
+    memset(ptr, 0, sz); // Initialize memory to zero
     return ptr;
   }
 
@@ -162,6 +163,7 @@ inline void* quake_alloc(size_t sz, int /*node*/) {
     if (!ptr) {
         throw std::bad_alloc();
     }
+    memset(ptr, 0, sz); // Initialize memory to zero
     return ptr;
 }
 
