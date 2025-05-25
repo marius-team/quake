@@ -19,6 +19,8 @@ static void ensure_blas_buffers(QueryCoordinator::CoreResources& res,
 {
     const size_t ip_need = db_bs * max_q;
     if (res.blas_ip_capacity < ip_need) {
+        std::cerr << "Reallocating BLAS buffers: " << res.blas_ip_capacity
+                  << " -> " << ip_need << std::endl;
         quake_free(res.blas_ip_block, res.blas_ip_capacity * sizeof(float));
         res.blas_ip_block    = static_cast<float*>(quake_alloc(ip_need * sizeof(float), node));
         res.blas_ip_capacity = ip_need;
