@@ -350,16 +350,19 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
 
     // check that things are on the proper NUMA node
     bool ok = true;
-    ok = ok & verify_numa_locality(res.batch_queries, "batch_queries");
-    ok = ok & verify_numa_locality(res.batch_distances, "batch_distances");
-    ok = ok & verify_numa_locality(res.batch_ids, "batch_ids");
-    ok = ok & verify_numa_locality(res.blas_ip_block, "blas_ip_block");
-    ok = ok & verify_numa_locality(res.blas_norms_x, "blas_norms_x");
-    ok = ok & verify_numa_locality(res.blas_norms_y, "blas_norms_y");
+    ok = ok && verify_numa_locality(qptr, "qptr");
+    ok = ok && verify_numa_locality(codes, "codes");
+    ok = ok && verify_numa_locality(ids, "ids");
+    ok = ok && verify_numa_locality(res.batch_queries, "batch_queries");
+    ok = ok && verify_numa_locality(res.batch_distances, "batch_distances");
+    ok = ok && verify_numa_locality(res.batch_ids, "batch_ids");
+    ok = ok && verify_numa_locality(res.blas_ip_block, "blas_ip_block");
+    ok = ok && verify_numa_locality(res.blas_norms_x, "blas_norms_x");
+    ok = ok && verify_numa_locality(res.blas_norms_y, "blas_norms_y");
     for (int64_t i = 0; i < Q; ++i) {
-        ok = ok & verify_numa_locality(res.topk_buffer_pool[i]->ord_, "ord_");
-        ok = ok & verify_numa_locality(res.topk_buffer_pool[i]->vals_, "vals_");
-        ok = ok & verify_numa_locality(res.topk_buffer_pool[i]->ids_, "ids_");
+        ok = ok && verify_numa_locality(res.topk_buffer_pool[i]->ord_, "ord_");
+        ok = ok && verify_numa_locality(res.topk_buffer_pool[i]->vals_, "vals_");
+        ok = ok && verify_numa_locality(res.topk_buffer_pool[i]->ids_, "ids_");
     }
     if (!ok) {
         std::cerr << "[QueryCoordinator::handle_batched_job] NUMA locality check failed.\n";
