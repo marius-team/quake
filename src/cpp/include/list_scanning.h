@@ -578,6 +578,15 @@ inline void l2_blas(
             //            ip_block,    &nyi);
             // }
 
+            // for (int64_t qi = 0; qi < (int64_t)q_chunk; ++qi) {
+            //     float* line = ip_block + qi * db_chunk;
+            //     const float xn = norms_x[qi];
+            //     for (size_t pj = 0; pj < db_chunk; ++pj, ++line) {
+            //         float d2 = xn + norms_y[pj] - 2.f * (*line);
+            //         *line = (d2 < 0.f || !std::isfinite(d2)) ? 0.f : d2;
+            //     }
+            // }
+
             /* IP → L2² */
             t1 = std::chrono::high_resolution_clock::now();
             if (k > 1) {
@@ -612,14 +621,14 @@ inline void l2_blas(
                     int64_t best_id = -1;
 
                     for (size_t pj = 0; pj < db_chunk; ++pj) {
-                        *line_ptr = std::sqrt(std::fma(-2.f, *line_ptr, current_norm_x + norms_y[pj]));
+                        *line_ptr = current_norm_x + norms_y[pj] - 2.f * (*line_ptr);
                         if (*line_ptr < best_dist) {
                             best_dist = *line_ptr;
                             best_id = list_ids_ptr[j0 + pj];
                         }
                         line_ptr++; // Move to the next element in the column
                     }
-                    topk_buffers[qi]->add(best_dist, best_id);
+                    topk_buffers[qi]->add(sqrt(best_dist), best_id);
                 }
             }
             t2 = std::chrono::high_resolution_clock::now();
