@@ -348,8 +348,20 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         pivots[i] = &query_dist_pivots_[qid];
     }
 
-    // run the scan on this chunk
+    // check that things are on the proper NUMA node
+    verify_numa_locality(qptr, "qptr");
+    verify_numa_locality(codes, "codes");
+    verify_numa_locality(ids, "ids");
+    verify_numa_locality(res.batch_distances, "batch_distances");
+    verify_numa_locality(res.batch_ids, "batch_ids");
+    verify_numa_locality(res.blas_ip_block, "blas_ip_block");
+    verify_numa_locality(res.blas_norms_x, "blas_norms_x");
+    verify_numa_locality(res.blas_norms_y, "blas_norms_y");
+    verify_numa_locality(res.topk_buffer_pool[0]->ord_, "ord_");
+    verify_numa_locality(res.topk_buffer_pool[0]->vals_, "vals_");
+    verify_numa_locality(res.topk_buffer_pool[0]->ids_, "ids_");
 
+    // run the scan on this chunk
     batched_scan_list(
             qptr,
             codes, ids,

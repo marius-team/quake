@@ -66,6 +66,90 @@ inline bool set_thread_affinity(int core_id) {
         return numa_num_configured_nodes();
     }
 
+    inline int get_current_cpu_numa_node() {
+        if (numa_available() < 0) return 0; // NUMA not available or error
+        int current_cpu = sched_getcpu();
+        if (current_cpu < 0) {
+            // perror("sched_getcpu failed"); // User prefers less output
+            return -1; // Error
+        }
+        return numa_node_of_cpu(current_cpu);
+    }
+
+    // Helper to get the NUMA node of a memory address
+    inline int get_memory_numa_node(const void* ptr) {
+        if (numa_available() < 0) return 0; // NUMA not available or error
+        if (!ptr) {
+            return -1; // Invalid pointer
+        }
+
+        int page_node = -1;
+        // Align pointer to page boundary for numa_move_pages query
+        void* page_address = (void*)((uintptr_t)ptr & ~((uintptr_t)getpagesize() - 1));
+
+        // Use numa_move_pages with nodes=NULL to query the current node of the page.
+        // The 'pages' argument is an array of page addresses.
+        void *pages_to_query[] = { page_address };
+        int status_array[] = { -1 }; // To store the node of the page
+
+        // pid = 0 for current process's address space
+        if (numa_move_pages(0, 1, pages_to_query, NULL, status_array, 0) == 0) {
+            page_node = status_array[0];
+        } else {
+            // perror("numa_move_pages query failed"); // User prefers less output
+            // This could happen if the page is not mapped, or other errors.
+            page_node = -2; // Indicate error in querying
+        }
+        return page_node;
+    }
+
+    // Verifies if the memory at memory_address is on the same NUMA node as the current CPU.
+    // variable_name is for logging/debugging by the caller if verification fails.
+    inline bool verify_numa_locality(const void* memory_address, const char* /*variable_name*/) {
+        if (numa_available() < 0) return true; // NUMA not available, assume locality
+        if (get_num_numa_nodes() <= 1) return true; // Single NUMA node system
+
+        if (!memory_address) {
+            std::cout << "Warning: Cannot verify NUMA locality for null pointer: " << variable_name << std::endl;
+            return true; // Or false, based on desired strictness for nullptrs. True avoids false positives.
+        }
+
+        int current_cpu_node = get_current_cpu_numa_node();
+        if (current_cpu_node < 0) {
+            std::cout << "Error: Could not determine current CPU NUMA node for " << variable_name << std::endl;
+            return false; // Cannot verify
+        }
+
+        int memory_page_node = get_memory_numa_node(memory_address);
+        if (memory_page_node < -1) { // -2 indicates query error
+            std::cout << "Error: Could not determine NUMA node for memory of " << variable_name << std::endl;
+            return false; // Cannot verify due to error
+        }
+        if (memory_page_node == -1) {
+            // This typically means the page is not mapped or has a default/interleaved policy
+            // that doesn't map to a single specific node in a way numa_move_pages can report.
+            // For strict checking, this could be considered non-local if cpu_node is specific.
+            // Caller can log: "Warning: Memory for " << variable_name << " has undetermined/interleaved policy (node -1). CPU node: " << current_cpu_node
+            // A common case for MPOL_DEFAULT is allocation on the node of first touch.
+            // If it's truly interleaved, it's not "local" to any single node.
+            // If it's default and first touched by current_cpu_node, it would be local.
+            // This check is tricky. For now, if we can't determine a specific node, assume it might not be local.
+            std::cout << "Warning: Memory for " << variable_name << " has undetermined/interleaved policy (node -1). CPU node: " << current_cpu_node << std::endl;
+            return false;
+        }
+
+        bool is_local = (current_cpu_node == memory_page_node);
+
+        if (is_local) {
+            std::cout << "NUMA locality verified for " << variable_name << std::endl;
+        } else {
+            std::cout << "Warning: NUMA locality mismatch for " << variable_name
+                      << ": CPU is on node " << current_cpu_node
+                      << ", but memory is on node " << memory_page_node << std::endl;
+        }
+
+        return is_local;
+    }
 #else
 #include <cstdlib>
 #include <new>
@@ -89,6 +173,13 @@ inline int cpu_numa_node(int /*cpu*/) {
 inline int get_num_numa_nodes() {
     return 1; // Not applicable
 }
+
+inline bool verify_numa_locality(const void* /*memory_address*/, const char* /*variable_name*/) {
+    return true;
+}
+inline int get_current_cpu_numa_node() { return 0; }
+inline int get_memory_numa_node(const void* /*ptr*/) { return 0; }
+
 #endif
 
 
