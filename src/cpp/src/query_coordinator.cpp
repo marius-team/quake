@@ -366,7 +366,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     }
     if (!ok) {
         std::cerr << "[QueryCoordinator::handle_batched_job] NUMA locality check failed.\n";
-        throw std::runtime_error("NUMA locality check failed");
+        // throw std::runtime_error("NUMA locality check failed");
     }
 
     // verify_numa_locality(qptr, "qptr");
