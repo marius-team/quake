@@ -122,6 +122,7 @@ inline bool set_thread_affinity(int core_id) {
 
         int memory_page_node = get_memory_numa_node(memory_address);
         if (memory_page_node < -1) { // -2 indicates query error
+            std::cout << "memory_page_node = " << memory_page_node << std::endl;
             std::cout << "Error: Could not determine NUMA node for memory of " << variable_name << std::endl;
             return false; // Cannot verify due to error
         }
