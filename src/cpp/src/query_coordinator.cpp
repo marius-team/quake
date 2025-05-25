@@ -358,11 +358,11 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     // verify_numa_locality(res.blas_norms_x, "blas_norms_x");
     // verify_numa_locality(res.blas_norms_y, "blas_norms_y");
 
-    for (int64_t i = 0; i < Q; ++i) {
-        verify_numa_locality(res.topk_buffer_pool[i]->ord_, "ord_");
-        verify_numa_locality(res.topk_buffer_pool[i]->vals_, "vals_");
-        verify_numa_locality(res.topk_buffer_pool[i]->ids_, "ids_");
-    }
+    // for (int64_t i = 0; i < Q; ++i) {
+    //     verify_numa_locality(res.topk_buffer_pool[i]->ord_, "ord_");
+    //     verify_numa_locality(res.topk_buffer_pool[i]->vals_, "vals_");
+    //     verify_numa_locality(res.topk_buffer_pool[i]->ids_, "ids_");
+    // }
 
     // run the scan on this chunk
     batched_scan_list(
