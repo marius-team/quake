@@ -141,7 +141,7 @@ inline bool set_thread_affinity(int core_id) {
         bool is_local = (current_cpu_node == memory_page_node);
 
         if (is_local) {
-            std::cout << "NUMA locality verified for " << variable_name << std::endl;
+            // std::cout << "NUMA locality verified for " << variable_name << std::endl;
         } else {
             std::cout << "Warning: NUMA locality mismatch for " << variable_name
                       << ": CPU is on node " << current_cpu_node
