@@ -235,7 +235,8 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
                   part_size,
                   D,
                   *buf,
-                  metric_);
+                  metric_,
+                  query_dist_pivots_[job.query_id].load(std::memory_order_relaxed));
 
         // If scan_list completes, enqueue its results
         auto tv = buf->get_topk(false);
@@ -259,6 +260,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
                                           CoreResources &res,
                                           NUMAResources &nr) {
 
+    auto start = std::chrono::high_resolution_clock::now();
     // Total queries, Top-K, dimension, NUMA node
     int64_t Q    = job.num_queries;
     int     K    = job.k;
@@ -339,7 +341,6 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         qptr = dst;
     }
 
-
     vector<std::atomic<float> *> pivots;
     pivots.resize(job.num_queries);
     for (int64_t i = 0; i < Q; ++i) {
@@ -348,50 +349,41 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     }
 
     // run the scan on this chunk
-    int64_t scan_setup_time = 0;
-    int64_t scan_time = 0;
-    int64_t scan_push_time = 0;
+
     batched_scan_list(
             qptr,
             codes, ids,
             Q, part_size, D,
             res.topk_buffer_pool,
-            &scan_setup_time,
-            &scan_time,
-            &scan_push_time,
             metric_,
-            /* distances*/ res.batch_distances,
-            /* labels   */ res.batch_ids,
-            /* BLAS scratch */ res.blas_ip_block,
-                              res.blas_norms_x,
-                              res.blas_norms_y,
+            res.blas_ip_block,
+            res.blas_norms_x,
+            res.blas_norms_y,
             BLAS_DB_BS,
             pivots);
 
+    auto end = std::chrono::high_resolution_clock::now();
+    res.scan_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
-        res.scan_setup_time_ns += scan_setup_time;
-        res.scan_time_ns += scan_time;
-        res.scan_push_time_ns += scan_push_time;
+    start = std::chrono::high_resolution_clock::now();
+    // collect results for this chunk
+    std::vector<ResultJob> results_batch;
+    results_batch.reserve(Q);
+    for (int64_t i = 0; i < Q; ++i) {
+        int global_q = (*job.query_ids)[i];
+        int rank_q   = (*job.ranks)    [i];
+        auto tv = res.topk_buffer_pool[i]->get_topk(false);
+        auto ti = res.topk_buffer_pool[i]->get_topk_indices(false);
+        results_batch.emplace_back(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
+    }
 
-        auto start = std::chrono::high_resolution_clock::now();
-        // collect results for this chunk
-        std::vector<ResultJob> results_batch;
-        results_batch.reserve(Q);
-        for (int64_t i = 0; i < Q; ++i) {
-            int global_q = (*job.query_ids)[i];
-            int rank_q   = (*job.ranks)    [i];
-            auto tv = res.topk_buffer_pool[i]->get_topk(false);
-            auto ti = res.topk_buffer_pool[i]->get_topk_indices(false);
-            results_batch.emplace_back(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
-        }
-
-        // enqueue this sub-batch in bulk
-        result_queue_.enqueue_bulk(
-                std::make_move_iterator(results_batch.begin()),
-                results_batch.size()
-        );
-        auto end = std::chrono::high_resolution_clock::now();
-        res.enqueue_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    // enqueue this sub-batch in bulk
+    result_queue_.enqueue_bulk(
+            std::make_move_iterator(results_batch.begin()),
+            results_batch.size()
+    );
+    end = std::chrono::high_resolution_clock::now();
+    res.enqueue_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 }
 
 void QueryCoordinator::init_global_buffers(int64_t nQ,
@@ -405,35 +397,24 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
     // faiss::HeapArray<faiss::CMin<float, int64_t>>(nQ) };
     float * vals = (float *) quake_alloc(nQ * K * sizeof(float), 0);
     int64_t * ids = (int64_t *) quake_alloc(nQ * K * sizeof(int64_t), 0);
-    std::fill_n(vals, nQ * K,
-        std::numeric_limits<float>::infinity());
     std::fill_n(ids,  nQ * K, -1);
 
-    global_topk_buffer_pool_ = make_shared<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>>(
-            nQ, vals, ids, K);
-    global_topk_buffer_pool_->begin_multiple(0, nQ);
-    // if (global_topk_buffer_pool_.size() < (size_t) nQ) {
-    //     size_t old = global_topk_buffer_pool_.size();
-    //     global_topk_buffer_pool_.resize(nQ);
-    //     for (int64_t q = old; q < nQ; ++q) {
-    //         global_topk_buffer_pool_[q] = std::make_shared<TopkBuffer>(
-    //                 K,
-    //                 metric_ == faiss::METRIC_INNER_PRODUCT,
-    //                 /*cap=*/cap,
-    //                 /*node=*/0
-    //         );
-    //     }
-    // } else {
-    //     for (int64_t q = 0; q < nQ; ++q) {
-    //         global_topk_buffer_pool_[q]->set_k(K);
-    //         global_topk_buffer_pool_[q]->reset();
-    //     }
-    // }
-
-    // set pivots to -1;
     float max_val = (metric_ == faiss::METRIC_INNER_PRODUCT)
-                  ? -std::numeric_limits<float>::infinity()
-                  :  std::numeric_limits<float>::infinity();
+              ? -std::numeric_limits<float>::infinity()
+              :  std::numeric_limits<float>::infinity();
+
+    std::fill_n(vals, nQ * K, max_val);
+
+    if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+        global_max_heaps_ = make_shared<faiss::HeapBlockResultHandler<faiss::CMin<float, int64_t>>>(
+            nQ, vals, ids, K);
+    } else {
+        std::fill_n(vals, nQ * K,
+            std::numeric_limits<float>::infinity());
+        global_min_heaps_ = make_shared<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>>(
+            nQ, vals, ids, K);
+    }
+
     query_dist_pivots_ = vector<std::atomic<float>>(nQ);
     for (int64_t q = 0; q < nQ; ++q) {
         query_dist_pivots_[q].store(max_val, std::memory_order_relaxed);
@@ -627,79 +608,81 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
 
     vector<int> per_query_result_count(nQ, 0);
 
-    vector<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>::SingleResultHandler>
-        handlers;
-    handlers.reserve(nQ);
-    for (int64_t q = 0; q < nQ; ++q) {
-        handlers.emplace_back(*global_topk_buffer_pool_);
-        handlers[q].begin(q);        // ← reset & heapify for query q
-    }
-
-    ResultJob rj;
-    while (total_left.load(std::memory_order_relaxed) > 0) {
-
-        /* -- Wait for result or APS timeout -- */
-        bool got_result = result_queue_.wait_dequeue_timed(rj, aps_dur);
-
-        if (got_result) {
-            do {   // Drain *all* currently available results.
-                for (int64_t i = 0; i < rj.distances.size(); ++i) {
-                    handlers[rj.query_id].add_result(rj.distances[i], rj.indices[i]);
-                }
-                query_dist_pivots_[rj.query_id].store(
-                        handlers[rj.query_id].threshold, std::memory_order_relaxed);
-
-                per_query_result_count[rj.query_id]++;
-
-                if (!job_flags_[rj.query_id][rj.rank]) {
-                    job_flags_[rj.query_id][rj.rank] = true;
-                    --parts_left[rj.query_id];
-                    --total_left;
-                }
-
-                // if (parts_left[rj.query_id] == 0) {
-                //     global_topk_buffer_pool_[rj.query_id]->flush();
-                // }
-            } while (result_queue_.try_dequeue(rj));
-
-            continue;   // Skip APS; we just did useful work.
+    if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+        vector<faiss::HeapBlockResultHandler<faiss::CMin<float, int64_t>>::SingleResultHandler>
+            handlers;
+        for (int64_t q = 0; q < nQ; ++q) {
+            handlers.emplace_back(*global_max_heaps_);
+            handlers[q].begin(q);        // ← reset & heapify for query q
         }
 
+        ResultJob rj;
+        while (total_left.load(std::memory_order_relaxed) > 0) {
 
-        /* (b) Timeout fired → run APS once. */
-        // if (use_aps) {
-        //     for (int64_t q = 0; q < nQ; ++q) {
-        //         if (parts_left[q] == 0) continue;
-        //
-        //         auto &buf = global_topk_buffer_pool_[q];
-        //         const float r = buf->get_kth_distance();
-        //         if (r != query_radius[q]) {
-        //             query_radius[q] = r;
-        //             probs[q] = compute_recall_profile(
-        //                     boundary_dist[q], r, D, {}, true, metric_==faiss::METRIC_L2);
-        //         }
-        //
-        //         float cum = 0.0f;
-        //         for (int64_t p = 0; p < nprobe; ++p)
-        //             if (job_flags_[q][p]) cum += probs[q][p];
-        //
-        //         if (cum >= recall_target) {
-        //             for (int64_t p = 0; p < nprobe; ++p)
-        //                 if (!job_flags_[q][p]) {
-        //                     job_flags_[q][p] = true;
-        //                     --parts_left[q];
-        //                     --total_left;
-        //                 }
-        //         }
-        //     }
-        // }
+            /* -- Wait for result or APS timeout -- */
+            bool got_result = result_queue_.wait_dequeue_timed(rj, aps_dur);
+
+            if (got_result) {
+                do {   // Drain *all* currently available results.
+                    for (int64_t i = 0; i < rj.distances.size(); ++i) {
+                        handlers[rj.query_id].add_result(rj.distances[i], rj.indices[i]);
+                    }
+                    query_dist_pivots_[rj.query_id].store(
+                            handlers[rj.query_id].threshold, std::memory_order_relaxed);
+
+                    per_query_result_count[rj.query_id]++;
+
+                    if (!job_flags_[rj.query_id][rj.rank]) {
+                        job_flags_[rj.query_id][rj.rank] = true;
+                        --parts_left[rj.query_id];
+                        --total_left;
+                    }
+                } while (result_queue_.try_dequeue(rj));
+            }
+        }
+        // end the handlers
+        for (int64_t q = 0; q < nQ; ++q) {
+            handlers[q].end();
+        }
+    } else {
+        vector<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>::SingleResultHandler>
+            handlers;
+        handlers.reserve(nQ);
+        for (int64_t q = 0; q < nQ; ++q) {
+            handlers.emplace_back(*global_min_heaps_);
+            handlers[q].begin(q);        // ← reset & heapify for query q
+        }
+
+        ResultJob rj;
+        while (total_left.load(std::memory_order_relaxed) > 0) {
+
+            /* -- Wait for result or APS timeout -- */
+            bool got_result = result_queue_.wait_dequeue_timed(rj, aps_dur);
+
+            if (got_result) {
+                do {   // Drain *all* currently available results.
+                    for (int64_t i = 0; i < rj.distances.size(); ++i) {
+                        handlers[rj.query_id].add_result(rj.distances[i], rj.indices[i]);
+                    }
+                    query_dist_pivots_[rj.query_id].store(
+                            handlers[rj.query_id].threshold, std::memory_order_relaxed);
+
+                    per_query_result_count[rj.query_id]++;
+
+                    if (!job_flags_[rj.query_id][rj.rank]) {
+                        job_flags_[rj.query_id][rj.rank] = true;
+                        --parts_left[rj.query_id];
+                        --total_left;
+                    }
+                } while (result_queue_.try_dequeue(rj));
+            }
+        }
+
+        // end the handlers
+        for (int64_t q = 0; q < nQ; ++q) {
+            handlers[q].end();
+        }
     }
-
-    // end the handlers
-    for (int64_t q = 0; q < nQ; ++q) {
-        handlers[q].end();
-    }
-
 }
 
 std::shared_ptr<SearchResult>
@@ -711,19 +694,22 @@ QueryCoordinator::aggregate_scan_results(int64_t nQ,
 
     auto id_acc = out_ids.accessor<int64_t,2>();
     auto d_acc  = out_dists.accessor<float,2>();
-    for (int64_t q = 0; q < nQ; ++q) {
 
-        for (int64_t i = 0; i < K; ++i) {
-            id_acc[q][i]  = global_topk_buffer_pool_->heap_ids_tab[q * K + i];
-            d_acc [q][i]  = global_topk_buffer_pool_->heap_dis_tab[q * K + i];
+    // copy results from the global heaps to the output tensors
+    if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+        for (int64_t q = 0; q < nQ; ++q) {
+            for (int64_t i = 0; i < K; ++i) {
+                id_acc[q][i]  = global_max_heaps_->heap_ids_tab[q * K + i];
+                d_acc [q][i]  = global_max_heaps_->heap_dis_tab[q * K + i];
+            }
         }
-
-        // auto tv = global_topk_buffer_pool_[q]->get_topk();
-        // auto ti = global_topk_buffer_pool_[q]->get_topk_indices();
-        // for (int i = 0; i < (int)ti.size() && i < K; ++i) {
-        //     id_acc[q][i]  = ti[i];
-        //     d_acc [q][i]  = tv[i];
-        // }
+    } else {
+        for (int64_t q = 0; q < nQ; ++q) {
+            for (int64_t i = 0; i < K; ++i) {
+                id_acc[q][i]  = global_min_heaps_->heap_ids_tab[q * K + i];
+                d_acc [q][i]  = global_min_heaps_->heap_dis_tab[q * K + i];
+            }
+        }
     }
 
     auto res = std::make_shared<SearchResult>();
@@ -764,9 +750,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         core_process_preamble_time_ns[i] = core_resources_[i].process_preamble_time_ns;
         core_enqueue_time_ns[i] = core_resources_[i].enqueue_time_ns;
         core_job_time_ns[i] = core_resources_[i].job_time_ns;
-        core_scan_setup_time_ns[i] = core_resources_[i].scan_setup_time_ns;
         core_scan_time_ns[i] = core_resources_[i].scan_time_ns;
-        core_scan_push_time_ns[i] = core_resources_[i].scan_push_time_ns;
     }
 
     auto s1 = high_resolution_clock::now();
@@ -817,9 +801,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         core_process_preamble_time_ns[i] = core_resources_[i].process_preamble_time_ns - core_process_preamble_time_ns[i];
         core_enqueue_time_ns[i] = core_resources_[i].enqueue_time_ns - core_enqueue_time_ns[i];
         core_job_time_ns[i] = core_resources_[i].job_time_ns - core_job_time_ns[i];
-        core_scan_setup_time_ns[i] = core_resources_[i].scan_setup_time_ns - core_scan_setup_time_ns[i];
         core_scan_time_ns[i] = core_resources_[i].scan_time_ns - core_scan_time_ns[i];
-        core_scan_push_time_ns[i] = core_resources_[i].scan_push_time_ns - core_scan_push_time_ns[i];
     }
 
 
@@ -1013,7 +995,8 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                       partition_manager_->partition_store_->list_size(pi),
                       dimension,
                       *topk_buf,
-                      metric_);
+                      metric_,
+                      query_radius);
             scanned_ids.push_back(pi);
 
             float curr_radius = topk_buf->get_kth_distance();
@@ -1262,10 +1245,6 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
 
         // Perform a single batched scan on the partition.
 
-        int64_t scan_setup_time = 0;
-        int64_t scan_time = 0;
-        int64_t scan_push_time = 0;
-
         batched_scan_list(x_subset.data_ptr<float>(),
                           list_codes,
                           list_ids,
@@ -1273,12 +1252,7 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
                           list_size,
                           d,
                           local_buffers,
-                          &scan_setup_time,
-                          &scan_time,
-                          &scan_push_time,
                           metric_,
-                          /* distances*/ nullptr,
-                          /* labels   */ nullptr,
                           /* BLAS scratch */ serial_res.blas_ip_block,
                                             serial_res.blas_norms_x,
                                             serial_res.blas_norms_y,

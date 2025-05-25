@@ -82,9 +82,7 @@ public:
         int64_t wait_time_ns = 0; ///< Time spent waiting for jobs.
         int64_t process_time_ns = 0; ///< Time spent processing jobs.
         int64_t process_preamble_time_ns = 0; ///< Time spent on job processing (excluding waiting).
-        int64_t scan_setup_time_ns = 0; ///< Time spent on scan setup.
         int64_t scan_time_ns = 0; ///< Time spent on scanning.
-        int64_t scan_push_time_ns = 0; ///< Time spent pushing results.
         int64_t enqueue_time_ns = 0; ///< Time spent enqueuing.
         int64_t job_time_ns = 0; ///< Time spent on job processing (excluding waiting).
     };
@@ -111,7 +109,10 @@ public:
     int num_workers_;                                  ///< Total number of worker threads.
     vector<std::thread> worker_threads_;               ///< Container for worker threads.
     vector<int64_t> worker_job_counter_;               ///< Job counters for each worker.
-    shared_ptr<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>> global_topk_buffer_pool_; ///< Global aggregator buffers.
+
+    shared_ptr<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>> global_min_heaps_; ///< Global aggregator buffers.
+    shared_ptr<faiss::HeapBlockResultHandler<faiss::CMin<float, int64_t>>> global_max_heaps_; ///< Global aggregator buffers.
+
     std::mutex global_mutex_;                          ///< Mutex for global synchronization.
     std::condition_variable global_cv_;                ///< Condition variable for thread coordination.
     std::atomic<int> stop_workers_;                    ///< Flag to signal workers to terminate.

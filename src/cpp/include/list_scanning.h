@@ -335,10 +335,15 @@ inline void scan_list_no_ids_inner_product(const float *query_vec,
                                                    const float *list_vecs,
                                                    int list_size,
                                                    int d,
-                                                   TopkBuffer &buffer) {
+                                                   TopkBuffer &buffer,
+                                                   float pivot) {
     const float *vec = list_vecs;
+    float dist;
     for (int l = 0; l < list_size; l++) {
-        buffer.add(faiss::fvec_inner_product(query_vec, vec, d), l);
+        dist = faiss::fvec_inner_product(query_vec, vec, d);
+        if (dist > pivot) {
+            buffer.add(dist, l);
+        }
         vec += d;  // move pointer to next vector
     }
 }
@@ -347,10 +352,14 @@ inline void scan_list_no_ids_l2(const float *query_vec,
                                       const float *list_vecs,
                                       int list_size,
                                       int d,
-                                      TopkBuffer &buffer) {
+                                      TopkBuffer &buffer,
+                                      float pivot) {
     const float *vec = list_vecs;
     for (int l = 0; l < list_size; l++) {
-        buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), l);
+        float dist = sqrt(faiss::fvec_L2sqr(query_vec, vec, d));
+        if (dist < pivot) {
+            buffer.add(dist, l);
+        }
         vec += d;
     }
 }
@@ -360,10 +369,14 @@ inline void scan_list_with_ids_inner_product(const float *query_vec,
                                                      const int64_t *list_ids,
                                                      int list_size,
                                                      int d,
-                                                     TopkBuffer &buffer) {
+                                                     TopkBuffer &buffer,
+                                                     float pivot) {
     const float *vec = list_vecs;
     for (int l = 0; l < list_size; l++) {
-        buffer.add(faiss::fvec_inner_product(query_vec, vec, d), list_ids[l]);
+        float dist = faiss::fvec_inner_product(query_vec, vec, d);
+        if (dist > pivot) {
+            buffer.add(dist, list_ids[l]);
+        }
         vec += d;
     }
 }
@@ -373,7 +386,8 @@ inline void scan_list_with_ids_l2(const float *query_vec,
                                         const int64_t *list_ids,
                                         int list_size,
                                         int d,
-                                        TopkBuffer &buffer) {
+                                        TopkBuffer &buffer,
+                                        float pivot) {
     const float *vec = list_vecs;
     for (int l = 0; l < list_size; l++) {
         buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
@@ -388,75 +402,104 @@ inline void scan_list(const float *query_vec,
                             int list_size,
                             int d,
                             TopkBuffer &buffer,
-                            faiss::MetricType metric = faiss::METRIC_L2) {
+                            faiss::MetricType metric,
+                            float pivot) {
     // Dispatch based on metric type and whether list_ids is provided.
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         if (list_ids == nullptr)
-            scan_list_no_ids_inner_product(query_vec, list_vecs, list_size, d, buffer);
+            scan_list_no_ids_inner_product(query_vec, list_vecs, list_size, d, buffer, pivot);
         else
-            scan_list_with_ids_inner_product(query_vec, list_vecs, list_ids, list_size, d, buffer);
+            scan_list_with_ids_inner_product(query_vec, list_vecs, list_ids, list_size, d, buffer, pivot);
     } else { // Assume L2 (or similar)
         if (list_ids == nullptr)
-            scan_list_no_ids_l2(query_vec, list_vecs, list_size, d, buffer);
+            scan_list_no_ids_l2(query_vec, list_vecs, list_size, d, buffer, pivot);
         else
-            scan_list_with_ids_l2(query_vec, list_vecs, list_ids, list_size, d, buffer);
+            scan_list_with_ids_l2(query_vec, list_vecs, list_ids, list_size, d, buffer, pivot);
     }
 }
 
-// inline void batched_scan_list(
-//         const float *query_vecs,
-//         const float *list_vecs,
-//         const int64_t *list_ids,
-//         int num_queries,
-//         int list_size,
-//         int dim,
-//         vector<shared_ptr<TopkBuffer>> &topk_buffers,
-//         MetricType metric = faiss::METRIC_L2,
-//         float *dist = nullptr,
-//         int64_t *labels = nullptr)  // Optional output for distances and labels
-// {
-//     if (list_size == 0 || list_vecs == nullptr) {
-//         return;
-//     }
-//
-//     // Wrap raw arrays in torch Tensors, no copy
-//     Tensor query = torch::from_blob((void*)query_vecs, {num_queries, dim}, torch::kFloat32);
-//     Tensor list  = torch::from_blob((void*)list_vecs,  {list_size, dim}, torch::kFloat32);
-//
-//     torch::Tensor distances;
-//     if (metric == faiss::METRIC_L2) {
-//         // Returns [num_queries, list_size], each entry is the Euclidean distance
-//         distances = torch::cdist(query, list, 2.0);
-//     } else if (metric == faiss::METRIC_INNER_PRODUCT) {
-//         // [num_queries, list_size], each entry is dot product
-//         distances = torch::matmul(query, list.t());
-//     } else {
-//         throw std::runtime_error("Metric type not supported");
-//     }
-//
-//     // For each query, push all list vectors and their distances into TopkBuffer
-//     auto distances_acc = distances.accessor<float,2>();
-//     for (int i = 0; i < num_queries; ++i) {
-//         std::vector<float> dists(list_size);
-//         std::vector<int64_t> ids(list_size);
-//
-//         for (int j = 0; j < list_size; ++j) {
-//             dists[j] = distances_acc[i][j];
-//         }
-//
-//         if (list_ids) {
-//             for (int j = 0; j < list_size; ++j) {
-//                 ids[j] = list_ids[j];
-//             }
-//         } else {
-//             for (int j = 0; j < list_size; ++j) {
-//                 ids[j] = j;
-//             }
-//         }
-//
-//         topk_buffers[i]->batch_add(dists.data(), ids.data(), list_size);
-//     }
-// }
+inline void ip_blas(
+        const float*   __restrict x,
+        const float*   __restrict y,
+        const int64_t  *list_ids,
+        size_t                      d,
+        size_t                      nx,
+        size_t                      ny,
+        size_t                      db_blas_bs,   // = bs_y
+        size_t                      k,
+        vector<shared_ptr<TopkBuffer>> &topk_buffers,
+        float*        __restrict    ip_block,     // nx * bs_y
+        vector<std::atomic<float>*>   pivot)      // db_blas_bs
+{
+    if (nx == 0 || ny == 0) return;
+
+    constexpr size_t bs_x = 256;
+    const     size_t bs_y = db_blas_bs;
+    int64_t *list_ids_ptr = (int64_t *) list_ids;
+
+    for (size_t i0 = 0; i0 < nx; i0 += bs_x) {
+        const size_t i1 = std::min(i0 + bs_x, nx);
+        const size_t q_chunk = i1 - i0;
+
+        for (size_t j0 = 0; j0 < ny; j0 += bs_y) {
+            const size_t j1      = std::min(j0 + bs_y, ny);
+            const size_t db_chunk = j1 - j0;
+
+            // use torch matmul
+
+            /* SGEMM */
+            {
+                const float one = 1.f;
+                float zero = 0.f;
+                FINTEGER nyi = FINTEGER(db_chunk);
+                FINTEGER nxi = FINTEGER(q_chunk);
+                FINTEGER di  = FINTEGER(d);
+                sgemm_("Transpose","Not transpose",
+                       &nyi,&nxi,&di,
+                       &one,
+                       y + j0 * d, &di,
+                       x + i0 * d, &di,
+                       &zero,
+                       ip_block,    &nyi);
+            }
+
+            /* IP → L2² */
+            if (k > 1) {
+                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                    float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
+                    // collect distances closer than pivot
+                    if (pivot.size() > 0) {
+                        float curr_pivot = pivot[qi]->load(std::memory_order_relaxed);
+                        line_ptr = ip_block + qi * db_chunk; // Reset line_ptr to the start of the current column
+                        for (size_t pj = 0; pj < db_chunk; ++pj) {
+                            if (*line_ptr > curr_pivot) {
+                                topk_buffers[qi]->add(*line_ptr, list_ids_ptr[j0 + pj]);
+                            }
+                            line_ptr++; // Move to the next element in the column
+                        }
+                    } else {
+                        topk_buffers[qi]->batch_add(ip_block + qi * db_chunk, list_ids_ptr + j0, db_chunk);
+                    }
+                }
+            } else if (k == 1) {
+                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                    float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
+                    float best_dist = -std::numeric_limits<float>::infinity();
+                    int64_t best_id = -1;
+
+                    for (size_t pj = 0; pj < db_chunk; ++pj) {
+                        if (*line_ptr < best_dist) {
+                            best_dist = *line_ptr;
+                            best_id = list_ids_ptr[j0 + pj];
+                        }
+                        line_ptr++; // Move to the next element in the column
+                    }
+                    topk_buffers[qi]->add(best_dist, best_id);
+                }
+            }
+        }
+    }
+}
 
 
 inline void l2_blas(
@@ -495,11 +538,6 @@ inline void l2_blas(
             faiss::fvec_norms_L2sqr(norms_y, y + j0 * d, d, db_chunk);
 
             // use torch matmul
-            // Tensor x_chunk = torch::from_blob((void*)(x + i0 * d), {(int64_t)  q_chunk, (int64_t)  d}, torch::kFloat32);
-            // Tensor y_chunk = torch::from_blob((void*)(y + j0 * d), {(int64_t)  db_chunk, (int64_t) d}, torch::kFloat32);
-            // Tensor out = torch::from_blob(ip_block, {(int64_t) q_chunk, (int64_t)  db_chunk}, torch::kFloat32);
-            //
-            // torch::matmul_out(out, x_chunk, y_chunk.t());
 
             /* SGEMM */
             {
@@ -571,15 +609,10 @@ inline void batched_scan_list(const float *query_vecs,
                               int list_size,
                               int dim,
                               vector<shared_ptr<TopkBuffer>> &topk_buffers,
-                              int64_t *setup_time,
-                              int64_t *scan_time,
-                              int64_t *push_time,
                               MetricType metric,
-                              float *distances,
-                              int64_t *labels,
                               float *ip_block,
-                                float *norms_x,
-                                float *norms_y_buf,
+                              float *norms_x,
+                              float *norms_y_buf,
                               int blas_db_bs = BLAS_DB_BS,
                               vector<std::atomic<float>*> pivots = {}) {
     if (list_size == 0 || list_vecs == nullptr) {
@@ -587,26 +620,26 @@ inline void batched_scan_list(const float *query_vecs,
         return;
     }
 
-    auto s1 = high_resolution_clock::now();
 
     // Ensure k does not exceed list_size
     int k = topk_buffers[0]->k();
     int k_max = std::min(k, list_size);
 
-    bool alloc_results = false;
-    if (distances == nullptr) {
-        alloc_results = true;
-        labels = (int64_t *) malloc(num_queries * k_max * sizeof(int64_t));
-        distances = (float *) malloc(num_queries * k_max * sizeof(float));
-    }
-
-    auto s2 = high_resolution_clock::now();
-
     if (metric == faiss::METRIC_INNER_PRODUCT) {
-        faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
-        faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
+        ip_blas(
+                query_vecs,
+                list_vecs,
+                list_ids,
+                dim,
+                num_queries,
+                list_size,
+                blas_db_bs,
+                k_max,
+                topk_buffers,
+                ip_block,
+                pivots
+        );
     } else if (metric == faiss::METRIC_L2) {
-        // faiss::float_maxheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
         l2_blas(
                 query_vecs,
                 list_vecs,
@@ -622,19 +655,9 @@ inline void batched_scan_list(const float *query_vecs,
                 norms_y_buf,
                 pivots
         );
-        // faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
     } else {
         throw std::runtime_error("Metric type not supported");
     }
-
-    auto s3 = high_resolution_clock::now();
-
-
-    auto s4 = high_resolution_clock::now();
-
-    *setup_time = duration_cast<nanoseconds>(s2 - s1).count();
-    *scan_time = duration_cast<nanoseconds>(s3 - s2).count();
-    *push_time = duration_cast<nanoseconds>(s4 - s3).count();
 }
 
 
