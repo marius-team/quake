@@ -517,16 +517,6 @@ inline void l2_blas(
         float*        __restrict    norms_y,
         vector<std::atomic<float>*>   pivot)      // db_blas_bs
 {
-
-    auto t1 = std::chrono::high_resolution_clock::now();
-    auto t2 = std::chrono::high_resolution_clock::now();
-
-    int64_t x_norm_ns = 0;
-    int64_t y_norm_ns = 0;
-    int64_t ip_ns = 0;
-    int64_t l2_ns = 0;
-    int64_t topk_ns = 0;
-
     if (nx == 0 || ny == 0) return;
 
     constexpr size_t bs_x = 256;
@@ -538,29 +528,20 @@ inline void l2_blas(
         const size_t q_chunk = i1 - i0;
 
         /* ‖x‖² for this query block */
-        t1 = std::chrono::high_resolution_clock::now();
         faiss::fvec_norms_L2sqr(norms_x, x + i0 * d, d, q_chunk);
-        t2 = std::chrono::high_resolution_clock::now();
-        x_norm_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
 
         for (size_t j0 = 0; j0 < ny; j0 += bs_y) {
             const size_t j1      = std::min(j0 + bs_y, ny);
             const size_t db_chunk = j1 - j0;
 
             /* ‖y‖² for this database block */
-            t1 = std::chrono::high_resolution_clock::now();
             faiss::fvec_norms_L2sqr(norms_y, y + j0 * d, d, db_chunk);
-            t2 = std::chrono::high_resolution_clock::now();
-            y_norm_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
 
             // use torch matmul
-            t1 = std::chrono::high_resolution_clock::now();
             Tensor x_tensor = torch::from_blob((void*) x + i0 * d, {q_chunk, d}, torch::kFloat32);
             Tensor y_tensor = torch::from_blob((void*) y + j0 * d, {db_chunk, d}, torch::kFloat32);
             Tensor ip_tensor = torch::from_blob(ip_block, {q_chunk, db_chunk}, torch::kFloat32);
             torch::matmul_out(ip_tensor, x_tensor, y_tensor.transpose(0, 1));
-            t2 = std::chrono::high_resolution_clock::now();
-            ip_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
 
             /* SGEMM */
             // {
@@ -588,7 +569,6 @@ inline void l2_blas(
             // }
 
             /* IP → L2² */
-            t1 = std::chrono::high_resolution_clock::now();
             if (k > 1) {
                 for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
                     float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
@@ -632,14 +612,8 @@ inline void l2_blas(
                     topk_buffers[qi]->add(sqrt(best_dist), best_id);
                 }
             }
-            t2 = std::chrono::high_resolution_clock::now();
-            l2_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
         }
     }
-    std::cout << "  x_norm_ns: " << x_norm_ns << std::endl;
-    std::cout << "  y_norm_ns: " << y_norm_ns << std::endl;
-    std::cout << "  ip_ns: " << ip_ns << std::endl;
-    std::cout << "  l2_ns: " << l2_ns << std::endl;
 }
 
 inline void batched_scan_list(const float *query_vecs,
