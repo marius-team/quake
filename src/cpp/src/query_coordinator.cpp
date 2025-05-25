@@ -444,12 +444,12 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
     std::fill_n(vals, nQ * K, max_val);
 
     if (metric_ == faiss::METRIC_INNER_PRODUCT) {
-        global_max_heaps_ = make_shared<faiss::HeapBlockResultHandler<faiss::CMin<float, int64_t>>>(
+        global_max_heaps_ = make_shared<faiss::ReservoirBlockResultHandler<faiss::CMin<float, int64_t>>>(
             nQ, vals, ids, K);
     } else {
         std::fill_n(vals, nQ * K,
             std::numeric_limits<float>::infinity());
-        global_min_heaps_ = make_shared<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>>(
+        global_min_heaps_ = make_shared<faiss::ReservoirBlockResultHandler<faiss::CMax<float, int64_t>>>(
             nQ, vals, ids, K);
     }
 
@@ -647,7 +647,7 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
     vector<int> per_query_result_count(nQ, 0);
 
     if (metric_ == faiss::METRIC_INNER_PRODUCT) {
-        vector<faiss::HeapBlockResultHandler<faiss::CMin<float, int64_t>>::SingleResultHandler>
+        vector<faiss::ReservoirBlockResultHandler<faiss::CMin<float, int64_t>>::SingleResultHandler>
             handlers;
         for (int64_t q = 0; q < nQ; ++q) {
             handlers.emplace_back(*global_max_heaps_);
@@ -683,7 +683,7 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
             handlers[q].end();
         }
     } else {
-        vector<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>::SingleResultHandler>
+        vector<faiss::ReservoirBlockResultHandler<faiss::CMax<float, int64_t>>::SingleResultHandler>
             handlers;
         handlers.reserve(nQ);
         for (int64_t q = 0; q < nQ; ++q) {

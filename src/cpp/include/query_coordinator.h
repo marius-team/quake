@@ -107,8 +107,8 @@ public:
     vector<std::thread> worker_threads_;               ///< Container for worker threads.
     vector<int64_t> worker_job_counter_;               ///< Job counters for each worker.
 
-    shared_ptr<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>> global_min_heaps_; ///< Global aggregator buffers.
-    shared_ptr<faiss::HeapBlockResultHandler<faiss::CMin<float, int64_t>>> global_max_heaps_; ///< Global aggregator buffers.
+    shared_ptr<faiss::ReservoirBlockResultHandler<faiss::CMax<float, int64_t>>> global_min_heaps_; ///< Global aggregator buffers.
+    shared_ptr<faiss::ReservoirBlockResultHandler<faiss::CMin<float, int64_t>>> global_max_heaps_; ///< Global aggregator buffers.
 
     std::mutex global_mutex_;                          ///< Mutex for global synchronization.
     std::condition_variable global_cv_;                ///< Condition variable for thread coordination.
