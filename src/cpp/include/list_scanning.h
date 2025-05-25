@@ -403,8 +403,15 @@ inline void scan_list(const float *query_vec,
                             int d,
                             TopkBuffer &buffer,
                             faiss::MetricType metric,
-                            float pivot) {
+                            float pivot = -1) {
     // Dispatch based on metric type and whether list_ids is provided.
+
+    if (pivot == 0) {
+        pivot = metric == faiss::METRIC_INNER_PRODUCT
+                ? -std::numeric_limits<float>::infinity()
+                : std::numeric_limits<float>::infinity();
+    }
+
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         if (list_ids == nullptr)
             scan_list_no_ids_inner_product(query_vec, list_vecs, list_size, d, buffer, pivot);
@@ -633,7 +640,6 @@ inline void batched_scan_list(const float *query_vecs,
         // No list vectors to process;
         return;
     }
-
 
     // Ensure k does not exceed list_size
     int k = topk_buffers[0]->k();

@@ -43,16 +43,18 @@ QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
                                    shared_ptr<MaintenancePolicy> maintenance_policy,
                                    MetricType metric,
                                    int num_workers,
-                                   bool use_numa)
+                                   bool use_numa,
+                                   int num_merge_workers)
     : parent_(parent),
       partition_manager_(partition_manager),
       maintenance_policy_(maintenance_policy),
       metric_(metric),
       num_workers_(num_workers),
+    num_merge_workers_(num_merge_workers),
       workers_initialized_(false) {
 
     if (num_workers_ > 0) {
-        initialize_workers(num_workers_, use_numa);
+        initialize_workers(num_workers_, num_merge_workers_, use_numa);
     }
 }
 
@@ -97,6 +99,42 @@ void QueryCoordinator::allocate_core_resources(int core_idx,
 }
 
 
+void QueryCoordinator::merge_worker_fn(int mid)
+{
+    auto& MR = merge_res_[mid];
+    ResultJob rj;
+
+    while (true) {
+        MR.queue.wait_dequeue(rj);
+
+        if (rj.query_id == -1) break;          // poison-pill
+
+        /* ---- grab the pre-built handler ---------------------------------- */
+        if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+            using H = faiss::HeapBlockResultHandler<
+                        faiss::CMin<float,int64_t>>::SingleResultHandler;
+            auto* h = static_cast<H*>(MR.handlers[rj.query_id]);
+            for (size_t i = 0; i < rj.distances.size(); ++i)
+                h->add_result(rj.distances[i], rj.indices[i]);
+            query_dist_pivots_[rj.query_id].store(h->threshold,
+                                                  std::memory_order_relaxed);
+        } else {
+            using H = faiss::HeapBlockResultHandler<
+                        faiss::CMax<float,int64_t>>::SingleResultHandler;
+            auto* h = static_cast<H*>(MR.handlers[rj.query_id]);
+            for (size_t i = 0; i < rj.distances.size(); ++i)
+                h->add_result(rj.distances[i], rj.indices[i]);
+            query_dist_pivots_[rj.query_id].store(h->threshold,
+                                                  std::memory_order_relaxed);
+        }
+
+        /* ---- bookkeeping -------------------------------------------------- */
+        if (!job_flags_[rj.query_id][rj.rank]) {
+            job_flags_[rj.query_id][rj.rank] = true;
+            --total_left_;
+        }
+    }
+}
 
 
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
@@ -130,7 +168,6 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
         auto s2 = std::chrono::high_resolution_clock::now();
         process_scan_job(job_buffer_[jid], res);
-        jobs_in_flight_.fetch_sub(1, std::memory_order_relaxed);
         i++;
         end = std::chrono::high_resolution_clock::now();
 
@@ -162,10 +199,10 @@ void QueryCoordinator::process_scan_job(ScanJob job,
                   << " invalid: " << e.what() << ". Returning empty result(s).\n";
         if (job.is_batched) {
             for (int64_t i = 0; i < job.num_queries; ++i) {
-                result_queue_.enqueue(ResultJob{(*job.query_ids)[i], (*job.ranks)[i], {}, {}});
+                enqueue_result_job(ResultJob{(*job.query_ids)[i], (*job.ranks)[i], {}, {}});
             }
         } else {
-            result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
+            enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}});
         }
         return;
     }
@@ -174,10 +211,10 @@ void QueryCoordinator::process_scan_job(ScanJob job,
         // empty => enqueue zero‐work per query
         if (job.is_batched) {
             for (int64_t i = 0; i < job.num_queries; ++i) {
-                result_queue_.enqueue(ResultJob{(*job.query_ids)[i], (*job.ranks)[i], {}, {}});
+                enqueue_result_job(ResultJob{(*job.query_ids)[i], (*job.ranks)[i], {}, {}});
             }
         } else {
-            result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
+            enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}});
         }
         return;
     }
@@ -232,7 +269,7 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
             std::cerr << "[QueryCoordinator::handle_nonbatched_job] Partition " << job.partition_id
                       << " invalid or empty before scan for query " << job.query_id
                       << ". Enqueuing empty result.\n";
-            result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}});
+            enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}});
             return; // Important to return after enqueueing the placeholder
         }
 
@@ -248,18 +285,18 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
         // If scan_list completes, enqueue its results
         auto tv = buf->get_topk(false);
         auto ti = buf->get_topk_indices(false);
-        result_queue_.enqueue(ResultJob{job.query_id, job.rank, std::move(tv), std::move(ti)});
+        enqueue_result_job(ResultJob{job.query_id, job.rank, std::move(tv), std::move(ti)});
 
     } catch (const std::exception& e) {
         std::cerr << "[QueryCoordinator::handle_nonbatched_job] Exception during scan for partition "
                   << job.partition_id << ", query " << job.query_id << ": " << e.what()
                   << ". Enqueuing empty result.\n";
-        result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}}); // Enqueue empty result on error
+        enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}}); // Enqueue empty result on error
     } catch (...) {
         std::cerr << "[QueryCoordinator::handle_nonbatched_job] Unknown exception during scan for partition "
                   << job.partition_id << ", query " << job.query_id
                   << ". Enqueuing empty result.\n";
-        result_queue_.enqueue(ResultJob{job.query_id, job.rank, {}, {}}); // Enqueue empty result on error
+        enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}}); // Enqueue empty result on error
     }
 }
 
@@ -281,7 +318,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     int64_t        part_size = partition_manager_->partition_store_->list_size(job.partition_id);
     if (!codes || !ids || part_size <= 0) {
         for (int64_t i = 0; i < Q; ++i) {
-            result_queue_.enqueue(ResultJob{(*job.query_ids)[i], (*job.ranks)[i], {}, {}});
+            enqueue_result_job(ResultJob{(*job.query_ids)[i], (*job.ranks)[i], {}, {}});
         }
         return;
     }
@@ -396,14 +433,9 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         int rank_q   = (*job.ranks)    [i];
         auto tv = res.topk_buffer_pool[i]->get_topk(false);
         auto ti = res.topk_buffer_pool[i]->get_topk_indices(false);
-        results_batch.emplace_back(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
+        enqueue_result_job(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
     }
 
-    // enqueue this sub-batch in bulk
-    result_queue_.enqueue_bulk(
-            std::make_move_iterator(results_batch.begin()),
-            results_batch.size()
-    );
     end = std::chrono::high_resolution_clock::now();
     auto s5 = std::chrono::high_resolution_clock::now();
     res.enqueue_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
@@ -423,6 +455,11 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     //           << ", enqueue: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - s4).count()
     //           << std::endl;
 }
+
+void QueryCoordinator::enqueue_result_job(ResultJob job) {
+    merge_res_[job.query_id % num_merge_workers_].queue.enqueue(std::move(job));
+}
+
 
 void QueryCoordinator::init_global_buffers(int64_t nQ,
                                            int K,
@@ -444,13 +481,35 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
     std::fill_n(vals, nQ * K, max_val);
 
     if (metric_ == faiss::METRIC_INNER_PRODUCT) {
-        global_max_heaps_ = make_shared<faiss::ReservoirBlockResultHandler<faiss::CMin<float, int64_t>>>(
-            nQ, vals, ids, K);
+        global_max_heaps_ = std::make_shared<
+            faiss::HeapBlockResultHandler<
+                faiss::CMin<float,int64_t>>>(nQ, vals, ids, K);
     } else {
-        std::fill_n(vals, nQ * K,
-            std::numeric_limits<float>::infinity());
-        global_min_heaps_ = make_shared<faiss::ReservoirBlockResultHandler<faiss::CMax<float, int64_t>>>(
-            nQ, vals, ids, K);
+        global_min_heaps_ = std::make_shared<
+            faiss::HeapBlockResultHandler<
+                faiss::CMax<float,int64_t>>>(nQ, vals, ids, K);
+    }
+
+    for (auto& mr : merge_res_) {
+        mr.handlers.clear();
+        mr.handlers.resize(nQ, nullptr);
+
+        /* allocate handler objects once per query --------------------------- */
+        if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+            using H = faiss::HeapBlockResultHandler<
+                        faiss::CMin<float,int64_t>>::SingleResultHandler;
+            for (int64_t q = 0; q < nQ; ++q) {
+                mr.handlers[q] = new H(*global_max_heaps_);
+                static_cast<H*>(mr.handlers[q])->begin(q);
+            }
+        } else {
+            using H = faiss::HeapBlockResultHandler<
+                        faiss::CMax<float,int64_t>>::SingleResultHandler;
+            for (int64_t q = 0; q < nQ; ++q) {
+                mr.handlers[q] = new H(*global_min_heaps_);
+                static_cast<H*>(mr.handlers[q])->begin(q);
+            }
+        }
     }
 
     query_dist_pivots_ = vector<std::atomic<float>>(nQ);
@@ -492,6 +551,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
 
     // flatten jobs
     next_job_id_ = 0;
+    total_left_.store(0, std::memory_order_relaxed);
     job_flags_.clear();
     job_flags_.resize(nQ);
     for (int64_t q = 0; q < nQ; ++q) {
@@ -522,7 +582,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                 job_buffer_.push_back(job);
                 numa_resources_[core_to_numa[pid % num_workers_]].job_queue.enqueue(next_job_id_);
                 next_job_id_++;
-                jobs_in_flight_.fetch_add(1, std::memory_order_relaxed);
+                total_left_.fetch_add(1, std::memory_order_relaxed);
             }
         }
     } else {
@@ -573,7 +633,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                         job_buffer_.push_back(job);
                         numa_resources_[core_to_numa[pid % num_workers_]].job_queue.enqueue(next_job_id_);
                         next_job_id_++;
-                        jobs_in_flight_.fetch_add(1, std::memory_order_relaxed);
+                        total_left_.fetch_add(1, std::memory_order_relaxed);
                     }
                 } else {
                     ScanJob job;
@@ -593,7 +653,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
                     int node = core_to_numa[core];
                     numa_resources_[node].job_queue.enqueue(next_job_id_);
                     next_job_id_++;
-                    jobs_in_flight_.fetch_add(1, std::memory_order_relaxed);
+                    total_left_.fetch_add(chunk, std::memory_order_relaxed);
                 }
             }
         }
@@ -605,122 +665,19 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
                                            Tensor                      partition_ids,
                                            bool                        use_aps,
                                            float                       recall_target,
-                                           float                       aps_flush_period_us,
+                                           int                       aps_flush_period_us,
                                            std::shared_ptr<SearchTimingInfo> timing)
 {
-    const int64_t nQ      = x.size(0);
-    const int64_t D       = x.size(1);
-    const int64_t nprobe  = partition_ids.size(1);
-    const auto    aps_dur = std::chrono::microseconds(
-            static_cast<int64_t>(aps_flush_period_us));
 
-    /* ------------------------------------------------------------------------ */
-    /*  Book-keeping                                                            */
-    /* ------------------------------------------------------------------------ */
-    std::vector<int> parts_left(nQ, 0);
-    std::atomic<int64_t> total_left{0};
+    int64_t nQ = x.size(0), D = x.size(1);
+    // compute boundary distances
 
-    for (int64_t q = 0; q < nQ; ++q) {
-        for (int64_t p = 0; p < nprobe; ++p)
-            if (!job_flags_[q][p]) { ++parts_left[q]; ++total_left; }
-    }
+    while (total_left_.load(std::memory_order_relaxed) > 0)
+        std::this_thread::sleep_for(std::chrono::microseconds(aps_flush_period_us));
 
-    /*  APS pre-computations  -------------------------------------------------- */
-    std::vector<float>                query_radius(nQ, 0.0f);
-    std::vector<std::vector<float>>   boundary_dist(nQ);
-    std::vector<std::vector<float>>   probs(nQ);
-    if (use_aps) {
-        query_radius.resize(nQ);
-        boundary_dist.resize(nQ);
-        probs.resize(nQ);
-        for (int64_t q = 0; q < nQ; ++q) {
-            std::vector<int64_t> pids(partition_ids[q].data_ptr<int64_t>(),
-                                      partition_ids[q].data_ptr<int64_t>()+nprobe);
-            auto centroids = parent_->partition_manager_->get_vectors(pids);
-            centroids.erase(std::remove(centroids.begin(), centroids.end(), nullptr),
-                            centroids.end());
-            boundary_dist[q] =
-                    compute_boundary_distances(x[q], centroids, metric_==faiss::METRIC_L2);
-        }
-    }
 
-    vector<int> per_query_result_count(nQ, 0);
 
-    if (metric_ == faiss::METRIC_INNER_PRODUCT) {
-        vector<faiss::ReservoirBlockResultHandler<faiss::CMin<float, int64_t>>::SingleResultHandler>
-            handlers;
-        for (int64_t q = 0; q < nQ; ++q) {
-            handlers.emplace_back(*global_max_heaps_);
-            handlers[q].begin(q);        // ← reset & heapify for query q
-        }
-
-        ResultJob rj;
-        while (total_left.load(std::memory_order_relaxed) > 0) {
-
-            /* -- Wait for result or APS timeout -- */
-            bool got_result = result_queue_.wait_dequeue_timed(rj, aps_dur);
-
-            if (got_result) {
-                do {   // Drain *all* currently available results.
-                    for (int64_t i = 0; i < rj.distances.size(); ++i) {
-                        handlers[rj.query_id].add_result(rj.distances[i], rj.indices[i]);
-                    }
-                    query_dist_pivots_[rj.query_id].store(
-                            handlers[rj.query_id].threshold, std::memory_order_relaxed);
-
-                    per_query_result_count[rj.query_id]++;
-
-                    if (!job_flags_[rj.query_id][rj.rank]) {
-                        job_flags_[rj.query_id][rj.rank] = true;
-                        --parts_left[rj.query_id];
-                        --total_left;
-                    }
-                } while (result_queue_.try_dequeue(rj));
-            }
-        }
-        // end the handlers
-        for (int64_t q = 0; q < nQ; ++q) {
-            handlers[q].end();
-        }
-    } else {
-        vector<faiss::ReservoirBlockResultHandler<faiss::CMax<float, int64_t>>::SingleResultHandler>
-            handlers;
-        handlers.reserve(nQ);
-        for (int64_t q = 0; q < nQ; ++q) {
-            handlers.emplace_back(*global_min_heaps_);
-            handlers[q].begin(q);        // ← reset & heapify for query q
-        }
-
-        ResultJob rj;
-        while (total_left.load(std::memory_order_relaxed) > 0) {
-
-            /* -- Wait for result or APS timeout -- */
-            bool got_result = result_queue_.wait_dequeue_timed(rj, aps_dur);
-
-            if (got_result) {
-                do {   // Drain *all* currently available results.
-                    for (int64_t i = 0; i < rj.distances.size(); ++i) {
-                        handlers[rj.query_id].add_result(rj.distances[i], rj.indices[i]);
-                    }
-                    query_dist_pivots_[rj.query_id].store(
-                            handlers[rj.query_id].threshold, std::memory_order_relaxed);
-
-                    per_query_result_count[rj.query_id]++;
-
-                    if (!job_flags_[rj.query_id][rj.rank]) {
-                        job_flags_[rj.query_id][rj.rank] = true;
-                        --parts_left[rj.query_id];
-                        --total_left;
-                    }
-                } while (result_queue_.try_dequeue(rj));
-            }
-        }
-
-        // end the handlers
-        for (int64_t q = 0; q < nQ; ++q) {
-            handlers[q].end();
-        }
-    }
+        // check if we need to apply APS
 }
 
 std::shared_ptr<SearchResult>
@@ -729,6 +686,23 @@ QueryCoordinator::aggregate_scan_results(int64_t nQ,
                                          shared_ptr<SearchTimingInfo> timing,
                                          Tensor out_ids,
                                          Tensor out_dists) {
+
+    for (int64_t q = 0; q < nQ; ++q) {
+        int merge_worker_idx = q % num_merge_workers_;
+        MergeResources& mr = merge_res_[merge_worker_idx];
+
+        if (q < static_cast<int64_t>(mr.handlers.size()) && mr.handlers[q] != nullptr) {
+            if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+                using H = faiss::HeapBlockResultHandler<
+                            faiss::CMin<float,int64_t>>::SingleResultHandler;
+                static_cast<H*>(mr.handlers[q])->end();
+            } else {
+                using H = faiss::HeapBlockResultHandler<
+                            faiss::CMax<float,int64_t>>::SingleResultHandler;
+                static_cast<H*>(mr.handlers[q])->end();
+            }
+        }
+    }
 
     auto id_acc = out_ids.accessor<int64_t,2>();
     auto d_acc  = out_dists.accessor<float,2>();
@@ -871,20 +845,20 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 }
 
 // Initialize Worker Threads
-void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
+void QueryCoordinator::initialize_workers(int num_workers, int num_merge_workers, bool use_numa) {
     if (workers_initialized_) {
         std::cerr << "[QueryCoordinator::initialize_workers] Workers already initialized." << std::endl;
         return;
     }
 
-    std::cout << "[QueryCoordinator::initialize_workers] Initializing " << num_cores << " worker threads with use_numa=" << use_numa <<
+    std::cout << "[QueryCoordinator::initialize_workers] Initializing " << num_workers << " worker threads with use_numa=" << use_numa <<
             std::endl;
 
-    partition_manager_->distribute_partitions(num_cores, use_numa);
-    core_resources_.resize(num_cores);
-    worker_threads_.resize(num_cores);
+    partition_manager_->distribute_partitions(num_workers, use_numa);
+    core_resources_.resize(num_workers);
+    worker_threads_.resize(num_workers);
     stop_workers_.store(false);
-    for (int i = 0; i < num_cores; i++) {
+    for (int i = 0; i < num_workers; i++) {
         if (!set_thread_affinity(i)) {
             std::cout << "[QueryCoordinator::initialize_workers] Failed to set thread affinity on core " << i << std::endl;
         }
@@ -892,11 +866,19 @@ void QueryCoordinator::initialize_workers(int num_cores, bool use_numa) {
         worker_threads_[i] = std::thread(&QueryCoordinator::partition_scan_worker_fn, this, i);
     }
 
+    merge_res_.resize(num_merge_workers_);
+    for (int i = 0; i < num_merge_workers; i++) {
+        if (!set_thread_affinity(i + num_workers)) {
+            std::cout << "[QueryCoordinator::initialize_workers] Failed to set thread affinity on core " << i + num_workers << std::endl;
+        }
+        merge_threads_.emplace_back(&QueryCoordinator::merge_worker_fn, this, i);
+    }
+
     workers_initialized_ = true;
 
     // set main thread on separate thread from workers
     int num_cores_on_machine = std::thread::hardware_concurrency();
-    set_thread_affinity(num_cores % num_cores_on_machine);
+    set_thread_affinity(num_workers + num_merge_workers);
     // set_thread_affinity(0);
 }
 
@@ -912,11 +894,24 @@ void QueryCoordinator::shutdown_workers() {
         for (int i = 0; i < num_workers_; ++i)
             res.job_queue.enqueue(-1);
     }
+
+    for (int m = 0; m < num_merge_workers_; ++m) {
+        enqueue_result_job(ResultJob{-1,0,{},{}});
+    }
+
     // Join all worker threads.
     for (auto &thr : worker_threads_) {
         if (thr.joinable())
             thr.join();
     }
+
+    for (auto &t : merge_threads_) {
+        if (t.joinable())
+            t.join();
+    }
+
+
+    merge_threads_.clear();
     worker_threads_.clear();
     workers_initialized_ = false;
 }

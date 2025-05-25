@@ -97,23 +97,28 @@ public:
         std::vector<int64_t>   indices;
     };
 
+    struct MergeResources {
+     moodycamel::BlockingConcurrentQueue<ResultJob> queue;
+     std::vector<void*> handlers;        // points to HandlerIP or HandlerL2
+    };
+
     vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.
     vector<NUMAResources> numa_resources_;
-    moodycamel::BlockingConcurrentQueue<ResultJob> result_queue_;
-//    moodycamel::ConcurrentQueue<ResultJob> result_queue_;
+    vector<MergeResources> merge_res_;    // size == num_merge_workers_
 
     bool workers_initialized_ = false;                 ///< Flag indicating if worker threads are initialized.
     int num_workers_;                                  ///< Total number of worker threads.
+    int num_merge_workers_;                            ///< Number of merge worker threads.
     vector<std::thread> worker_threads_;               ///< Container for worker threads.
+    vector<std::thread> merge_threads_;                 ///< Container for merge threads.
     vector<int64_t> worker_job_counter_;               ///< Job counters for each worker.
 
-    shared_ptr<faiss::ReservoirBlockResultHandler<faiss::CMax<float, int64_t>>> global_min_heaps_; ///< Global aggregator buffers.
-    shared_ptr<faiss::ReservoirBlockResultHandler<faiss::CMin<float, int64_t>>> global_max_heaps_; ///< Global aggregator buffers.
+    shared_ptr<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>> global_min_heaps_; ///< Global aggregator buffers.
+    shared_ptr<faiss::HeapBlockResultHandler<faiss::CMin<float, int64_t>>> global_max_heaps_; ///< Global aggregator buffers.
 
     std::mutex global_mutex_;                          ///< Mutex for global synchronization.
     std::condition_variable global_cv_;                ///< Condition variable for thread coordination.
     std::atomic<int> stop_workers_;                    ///< Flag to signal workers to terminate.
-    std::atomic<int> jobs_in_flight_;                  ///< Number of jobs in flight.
     bool debug_ = false;                               ///< Debug mode flag.
 
     std::vector<ScanJob> job_buffer_;
@@ -122,6 +127,7 @@ public:
     vector<vector<std::atomic<bool>>> job_flags_; ///< Flags to track job completion
     std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.
     std::atomic<int64_t> job_process_time_ns = 0; ///< Time spent processing jobs.
+    std::atomic<int64_t> total_left_;
 
     /**
     * @brief Constructs a QueryCoordinator.
@@ -137,7 +143,8 @@ public:
         shared_ptr<MaintenancePolicy> maintenance_policy,
         MetricType metric,
         int num_workers=0,
-        bool use_numa=false);
+        bool use_numa=false,
+        int num_merge_workers=2);
 
     /**
     * @brief Destructor for QueryCoordinator.
@@ -200,7 +207,7 @@ public:
      *
      * @param num_workers Number of worker threads to initialize.
      */
-    void initialize_workers(int num_workers, bool use_numa=false);
+    void initialize_workers(int num_workers, int num_merge_workers=1, bool use_numa=false);
 
     /**
      * @brief Shuts down all worker threads.
@@ -217,6 +224,8 @@ public:
      * @param worker_id Identifier for the worker thread.
      */
     void partition_scan_worker_fn(int worker_id);
+
+    void merge_worker_fn(int merge_worker_id);
 
     /**
      * @brief Worker thread function to perform partition scanning.
@@ -243,7 +252,6 @@ private:
      */
     void allocate_core_resources(int core_idx, int num_queries, int k, int d);
 
-    int64_t pop_scan_job(CoreResources &res);
     void process_scan_job(ScanJob job, CoreResources &res);
 
     // handles the non‐batched branch
@@ -267,11 +275,13 @@ private:
                            Tensor partition_ids,
                            shared_ptr<SearchParams> params);
 
+    void enqueue_result_job(ResultJob job);
+
     void drain_and_apply_aps(Tensor x,
                             Tensor partition_ids,
                              bool use_aps,
                              float recall_target,
-                             float aps_flush_period_us,
+                             int aps_flush_period_us,
                              shared_ptr<SearchTimingInfo> timing);
 
     std::shared_ptr<SearchResult>
