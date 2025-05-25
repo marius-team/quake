@@ -80,28 +80,30 @@ inline bool set_thread_affinity(int core_id) {
     inline int get_memory_numa_node(const void* ptr) {
         if (numa_available() < 0) return 0; // NUMA not available or error
         if (!ptr) {
-            return -1; // Invalid pointer
+            return -1; // Invalid pointer (e.g. NULL)
         }
 
-        int page_node = -1;
         // Align pointer to page boundary for numa_move_pages query
         void* page_address = (void*)((uintptr_t)ptr & ~((uintptr_t)getpagesize() - 1));
 
-        // Use numa_move_pages with nodes=NULL to query the current node of the page.
-        // The 'pages' argument is an array of page addresses.
         void *pages_to_query[] = { page_address };
         int status_array[] = { -1 }; // To store the node of the page
 
+        errno = 0; // Clear errno before system call
         // pid = 0 for current process's address space
+        // nodes = NULL to query current node
+        // flags = 0 for query
         if (numa_move_pages(0, 1, pages_to_query, NULL, status_array, 0) == 0) {
-            page_node = status_array[0];
+            // Success. status_array[0] contains the node.
+            // It can be -1 if the page has a policy like MPOL_INTERLEAVE or is not mapped to a specific node.
+            return status_array[0];
         } else {
-            // perror("numa_move_pages query failed"); // User prefers less output
-            // This could happen if the page is not mapped, or other errors.
-            page_node = -2; // Indicate error in querying
+            // numa_move_pages failed, return negative errno.
+            // errno is set by numa_move_pages.
+            // Common errors: EFAULT (-14), EINVAL (-22), EPERM (-1), ESRCH (-3), ENOMEM (-12)
+            return -errno;
         }
-        return page_node;
-    }
+}
 
     // Verifies if the memory at memory_address is on the same NUMA node as the current CPU.
     // variable_name is for logging/debugging by the caller if verification fails.

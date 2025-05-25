@@ -63,10 +63,7 @@ public:
 
         // Thread-local buffers for batched queries
         float*    batch_queries       = nullptr;  // batched query buffer (NUMA-allocated)
-        float*    batch_distances     = nullptr;  // scratch space for distances
-        int64_t*  batch_ids           = nullptr;  // scratch space for ids
         size_t    batch_q_capacity    = 0;  // number of floats in batch_queries
-        size_t    batch_res_capacity  = 0;  // number of (k×Q) slots in distances & ids
 
         float* blas_ip_block   = nullptr;  // capacity: db_blas_bs * max_Q
         size_t blas_ip_capacity = 0;       // # floats

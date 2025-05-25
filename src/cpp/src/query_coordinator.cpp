@@ -70,8 +70,13 @@ void QueryCoordinator::allocate_core_resources(int core_idx,
 
     // --- ZERO‐INITIALIZE our batched‐query buffers so we never free garbage pointers ---
     CR.batch_queries   = nullptr;
-    CR.batch_distances = nullptr;
-    CR.batch_ids       = nullptr;
+
+    CR.blas_ip_block = nullptr;
+    CR.blas_ip_capacity = 0;
+    CR.blas_norms_x = nullptr;
+    CR.blas_norms_x_cap = 0;
+    CR.blas_norms_y = nullptr;
+    CR.blas_norms_y_cap = 0;
 
     int numa_node = 0;
 #ifdef QUAKE_USE_NUMA
@@ -302,15 +307,6 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         res.batch_q_capacity = max_q;
     }
 
-    size_t max_r = size_t(queries_req) * K;
-    if (res.batch_res_capacity < max_r) {
-        quake_free(res.batch_distances, res.batch_res_capacity * sizeof(float));
-        quake_free(res.batch_ids,       res.batch_res_capacity * sizeof(int64_t));
-        res.batch_distances    = static_cast<float*>   (quake_alloc(max_r * sizeof(float), node));
-        res.batch_ids          = static_cast<int64_t*>(quake_alloc(max_r * sizeof(int64_t), node));
-        res.batch_res_capacity = max_r;
-    }
-
     // reset only the first 'chunk' TopK buffers
     for (int64_t i = 0; i < Q; ++i) {
         auto &buf = res.topk_buffer_pool[i];
@@ -354,8 +350,6 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     ok = ok && verify_numa_locality(codes, "codes");
     ok = ok && verify_numa_locality(ids, "ids");
     ok = ok && verify_numa_locality(res.batch_queries, "batch_queries");
-    // ok = ok && verify_numa_locality(res.batch_distances, "batch_distances");
-    // ok = ok && verify_numa_locality(res.batch_ids, "batch_ids");
     ok = ok && verify_numa_locality(res.blas_ip_block, "blas_ip_block");
     ok = ok && verify_numa_locality(res.blas_norms_x, "blas_norms_x");
     ok = ok && verify_numa_locality(res.blas_norms_y, "blas_norms_y");
