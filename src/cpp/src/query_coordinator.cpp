@@ -268,6 +268,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
                                           NUMAResources &nr) {
 
     auto start = std::chrono::high_resolution_clock::now();
+    auto s1 = std::chrono::high_resolution_clock::now();
     // Total queries, Top-K, dimension, NUMA node
     int64_t Q    = job.num_queries;
     int     K    = job.k;
@@ -316,6 +317,8 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         buf->reset();
     }
 
+    auto s2 = std::chrono::high_resolution_clock::now();
+
     // // init only the first chunk*K slots in scratch
     // float init_val = (metric_ == faiss::METRIC_INNER_PRODUCT)
     //                  ? -std::numeric_limits<float>::infinity()
@@ -346,6 +349,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
         pivots[i] = &query_dist_pivots_[qid];
     }
 
+    auto s3 = std::chrono::high_resolution_clock::now();
     // check that things are on the proper NUMA node
     // bool ok = true;
     // ok = ok && verify_numa_locality(qptr, "qptr");
@@ -378,6 +382,8 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
             BLAS_DB_BS,
             pivots);
 
+    auto s4 = std::chrono::high_resolution_clock::now();
+
     auto end = std::chrono::high_resolution_clock::now();
     res.scan_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
@@ -399,7 +405,23 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
             results_batch.size()
     );
     end = std::chrono::high_resolution_clock::now();
+    auto s5 = std::chrono::high_resolution_clock::now();
     res.enqueue_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
+    // print out debug timing info s1, ... s5
+    std::cout << "QueryCoordinator::handle_batched_job: "
+              << "wait: " << res.wait_time_ns
+              << ", preamble: " << res.process_preamble_time_ns
+              << ", process: " << res.process_time_ns
+              << ", scan: " << res.scan_time_ns
+              << ", enqueue: " << res.enqueue_time_ns
+              << ", job: " << res.job_time_ns
+              << ", s1: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s1 - start).count()
+              << ", s2: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s2 - s1).count()
+              << ", s3: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s3 - s2).count()
+              << ", s4: " << std::chrono::duration_cast<std::chrono::nanoseconds>(s4 - s3).count()
+              << ", s5: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - s4).count()
+              << std::endl;
 }
 
 void QueryCoordinator::init_global_buffers(int64_t nQ,
