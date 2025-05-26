@@ -585,6 +585,11 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
         core_to_numa[i] = cpu_numa_node(i);
     }
 
+    std::cout << "[enqueue_scan_jobs] Enqueuing jobs for " << nQ
+              << " queries, " << partition_ids.size(1)
+              << " partitions, k = " << params->k
+              << ", batched scan: " << (params->batched_scan ? "yes" : "no") << std::endl;
+
     // Reset job state
     next_job_id_ = 0;
     total_left_.store(0, std::memory_order_relaxed);
