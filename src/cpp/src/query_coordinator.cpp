@@ -163,6 +163,12 @@ void QueryCoordinator::merge_worker_fn(int mid)
             }
             --total_left_;
         }
+
+        std::cout << "[merge_worker_fn] Query ID: " << rj.query_id
+                  << ", Rank: " << rj.rank
+                  << ", Distances: " << rj.distances.size()
+                  << ", Indices: " << rj.indices.size()
+                  << ", Total left: " << total_left_.load() << std::endl;
     }
 }
 
