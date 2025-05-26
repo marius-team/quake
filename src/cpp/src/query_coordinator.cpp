@@ -104,24 +104,7 @@ void QueryCoordinator::merge_worker_fn(int mid)
     auto& MR = merge_res_[mid];
     ResultJob rj;
 
-    // for (int64_t q = 0; q < nQ; ++q) {
-    //     int merge_worker_idx = q % num_merge_workers_;
-    //     MergeResources& mr = merge_res_[merge_worker_idx];
-    //
-    //     if (q < static_cast<int64_t>(mr.handlers.size()) && mr.handlers[q] != nullptr) {
-    //         if (metric_ == faiss::METRIC_INNER_PRODUCT) {
-    //             using H = faiss::HeapBlockResultHandler<
-    //                         faiss::CMin<float,int64_t>>::SingleResultHandler;
-    //             static_cast<H*>(mr.handlers[q])->end();
-    //         } else {
-    //             using H = faiss::HeapBlockResultHandler<
-    //                         faiss::CMax<float,int64_t>>::SingleResultHandler;
-    //             static_cast<H*>(mr.handlers[q])->end();
-    //         }
-    //     }
-    // }
-
-    while (true) {
+    while (!stop_workers_) {
         MR.queue.wait_dequeue(rj);
 
         if (rj.query_id == -1) break;          // poison-pill
@@ -209,6 +192,14 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
 
         res.process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - s2).count();
         res.job_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
+        std::cout << "[partition_scan_worker_fn] Core: " << core_index
+                  << ", Job ID: " << jid
+                  << ", Processed: " << i
+                  << ", Wait time: " << res.wait_time_ns / 1e6 << " ms"
+                  << ", Process time: " << res.process_time_ns / 1e6 << " ms"
+                  << ", Enqueue time: " << res.enqueue_time_ns / 1e6 << " ms"
+                  << ", Job time: " << res.job_time_ns / 1e6 << " ms" << std::endl;
     }
 }
 
