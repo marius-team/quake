@@ -487,8 +487,18 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     //           << std::endl;
 }
 
-void QueryCoordinator::enqueue_result_job(ResultJob job) {
-    merge_res_[job.query_id % num_merge_workers_].queue.enqueue(std::move(job));
+// --- replace old enqueue -------------------------------------------------
+inline void QueryCoordinator::enqueue_result_job(ResultJob job)
+{
+    if (job.query_id < 0) {
+        // Poison pill to stop the merge worker
+        for (auto& mr : merge_res_) {
+            mr.queue.enqueue(ResultJob{-1, 0, {}, {}});
+        }
+        return;
+    }
+    const size_t mid = static_cast<size_t>(job.query_id) % num_merge_workers_;
+    merge_res_[mid].queue.enqueue(std::move(job));
 }
 
 
@@ -920,14 +930,15 @@ void QueryCoordinator::shutdown_workers() {
     }
 
     stop_workers_.store(true);
-    // Enqueue a special shutdown job for each core.
+    // Enqueue poison pills to all worker threads.
     for (auto &res : numa_resources_) {
         for (int i = 0; i < num_workers_; ++i)
             res.job_queue.enqueue(-1);
     }
 
+    // Enqueue poison pills to all merge workers.
     for (int m = 0; m < num_merge_workers_; ++m) {
-        enqueue_result_job(ResultJob{-1,0,{},{}});
+        merge_res_[m].queue.enqueue(ResultJob{-1, 0, {}, {}});
     }
 
     // Join all worker threads.
