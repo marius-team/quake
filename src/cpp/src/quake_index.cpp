@@ -236,7 +236,7 @@ void QuakeIndex::save(const std::string& dir_path) {
     std::cout << "[QuakeIndex::save] Index saved to directory: " << dir_path << "\n";
 }
 
-void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa, int parent_n_workers) {
+void QuakeIndex::load(const std::string& dir_path, shared_ptr<IndexBuildParams> build_params) {
     namespace fs = std::filesystem;
 
     if (!fs::exists(dir_path) || !fs::is_directory(dir_path)) {
@@ -282,7 +282,11 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa,
         if (fs::exists(parent_dir) && fs::is_directory(parent_dir)) {
             parent_ = std::make_shared<QuakeIndex>();
             int n_parts = partition_manager_->nlist();
-            parent_->load(parent_dir, parent_n_workers, use_numa);
+            auto parent_params = make_shared<IndexBuildParams>();
+            if (build_params->parent_params != nullptr) {
+                parent_params = build_params->parent_params;
+            }
+            parent_->load(parent_dir, parent_params);
             partition_manager_->parent_ = parent_;
         } else {
             parent_ = nullptr;
@@ -293,9 +297,14 @@ void QuakeIndex::load(const std::string& dir_path, int n_workers, bool use_numa,
     initialize_maintenance_policy(default_params);
 
     // 5. Create query coordinator
-    std::cout << "Loading coordinator with n_workers=" << n_workers << " and use_numa=" << use_numa << '\n';
-    query_coordinator_ = std::make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, n_workers, use_numa);
-    std::cout << "Loaded coordinator\n";
+    std::cout << "Loading coordinator with n_workers=" << build_params->num_workers << " and use_numa=" << build_params->use_numa << '\n';
+    query_coordinator_ = std::make_shared<QueryCoordinator>(parent_,
+        partition_manager_,
+        maintenance_policy_,
+        metric_,
+        build_params->num_workers,
+        build_params->use_numa,
+        build_params->num_merge_workers);
 }
 
 int64_t QuakeIndex::ntotal() {

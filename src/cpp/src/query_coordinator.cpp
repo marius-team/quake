@@ -104,6 +104,23 @@ void QueryCoordinator::merge_worker_fn(int mid)
     auto& MR = merge_res_[mid];
     ResultJob rj;
 
+    // for (int64_t q = 0; q < nQ; ++q) {
+    //     int merge_worker_idx = q % num_merge_workers_;
+    //     MergeResources& mr = merge_res_[merge_worker_idx];
+    //
+    //     if (q < static_cast<int64_t>(mr.handlers.size()) && mr.handlers[q] != nullptr) {
+    //         if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+    //             using H = faiss::HeapBlockResultHandler<
+    //                         faiss::CMin<float,int64_t>>::SingleResultHandler;
+    //             static_cast<H*>(mr.handlers[q])->end();
+    //         } else {
+    //             using H = faiss::HeapBlockResultHandler<
+    //                         faiss::CMax<float,int64_t>>::SingleResultHandler;
+    //             static_cast<H*>(mr.handlers[q])->end();
+    //         }
+    //     }
+    // }
+
     while (true) {
         MR.queue.wait_dequeue(rj);
 
@@ -131,6 +148,19 @@ void QueryCoordinator::merge_worker_fn(int mid)
         /* ---- bookkeeping -------------------------------------------------- */
         if (!job_flags_[rj.query_id][rj.rank]) {
             job_flags_[rj.query_id][rj.rank] = true;
+            --per_query_total_left_[rj.query_id];
+
+            if (per_query_total_left_[rj.query_id] == 0) {
+                if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+                    using H = faiss::HeapBlockResultHandler<
+                                faiss::CMin<float,int64_t>>::SingleResultHandler;
+                    static_cast<H*>(MR.handlers[rj.query_id])->end();
+                } else {
+                    using H = faiss::HeapBlockResultHandler<
+                                faiss::CMax<float,int64_t>>::SingleResultHandler;
+                    static_cast<H*>(MR.handlers[rj.query_id])->end();
+                }
+            }
             --total_left_;
         }
     }
@@ -387,6 +417,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     }
 
     auto s3 = std::chrono::high_resolution_clock::now();
+
     // check that things are on the proper NUMA node
     // bool ok = true;
     // ok = ok && verify_numa_locality(qptr, "qptr");
@@ -468,8 +499,6 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
     std::lock_guard<std::mutex> lg(global_mutex_);
     // resize or reset
 
-    // size_t cap = std::min(100 * K, 10000);
-    // faiss::HeapArray<faiss::CMin<float, int64_t>>(nQ) };
     float * vals = (float *) quake_alloc(nQ * K * sizeof(float), 0);
     int64_t * ids = (int64_t *) quake_alloc(nQ * K * sizeof(int64_t), 0);
     std::fill_n(ids,  nQ * K, -1);
@@ -549,17 +578,19 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
         core_to_numa[i] = cpu_numa_node(i);
     }
 
-    // flatten jobs
+    // Reset job state
     next_job_id_ = 0;
     total_left_.store(0, std::memory_order_relaxed);
     job_flags_.clear();
     job_flags_.resize(nQ);
+    per_query_total_left_ = vector<std::atomic<int>>(nQ);
     for (int64_t q = 0; q < nQ; ++q) {
         job_flags_[q] = vector<std::atomic<bool>>(partition_ids.size(1));
         for (int p = 0; p < partition_ids.size(1); ++p) {
             job_flags_[q][p].store(false);
             if (partition_ids_acc[q][p] < 0) job_flags_[q][p] = true;
         }
+        per_query_total_left_[q].store(partition_ids.size(1), std::memory_order_relaxed);
     }
     job_buffer_.clear();
     job_buffer_.reserve(nQ * partition_ids.size(1));

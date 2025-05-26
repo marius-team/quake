@@ -128,6 +128,7 @@ public:
     std::atomic<int64_t> job_pull_time_ns = 0; ///< Time spent pulling jobs from the queue.
     std::atomic<int64_t> job_process_time_ns = 0; ///< Time spent processing jobs.
     std::atomic<int64_t> total_left_;
+    vector<std::atomic<int>> per_query_total_left_; ///< Total jobs left for each query.
 
     /**
     * @brief Constructs a QueryCoordinator.
@@ -144,7 +145,7 @@ public:
         MetricType metric,
         int num_workers=0,
         bool use_numa=false,
-        int num_merge_workers=2);
+        int num_merge_workers=1);
 
     /**
     * @brief Destructor for QueryCoordinator.

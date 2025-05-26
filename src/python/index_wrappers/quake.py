@@ -65,6 +65,7 @@ class QuakeWrapper(IndexWrapper):
         metric: str = "l2",
         ids: Optional[torch.Tensor] = None,
         num_workers: int = 0,
+        num_merge_workers: int = 1,
         m: int = -1,
         code_size: int = 8,
         parent=None,
@@ -94,11 +95,15 @@ class QuakeWrapper(IndexWrapper):
         build_params.metric = metric
         build_params.nlist = nc
         build_params.num_workers = num_workers
+        build_params.num_merge_workers = num_merge_workers
         build_params.use_numa = use_numa
 
         if parent is not None:
             build_params.parent_params = quake.IndexBuildParams()
             build_params.parent_params.nlist = parent.get("nc", 1)
+            build_params.parent_params.num_workers = parent.get("num_workers", 0)
+            build_params.parent_params.num_merge_workers = parent.get("num_merge_workers", 1)
+
 
         build_params.use_gpu = use_gpu
         build_params.gpu_batch_size = gpu_batch_size
@@ -178,8 +183,6 @@ class QuakeWrapper(IndexWrapper):
         search_params.sample_stride = sample_stride
         search_params.batch_size = batch_size
 
-        print(parent)
-
         if parent is not None:
             search_params.parent_params = quake.SearchParams()
             search_params.parent_params.nprobe = parent.get("nprobe", 1)
@@ -209,8 +212,9 @@ class QuakeWrapper(IndexWrapper):
         self,
         filename: str,
         num_workers: int = 0,
-        parent_num_workers: int = 0,
+        num_merge_workers: int = 1,
         use_numa: bool = False,
+        parent: dict = None,
         verbose: bool = False,
     ):
         """
@@ -219,10 +223,18 @@ class QuakeWrapper(IndexWrapper):
         :param filename: The name of the file to load the index from.
         """
         print(
-            f"Loading index from {filename}, with {num_workers} workers, use_numa={use_numa}, parent_num_workers={parent_num_workers}"
+            f"Loading index from {filename}, with {num_workers} workers, use_numa={use_numa}, parent={parent}"
         )
         self.index = QuakeIndex()
-        self.index.load(str(filename), num_workers, use_numa, parent_num_workers)
+        build_params = quake.IndexBuildParams()
+        build_params.num_workers = num_workers
+        build_params.use_numa = use_numa
+        build_params.parent_params = quake.IndexBuildParams()
+        if parent is not None:
+            build_params.parent_params.num_workers = parent.get("num_workers", 0)
+            build_params.parent_params.num_merge_workers = parent.get("num_merge_workers", 1)
+            build_params.parent_params.use_numa = parent.get("use_numa", build_params.use_numa)
+        self.index.load(str(filename), build_params)
 
     def centroids(self) -> torch.Tensor:
         """

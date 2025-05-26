@@ -63,6 +63,7 @@ constexpr int DEFAULT_NLIST = 0;                   ///< Default number of cluste
 constexpr int DEFAULT_NITER = 5;                   ///< Default number of k-means iterations used during clustering.
 constexpr const char* DEFAULT_METRIC = "l2";       ///< Default distance metric (either "l2" for Euclidean or "ip" for inner product).
 constexpr int DEFAULT_NUM_WORKERS = 0;             ///< Default number of workers (0 means single-threaded).
+constexpr int DEFAULT_NUM_MERGE_WORKERS = 1;      ///< Default number of merge workers (for worker_scan)
 constexpr int DEFAULT_GPU_BATCH_SIZE = 100000;             ///< Default batch size for GPU index building.
 constexpr int DEFAULT_GPU_SAMPLE_SIZE = 1000000;           ///< Default sample size for GPU index building.
 
@@ -125,6 +126,7 @@ struct IndexBuildParams {
     int dimension = 0;
     int nlist = DEFAULT_NLIST;
     int num_workers = DEFAULT_NUM_WORKERS;
+    int num_merge_workers = DEFAULT_NUM_MERGE_WORKERS;
     int code_size = -1;         // for PQ
     int num_codebooks = -1;     // for PQ
     string metric = DEFAULT_METRIC;
