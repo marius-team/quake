@@ -599,6 +599,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
             job_flags_[q][p].store(false);
             if (partition_ids_acc[q][p] < 0) {
                 job_flags_[q][p] = true;
+            } else {
                 valid_count++;
             }
         }
