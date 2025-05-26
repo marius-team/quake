@@ -96,7 +96,8 @@ def task_search_index(
     load_kwargs = {}
     if "num_workers" in current_build_params_for_load: load_kwargs["num_workers"] = current_build_params_for_load.get("num_workers")
     if "use_numa" in current_build_params_for_load: load_kwargs["use_numa"] = current_build_params_for_load.get("use_numa")
-    if "parent_num_workers" in current_build_params_for_load: load_kwargs["parent_num_workers"] = current_build_params_for_load.get("parent_num_workers")
+    if "num_merge_workers" in current_build_params_for_load: load_kwargs["num_merge_workers"] = current_build_params_for_load.get("num_merge_workers")
+    if "parent" in current_build_params_for_load: load_kwargs["parent"] = current_build_params_for_load.get("parent")
 
     idx_instance.load(str(index_file_path), **load_kwargs)
     print(f"[{index_name} SEARCH_TASK] Index loaded with kwargs: {load_kwargs}")

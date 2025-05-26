@@ -147,11 +147,11 @@ void QueryCoordinator::merge_worker_fn(int mid)
             --total_left_;
         }
 
-        std::cout << "[merge_worker_fn] Query ID: " << rj.query_id
-                  << ", Rank: " << rj.rank
-                  << ", Distances: " << rj.distances.size()
-                  << ", Indices: " << rj.indices.size()
-                  << ", Total left: " << total_left_.load() << std::endl;
+        // std::cout << "[merge_worker_fn] Query ID: " << rj.query_id
+        //           << ", Rank: " << rj.rank
+        //           << ", Distances: " << rj.distances.size()
+        //           << ", Indices: " << rj.indices.size()
+        //           << ", Total left: " << total_left_.load() << std::endl;
     }
 }
 
@@ -193,13 +193,13 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         res.process_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - s2).count();
         res.job_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
-        std::cout << "[partition_scan_worker_fn] Core: " << core_index
-                  << ", Job ID: " << jid
-                  << ", Processed: " << i
-                  << ", Wait time: " << res.wait_time_ns / 1e6 << " ms"
-                  << ", Process time: " << res.process_time_ns / 1e6 << " ms"
-                  << ", Enqueue time: " << res.enqueue_time_ns / 1e6 << " ms"
-                  << ", Job time: " << res.job_time_ns / 1e6 << " ms" << std::endl;
+        // std::cout << "[partition_scan_worker_fn] Core: " << core_index
+        //           << ", Job ID: " << jid
+        //           << ", Processed: " << i
+        //           << ", Wait time: " << res.wait_time_ns / 1e6 << " ms"
+        //           << ", Process time: " << res.process_time_ns / 1e6 << " ms"
+        //           << ", Enqueue time: " << res.enqueue_time_ns / 1e6 << " ms"
+        //           << ", Job time: " << res.job_time_ns / 1e6 << " ms" << std::endl;
     }
 }
 
@@ -585,10 +585,10 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
         core_to_numa[i] = cpu_numa_node(i);
     }
 
-    std::cout << "[enqueue_scan_jobs] Enqueuing jobs for " << nQ
-              << " queries, " << partition_ids.size(1)
-              << " partitions, k = " << params->k
-              << ", batched scan: " << (params->batched_scan ? "yes" : "no") << std::endl;
+    // std::cout << "[enqueue_scan_jobs] Enqueuing jobs for " << nQ
+    //           << " queries, " << partition_ids.size(1)
+    //           << " partitions, k = " << params->k
+    //           << ", batched scan: " << (params->batched_scan ? "yes" : "no") << std::endl;
 
     // Reset job state
     next_job_id_ = 0;
