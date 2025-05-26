@@ -596,11 +596,16 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
     per_query_total_left_ = vector<std::atomic<int>>(nQ);
     for (int64_t q = 0; q < nQ; ++q) {
         job_flags_[q] = vector<std::atomic<bool>>(partition_ids.size(1));
+
+        int valid_count = 0;
         for (int p = 0; p < partition_ids.size(1); ++p) {
             job_flags_[q][p].store(false);
-            if (partition_ids_acc[q][p] < 0) job_flags_[q][p] = true;
+            if (partition_ids_acc[q][p] < 0) {
+                job_flags_[q][p] = true;
+                valid_count++;
+            }
         }
-        per_query_total_left_[q].store(partition_ids.size(1), std::memory_order_relaxed);
+        per_query_total_left_[q].store(valid_count, std::memory_order_relaxed);
     }
     job_buffer_.clear();
     job_buffer_.reserve(nQ * partition_ids.size(1));
