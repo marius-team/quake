@@ -244,6 +244,106 @@ class Sift10m(Dataset):
 
         return torch.from_numpy(ids).long()
 
+class  Wiki13M(Dataset):
+    def __init__(self, download_dir: Union[str, Path] = DEFAULT_DOWNLOAD_DIR):
+        self.download_dir = to_path(download_dir)
+        self.data_dir = self.download_dir / "wiki13m"
+        self.downloaded = False
+        self.metric = "ip"
+
+    def is_downloaded(self) -> bool:
+        base = self.data_dir / "wiki.npy"
+        query = self.data_dir / "wiki_queries.npy"
+        gt = self.data_dir / "wiki_gt.npy"
+        return base.exists() and query.exists() and gt.exists()
+
+    def download(self, overwrite: bool = False):
+        pass
+
+    def load_vectors(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "wiki.npy"
+        return torch.from_numpy(np.load(fname)).to(torch.float32)
+
+    def load_queries(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "wiki_queries.npy"
+        return torch.from_numpy(np.load(fname)).to(torch.float32)
+
+    def load_ground_truth(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "wiki_gt.npy"
+        return torch.from_numpy(np.load(fname)).long()
+
+
+class WikiCohere1M(Dataset):
+    def __init__(self, download_dir: Union[str, Path] = DEFAULT_DOWNLOAD_DIR):
+        self.download_dir = to_path(download_dir)
+        self.data_dir = self.download_dir / "wikipedia_cohere"
+        self.downloaded = False
+        self.metric = "ip"
+
+    def is_downloaded(self) -> bool:
+        base = self.data_dir / "wikipedia_base.bin.crop_nb_1000000"
+        query = self.data_dir / "wikipedia_query.bin"
+        gt = self.data_dir / " wikipedia-1M"
+        return base.exists() and query.exists() and gt.exists()
+
+    def download(self, overwrite: bool = False):
+        pass
+
+    def load_vectors(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "wikipedia_base.bin.crop_nb_1000000"
+        n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
+        return torch.from_numpy(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
+
+    def load_queries(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "wikipedia_query.bin"
+        n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
+        return torch.from_numpy(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
+
+    def load_ground_truth(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "wikipedia-1M"
+        n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
+        assert os.stat(fname).st_size == 8 + n * d * (4 + 4)
+        f = open(fname, "rb")
+        f.seek(4 + 4)
+        ids = np.fromfile(f, dtype="int32", count=n * d).reshape(n, d)
+        return torch.from_numpy(ids).long()
+
+class T2I1M(Dataset):
+    def __init__(self, download_dir: Union[str, Path] = DEFAULT_DOWNLOAD_DIR):
+        self.download_dir = to_path(download_dir)
+        self.data_dir = self.download_dir / "text2image1B"
+        self.downloaded = False
+        self.metric = "ip"
+
+    def is_downloaded(self) -> bool:
+        base = self.data_dir / "base.1B.fbin.crop_nb_1000000"
+        query = self.data_dir / "query.heldout.30K.fbin"
+        gt = self.data_dir / "gt100-heldout.30K.fbin"
+        return base.exists() and query.exists() and gt.exists()
+
+    def download(self, overwrite: bool = False):
+        pass
+
+    def load_vectors(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "base.1B.fbin.crop_nb_1000000"
+        n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
+        return torch.from_numpy(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
+
+    def load_queries(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "query.heldout.30K.fbin"
+        n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
+        return torch.from_numpy(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))
+
+    def load_ground_truth(self) -> Union[np.ndarray, torch.Tensor]:
+        fname = self.data_dir / "gt100-heldout.30K.fbin"
+        n, d = map(int, np.fromfile(fname, dtype="uint32", count=2))
+        assert os.stat(fname).st_size == 8 + n * d * (4 + 4)
+        f = open(fname, "rb")
+        f.seek(4 + 4)
+        ids = np.fromfile(f, dtype="int32", count=n * d).reshape(n, d)
+        return torch.from_numpy(ids).long()
+
+
 
 
 def load_dataset(
@@ -259,6 +359,12 @@ def load_dataset(
         dataset = MSTuring100m(download_dir=download_dir)
     elif name.lower() == "sift10m":
         dataset = Sift10m(download_dir=download_dir)
+    elif name.lower() == "wiki13m":
+        dataset = Wiki13M(download_dir=download_dir)
+    elif name.lower() == "t2i1m":
+        dataset = T2I1M(download_dir=download_dir)
+    elif name.lower() == "wikicohere1m":
+        dataset = WikiCohere1M(download_dir=download_dir)
     else:
         raise RuntimeError("Unimplemented dataset + " + name)
 

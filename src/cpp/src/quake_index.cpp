@@ -39,6 +39,8 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
 
     auto start = std::chrono::high_resolution_clock::now();
 
+    std::cout << "[QuakeIndex::build] Building index at level " << current_level_ << " with nlist=" << build_params_->nlist << " and metric=" << build_params_->metric << std::endl;
+
     if (build_params_->nlist > 1) {
         auto s1 = std::chrono::high_resolution_clock::now();
         shared_ptr<Clustering> clustering = kmeans(
@@ -55,11 +57,11 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
 
         auto parent_build_params = make_shared<IndexBuildParams>();
         if (build_params->parent_params == nullptr) {
-            parent_build_params->metric = build_params_->metric;
             parent_build_params->num_workers = build_params_->num_workers;
         } else {
             parent_build_params = build_params_->parent_params;
         }
+        parent_build_params->metric = build_params_->metric;
         parent_->build(clustering->centroids, clustering->partition_ids, parent_build_params);
 
         // initialize the partition manager
@@ -297,7 +299,8 @@ void QuakeIndex::load(const std::string& dir_path, shared_ptr<IndexBuildParams> 
     initialize_maintenance_policy(default_params);
 
     // 5. Create query coordinator
-    std::cout << "Loading coordinator with n_workers=" << build_params->num_workers << " and use_numa=" << build_params->use_numa << '\n';
+    std::cout << "Loading coordinator at level " << current_level_ << " with "
+              << build_params->num_workers << " workers, NUMA: " << (build_params->use_numa ? "enabled" : "disabled") << " and metric " << metric_ << std::endl;
     query_coordinator_ = std::make_shared<QueryCoordinator>(parent_,
         partition_manager_,
         maintenance_policy_,

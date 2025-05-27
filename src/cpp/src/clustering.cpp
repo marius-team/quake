@@ -163,6 +163,7 @@ shared_ptr<Clustering> kmeans_cpu(Tensor vectors,
 
     faiss::ClusteringParameters cp;
     cp.niter = build_params->niter;
+    cp.spherical = (metric_type == faiss::METRIC_INNER_PRODUCT);
 
     faiss::Clustering clus(d, build_params->nlist, cp);
     clus.train(n, vectors.data_ptr<float>(), *index_ptr);

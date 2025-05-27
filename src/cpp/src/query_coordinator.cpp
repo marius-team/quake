@@ -99,62 +99,60 @@ void QueryCoordinator::allocate_core_resources(int core_idx,
 }
 
 
-void QueryCoordinator::merge_worker_fn(int mid)
-{
+// The heart of it: one function, two instantiations.
+template <typename Compare>
+void QueryCoordinator::merge_worker_fn(int mid) {
     auto& MR = merge_res_[mid];
     ResultJob rj;
 
-    while (!stop_workers_) {
+    while (true) {
         MR.queue.wait_dequeue(rj);
+        if (rj.query_id == -1)  // poison pill
+            return;
 
-        if (rj.query_id == -1) break;          // poison-pill
+        // single cast, based on the Compare template
+        using Handler = typename faiss::HeapBlockResultHandler<Compare>::SingleResultHandler;
+        auto* h = static_cast<Handler*>(MR.handlers[rj.query_id]);
 
-        /* ---- grab the pre-built handler ---------------------------------- */
-        if (metric_ == faiss::METRIC_INNER_PRODUCT) {
-            using H = faiss::HeapBlockResultHandler<
-                        faiss::CMin<float,int64_t>>::SingleResultHandler;
-            auto* h = static_cast<H*>(MR.handlers[rj.query_id]);
-            for (size_t i = 0; i < rj.distances.size(); ++i)
-                h->add_result(rj.distances[i], rj.indices[i]);
-            query_dist_pivots_[rj.query_id].store(h->threshold,
-                                                  std::memory_order_relaxed);
-        } else {
-            using H = faiss::HeapBlockResultHandler<
-                        faiss::CMax<float,int64_t>>::SingleResultHandler;
-            auto* h = static_cast<H*>(MR.handlers[rj.query_id]);
-            for (size_t i = 0; i < rj.distances.size(); ++i)
-                h->add_result(rj.distances[i], rj.indices[i]);
-            query_dist_pivots_[rj.query_id].store(h->threshold,
-                                                  std::memory_order_relaxed);
+        // feed all partial results
+        for (size_t i = 0; i < rj.distances.size(); ++i) {
+            h->add_result(rj.distances[i], rj.indices[i]);
         }
+        // update pivot
+        query_dist_pivots_[rj.query_id].store(h->threshold,
+                                              std::memory_order_relaxed);
 
-        /* ---- bookkeeping -------------------------------------------------- */
+        // once all ranks for this query are in, finalize & sort
         if (!job_flags_[rj.query_id][rj.rank]) {
             job_flags_[rj.query_id][rj.rank] = true;
-            --per_query_total_left_[rj.query_id];
+            if (--per_query_total_left_[rj.query_id] == 0) {
+                h->end();
 
-            if (per_query_total_left_[rj.query_id] == 0) {
-                if (metric_ == faiss::METRIC_INNER_PRODUCT) {
-                    using H = faiss::HeapBlockResultHandler<
-                                faiss::CMin<float,int64_t>>::SingleResultHandler;
-                    static_cast<H*>(MR.handlers[rj.query_id])->end();
-                } else {
-                    using H = faiss::HeapBlockResultHandler<
-                                faiss::CMax<float,int64_t>>::SingleResultHandler;
-                    static_cast<H*>(MR.handlers[rj.query_id])->end();
+                // pack into pairs for sorting
+                int k = h->k;
+                std::vector<std::pair<float,int64_t>> result;
+                result.reserve(k);
+                for (int i = 0; i < k; ++i) {
+                    result.emplace_back(h->heap_dis[i], h->heap_ids[i]);
+                }
+
+                // for CMin (inner-product) we want descending distances
+                // for CMax (L2) we want ascending distances
+                auto cmp = [](auto& a, auto& b) {
+                    return Compare::cmp(a.first, b.first);
+                };
+                std::sort(result.begin(), result.end(), cmp);
+
+                // write them back
+                for (int i = 0; i < k; ++i) {
+                    h->heap_dis[i] = result[i].first;
+                    h->heap_ids[i] = result[i].second;
                 }
             }
-            --total_left_;
         }
-
-        // std::cout << "[merge_worker_fn] Query ID: " << rj.query_id
-        //           << ", Rank: " << rj.rank
-        //           << ", Distances: " << rj.distances.size()
-        //           << ", Indices: " << rj.indices.size()
-        //           << ", Total left: " << total_left_.load() << std::endl;
+        --total_left_;
     }
 }
-
 
 void QueryCoordinator::partition_scan_worker_fn(int core_index) {
     CoreResources &res = core_resources_[core_index];
@@ -394,17 +392,13 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
 
     // gather queries
     float *qptr = nullptr;
-    if (job.scan_all) {
-        qptr = nr.local_query_buffer;
-    } else {
-        float *dst = res.batch_queries;
-        for (int64_t i = 0; i < Q; ++i) {
-            int qid = (*job.query_ids)[i];
-            const float *src = nr.local_query_buffer + size_t(qid) * D;
-            std::memcpy(dst + i * D, src, D * sizeof(float));
-        }
-        qptr = dst;
+    float *dst = res.batch_queries;
+    for (int64_t i = 0; i < Q; ++i) {
+        int qid = (*job.query_ids)[i];
+        const float *src = nr.local_query_buffer + size_t(qid) * D;
+        std::memcpy(dst + i * D, src, D * sizeof(float));
     }
+    qptr = dst;
 
     vector<std::atomic<float> *> pivots;
     pivots.resize(job.num_queries);
@@ -735,24 +729,6 @@ QueryCoordinator::aggregate_scan_results(int64_t nQ,
                                          shared_ptr<SearchTimingInfo> timing,
                                          Tensor out_ids,
                                          Tensor out_dists) {
-
-    for (int64_t q = 0; q < nQ; ++q) {
-        int merge_worker_idx = q % num_merge_workers_;
-        MergeResources& mr = merge_res_[merge_worker_idx];
-
-        if (q < static_cast<int64_t>(mr.handlers.size()) && mr.handlers[q] != nullptr) {
-            if (metric_ == faiss::METRIC_INNER_PRODUCT) {
-                using H = faiss::HeapBlockResultHandler<
-                            faiss::CMin<float,int64_t>>::SingleResultHandler;
-                static_cast<H*>(mr.handlers[q])->end();
-            } else {
-                using H = faiss::HeapBlockResultHandler<
-                            faiss::CMax<float,int64_t>>::SingleResultHandler;
-                static_cast<H*>(mr.handlers[q])->end();
-            }
-        }
-    }
-
     auto id_acc = out_ids.accessor<int64_t,2>();
     auto d_acc  = out_dists.accessor<float,2>();
 
@@ -854,8 +830,8 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
             duration_cast<nanoseconds>(s5 - s4).count();
     res->timing_info->result_aggregate_time_ns =
             duration_cast<nanoseconds>(s6 - s5).count();
-
-    // retrieve the final values of the per-core resource timers;
+    //
+    // // retrieve the final values of the per-core resource timers;
     for (int i = 0; i < num_workers_; ++i) {
         core_wait_time_ns[i] = core_resources_[i].wait_time_ns - core_wait_time_ns[i];
         core_process_time_ns[i] = core_resources_[i].process_time_ns - core_process_time_ns[i];
@@ -866,7 +842,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     }
 
 
-    // print out the per-core resource timers;
+    // // print out the per-core resource timers;
     for (int i = 0; i < num_workers_; ++i) {
         std::cout << "[QueryCoordinator::worker_scan] Core " << i << ": "
                     << "job_counter=" << core_resources_[i].job_counter << " "
@@ -915,12 +891,22 @@ void QueryCoordinator::initialize_workers(int num_workers, int num_merge_workers
         worker_threads_[i] = std::thread(&QueryCoordinator::partition_scan_worker_fn, this, i);
     }
 
+    merge_threads_.resize(num_merge_workers_);
     merge_res_.resize(num_merge_workers_);
-    for (int i = 0; i < num_merge_workers; i++) {
-        if (!set_thread_affinity(i + num_workers)) {
-            std::cout << "[QueryCoordinator::initialize_workers] Failed to set thread affinity on core " << i + num_workers << std::endl;
+    if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+        // CMin: we want largest-inner-product first
+        for (int i = 0; i < num_merge_workers_; ++i) {
+            merge_threads_[i] = std::thread(
+              &QueryCoordinator::merge_worker_fn<faiss::CMin<float,int64_t>>,
+              this, i);
         }
-        merge_threads_.emplace_back(&QueryCoordinator::merge_worker_fn, this, i);
+    } else {
+        // CMax: we want smallest-L2 first
+        for (int i = 0; i < num_merge_workers_; ++i) {
+            merge_threads_[i] = std::thread(
+              &QueryCoordinator::merge_worker_fn<faiss::CMax<float,int64_t>>,
+              this, i);
+        }
     }
 
     workers_initialized_ = true;
@@ -1072,6 +1058,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
             float *list_vectors = (float *) partition_manager_->partition_store_->get_codes(pi);
             int64_t *list_ids = (int64_t *) partition_manager_->partition_store_->get_ids(pi);
             int64_t list_size = partition_manager_->partition_store_->list_size(pi);
+
             scan_list(query_vec,
                       list_vectors,
                       list_ids,
@@ -1079,7 +1066,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
                       dimension,
                       *topk_buf,
                       metric_,
-                      query_radius);
+                      NULL);
             scanned_ids.push_back(pi);
 
             float curr_radius = topk_buf->get_kth_distance();

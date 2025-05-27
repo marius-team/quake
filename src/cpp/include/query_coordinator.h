@@ -226,7 +226,8 @@ public:
      */
     void partition_scan_worker_fn(int worker_id);
 
-    void merge_worker_fn(int merge_worker_id);
+    template <typename Compare>
+    void merge_worker_fn(int worker_id);
 
     /**
      * @brief Worker thread function to perform partition scanning.

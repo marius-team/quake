@@ -180,7 +180,7 @@ public:
         if (++head_ == capacity_) flush();
     }
 
-    float batch_add(T *distances, I *indices, int num_values) {
+    void batch_add(T *distances, I *indices, int num_values) {
         int pos = 0;
         while (pos < num_values) {
             int available = capacity_ - head_;
@@ -208,28 +208,26 @@ public:
         for (int i = 0; i < n; ++i) {
             ord_[i] = i;
         }
-        // comparator by value
-        auto cmpIdx = [&](int a, int b) {
-            return is_desc_ ? (vals_[a] > vals_[b])
-                            : (vals_[a] < vals_[b]);
+
+        auto cmp = [&](int a, int b) {
+            return is_desc_ ? vals_[a] > vals_[b] : vals_[a] < vals_[b];
         };
+
 
         // 2) select top‐m indices into ord_[0..m)
         if (n > m) {
             if (m < 10) {
-                miniselect::heap_select(ord_, ord_ + m, ord_ + n, cmpIdx);
+                miniselect::heap_select(ord_, ord_ + m, ord_ + n, cmp);
             } else if (m < n * 0.001) {
-                miniselect::floyd_rivest_select(ord_, ord_ + m, ord_ + n, cmpIdx);
+                miniselect::floyd_rivest_select(ord_, ord_ + m, ord_ + n, cmp);
             } else {
-                miniselect::pdqpartial_sort_branchless(ord_, ord_ + m, ord_ + n, cmpIdx);
+                miniselect::pdqpartial_sort_branchless(ord_, ord_ + m, ord_ + n, cmp);
             }
 
         } else {
-            miniselect::pdqsort_branchless(ord_, ord_ + n, cmpIdx);
+            miniselect::pdqsort_branchless(ord_, ord_ + n, cmp);
         }
 
-        // 4) fully sort the top-m indices so they are in strictly correct order
-        miniselect::pdqsort_branchless(ord_, ord_ + m, cmpIdx);
 
         // 5) copy the winners back to vals_/ids_ and clamp head_
         std::vector<T> temp_v(m);
@@ -390,7 +388,10 @@ inline void scan_list_with_ids_l2(const float *query_vec,
                                         float pivot) {
     const float *vec = list_vecs;
     for (int l = 0; l < list_size; l++) {
-        buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
+        float dist = sqrt(faiss::fvec_L2sqr(query_vec, vec, d));
+        if (dist < pivot) {
+            buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
+        }
         vec += d;
     }
 }
@@ -403,10 +404,10 @@ inline void scan_list(const float *query_vec,
                             int d,
                             TopkBuffer &buffer,
                             faiss::MetricType metric,
-                            float pivot = -1) {
+                            float pivot = NULL) {
     // Dispatch based on metric type and whether list_ids is provided.
 
-    if (pivot == 0) {
+    if (pivot == NULL) {
         pivot = metric == faiss::METRIC_INNER_PRODUCT
                 ? -std::numeric_limits<float>::infinity()
                 : std::numeric_limits<float>::infinity();
@@ -436,11 +437,11 @@ inline void ip_blas(
         size_t                      k,
         vector<shared_ptr<TopkBuffer>> &topk_buffers,
         float*        __restrict    ip_block,     // nx * bs_y
-        vector<std::atomic<float>*>   pivot)      // db_blas_bs
+        vector<std::atomic<float>*>   pivot = {})      // db_blas_bs
 {
     if (nx == 0 || ny == 0) return;
 
-    constexpr size_t bs_x = 256;
+    const size_t bs_x = nx;
     const     size_t bs_y = db_blas_bs;
     int64_t *list_ids_ptr = (int64_t *) list_ids;
 
@@ -453,8 +454,12 @@ inline void ip_blas(
             const size_t db_chunk = j1 - j0;
 
             // use torch matmul
-
-            /* SGEMM */
+# ifdef __APPLE__ // use torch on macOS
+            Tensor x_tensor = torch::from_blob((void*) (x + i0 * d), {(int64_t) q_chunk, (int64_t) d}, torch::kFloat32);
+            Tensor y_tensor = torch::from_blob((void*) (y + j0 * d), {(int64_t) db_chunk, (int64_t) d}, torch::kFloat32);
+            Tensor ip_tensor = torch::from_blob(ip_block, {(int64_t) q_chunk, (int64_t) db_chunk}, torch::kFloat32);
+            torch::matmul_out(ip_tensor, x_tensor, y_tensor.transpose(0, 1));
+#else // use BLAS on Linux
             {
                 const float one = 1.f;
                 float zero = 0.f;
@@ -469,11 +474,14 @@ inline void ip_blas(
                        &zero,
                        ip_block,    &nyi);
             }
+#endif
+
 
             /* IP → L2² */
             if (k > 1) {
                 for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
                     float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
+
                     // collect distances closer than pivot
                     if (pivot.size() > 0) {
                         float curr_pivot = pivot[qi]->load(std::memory_order_relaxed);
@@ -495,7 +503,7 @@ inline void ip_blas(
                     int64_t best_id = -1;
 
                     for (size_t pj = 0; pj < db_chunk; ++pj) {
-                        if (*line_ptr < best_dist) {
+                        if (*line_ptr > best_dist) {
                             best_dist = *line_ptr;
                             best_id = list_ids_ptr[j0 + pj];
                         }
@@ -526,7 +534,7 @@ inline void l2_blas(
 {
     if (nx == 0 || ny == 0) return;
 
-    constexpr size_t bs_x = 256;
+    const size_t bs_x = nx;
     const     size_t bs_y = db_blas_bs;
     int64_t *list_ids_ptr = (int64_t *) list_ids;
 
@@ -660,6 +668,7 @@ inline void batched_scan_list(const float *query_vecs,
                 pivots
         );
     } else if (metric == faiss::METRIC_L2) {
+        std::cout << "Using L2 metric for batched scan." << std::endl;
         l2_blas(
                 query_vecs,
                 list_vecs,

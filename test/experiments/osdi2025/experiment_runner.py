@@ -13,6 +13,7 @@ from test.experiments.osdi2025.early_termination.run import run_experiment as ru
 from test.experiments.osdi2025.multi_level.run import run_experiment as run_multi_level
 from test.experiments.osdi2025.vary_levels.run import run_experiment as run_vary_levels
 from test.experiments.osdi2025.maintenance_ablation.run import run_experiment as run_ablation
+from test.experiments.osdi2025.vary_batch_size.run import run_experiment as run_vary_batch_size
 
 EXPERIMENTS = {
     "kick_the_tires":   run_kick_the_tires,
@@ -23,6 +24,7 @@ EXPERIMENTS = {
     "multi_level":        run_multi_level,
     "vary_levels":        run_vary_levels,
     "maintenance_ablation": run_ablation,
+    "vary_batch_size":    run_vary_batch_size,
 }
 
 def main():
