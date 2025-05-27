@@ -842,29 +842,29 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     }
 
 
-    // // print out the per-core resource timers;
-    for (int i = 0; i < num_workers_; ++i) {
-        std::cout << "[QueryCoordinator::worker_scan] Core " << i << ": "
-                    << "job_counter=" << core_resources_[i].job_counter << " "
-                    << "queries_counter=" << core_resources_[i].queries_counter << " "
-                  << "wait_time_ms=" << (float) core_wait_time_ns[i] / 1e6 << " "
-                    << "scan_setup_time_ms=" << (float) core_scan_setup_time_ns[i] / 1e6 << " "
-                    << "scan_time_ms=" << (float) core_scan_time_ns[i] / 1e6 << " "
-        << "scan_push_time_ms=" << (float) core_scan_push_time_ns[i] / 1e6 << " "
-                  << "process_time_ms=" << (float) core_process_time_ns[i] / 1e6 << " "
-        << "process_preamble_time_ms=" << (float) core_process_preamble_time_ns[i] / 1e6 << " "
-                  << "enqueue_time_ms=" << (float) core_enqueue_time_ns[i] / 1e6 << " "
-                  << "job_time_ms=" << (float) core_job_time_ns[i] / 1e6 << std::endl;
-    }
-
-    // print out the main thread timers;
-    std::cout << "[QueryCoordinator::worker_scan] Main thread: "
-              << "buffer_init_time_ms=" << (float) res->timing_info->buffer_init_time_ns / 1e6 << " "
-              << "copy_query_time_ms=" << (float) res->timing_info->copy_query_time_ns / 1e6 << " "
-              << "job_enqueue_time_ms=" << (float) res->timing_info->job_enqueue_time_ns / 1e6 << " "
-              << "job_wait_time_ms=" << (float) res->timing_info->job_wait_time_ns / 1e6 << " "
-              << "result_aggregate_time_ms=" << (float) res->timing_info->result_aggregate_time_ns / 1e6
-              << std::endl;
+    // // // print out the per-core resource timers;
+    // for (int i = 0; i < num_workers_; ++i) {
+    //     std::cout << "[QueryCoordinator::worker_scan] Core " << i << ": "
+    //                 << "job_counter=" << core_resources_[i].job_counter << " "
+    //                 << "queries_counter=" << core_resources_[i].queries_counter << " "
+    //               << "wait_time_ms=" << (float) core_wait_time_ns[i] / 1e6 << " "
+    //                 << "scan_setup_time_ms=" << (float) core_scan_setup_time_ns[i] / 1e6 << " "
+    //                 << "scan_time_ms=" << (float) core_scan_time_ns[i] / 1e6 << " "
+    //     << "scan_push_time_ms=" << (float) core_scan_push_time_ns[i] / 1e6 << " "
+    //               << "process_time_ms=" << (float) core_process_time_ns[i] / 1e6 << " "
+    //     << "process_preamble_time_ms=" << (float) core_process_preamble_time_ns[i] / 1e6 << " "
+    //               << "enqueue_time_ms=" << (float) core_enqueue_time_ns[i] / 1e6 << " "
+    //               << "job_time_ms=" << (float) core_job_time_ns[i] / 1e6 << std::endl;
+    // }
+    //
+    // // print out the main thread timers;
+    // std::cout << "[QueryCoordinator::worker_scan] Main thread: "
+    //           << "buffer_init_time_ms=" << (float) res->timing_info->buffer_init_time_ns / 1e6 << " "
+    //           << "copy_query_time_ms=" << (float) res->timing_info->copy_query_time_ns / 1e6 << " "
+    //           << "job_enqueue_time_ms=" << (float) res->timing_info->job_enqueue_time_ns / 1e6 << " "
+    //           << "job_wait_time_ms=" << (float) res->timing_info->job_wait_time_ns / 1e6 << " "
+    //           << "result_aggregate_time_ms=" << (float) res->timing_info->result_aggregate_time_ns / 1e6
+    //           << std::endl;
 
     return res;
 }
