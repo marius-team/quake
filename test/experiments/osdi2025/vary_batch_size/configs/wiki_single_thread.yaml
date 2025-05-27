@@ -2,8 +2,8 @@ dataset:
   name: wiki13m
   # Instead of a single num_queries, we sweep over these batch sizes:
 #  query_batch_sizes: [1, 8, 16, 32, 64, 128, 256, 512]
-  num_queries: 4096
-  query_batch_sizes: [1, 4, 16, 64, 256, 1024, 4096]
+  num_queries: 8192
+  query_batch_sizes: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
   k: 100
 
 trials: 3
@@ -18,11 +18,11 @@ indexes:
     build_params:
       nc: 3500
       metric: ip
-      num_workers: 0
+      num_workers: 16
       use_numa: true
       omp_num_threads_build: 8
       parent:
-        num_workers: 0
+        num_workers: 4
     search_params:
       nprobe: 4
       batch_size: 128
@@ -37,11 +37,11 @@ indexes:
     build_params:
       nc: 3500
       metric: ip
-      num_workers: 0
+      num_workers: 16
       omp_num_threads_build: 8
       use_numa: true
       parent:
-        num_workers: 0
+        num_workers: 4
     search_params:
       nprobe: 4
       batch_size: 128
@@ -59,7 +59,20 @@ indexes:
       omp_num_threads_build: 1
     search_params:
       nprobe: 4
-      omp_num_threads_search: 1
+      omp_num_threads_search: 16
+
+  - name: FaissHNSW
+    index: HNSW
+    index_file: /opt/quake/data/vary_batch_sizes/indices/FaissHNSW.bin
+    build_params:
+      m: 64
+      ef_construction: 128
+      metric: ip
+      omp_num_threads_build: 1
+    search_params:
+      ef_search: 16
+      omp_num_threads_search: 16
+
 
 output:
   results_csv: numa_query_batch_results.csv
