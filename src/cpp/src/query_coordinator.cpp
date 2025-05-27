@@ -258,6 +258,8 @@ void QueryCoordinator::process_scan_job(ScanJob job,
 void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
                                              CoreResources &res,
                                              NUMAResources &nr) {
+
+    auto start = std::chrono::high_resolution_clock::now();
     // ensure buffers
     if (res.topk_buffer_pool.size() < 1) {
         res.topk_buffer_pool.resize(1);
@@ -307,10 +309,21 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
                   metric_,
                   query_dist_pivots_[job.query_id].load(std::memory_order_relaxed));
 
+        auto end = std::chrono::high_resolution_clock::now();
+
+        res.scan_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
+        start = std::chrono::high_resolution_clock::now();
+
         // If scan_list completes, enqueue its results
         auto tv = buf->get_topk(false);
         auto ti = buf->get_topk_indices(false);
         enqueue_result_job(ResultJob{job.query_id, job.rank, std::move(tv), std::move(ti)});
+
+        end = std::chrono::high_resolution_clock::now();
+        res.enqueue_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
+
 
     } catch (const std::exception& e) {
         std::cerr << "[QueryCoordinator::handle_nonbatched_job] Exception during scan for partition "
