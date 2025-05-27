@@ -14,6 +14,7 @@ force_rebuild: false
 indexes:
   - name: Quake_Unbatched
     index: Quake
+    index_file: /Users/jason/projects/quake/test/experiments/osdi2025/vary_batch_size/indices/Quake_3500.bin
     build_params:
       nc: 3500
       metric: ip
@@ -32,6 +33,7 @@ indexes:
 
   - name: Quake_Batched
     index: Quake
+    index_file: /Users/jason/projects/quake/test/experiments/osdi2025/vary_batch_size/indices/Quake_3500.bin
     build_params:
       nc: 3500
       metric: ip
@@ -50,6 +52,7 @@ indexes:
 
   - name: FaissIVF
     index: IVF
+    index_file: /Users/jason/projects/quake/test/experiments/osdi2025/vary_batch_size/indices/FaissIVF.bin
     build_params:
       nc: 3500
       metric: ip

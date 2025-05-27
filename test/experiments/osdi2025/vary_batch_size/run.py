@@ -135,8 +135,9 @@ def run_experiment(cfg_path, out_dir):
     idx_store = out/"indices"
     idx_store.mkdir(exist_ok=True)
     for idx_cfg in cfg["indexes"]:
-        idx_file = idx_store/f"{idx_cfg['name']}.bin"
-        br = task_build_index(idx_cfg, ds_cfg, run_params, idx_file)
+        idx_path = Path(idx_cfg.get("index_file", idx_store/f"{idx_cfg['name']}.bin"))
+        idx_path.parent.mkdir(parents=True, exist_ok=True)
+        br = task_build_index(idx_cfg, ds_cfg, run_params, idx_path)
         if br.get("error"):
             logger.error(f"Build failed for {idx_cfg['name']}: {br['error']}")
 
@@ -144,8 +145,8 @@ def run_experiment(cfg_path, out_dir):
     for bs in batch_sizes:
         logger.info(f"--- Running batch size = {bs} ---")
         for idx_cfg in cfg["indexes"]:
-            idx_file = idx_store/f"{idx_cfg['name']}.bin"
-            row = task_search_index(idx_cfg, ds_cfg, run_params, idx_file, bs)
+            idx_path = Path(idx_cfg.get("index_file", idx_store/f"{idx_cfg['name']}.bin"))
+            row = task_search_index(idx_cfg, ds_cfg, run_params, idx_path, bs)
             all_rows.append(row)
 
     df = pd.DataFrame(all_rows)
