@@ -59,7 +59,7 @@ def task_build_index(idx_cfg, ds_cfg, run_params, idx_file: Path):
 def task_search_index(idx_cfg, ds_cfg, run_params, idx_file: Path, batch_size: int):
     name = idx_cfg["name"]
     itype = idx_cfg["index"]
-    print(f"[{name} SEARCH bs={batch_size}] Loading index")
+    print(f"[{name} SEARCH bs={batch_size}] PID={os.getpid()} Loading index")
     bp = dict(idx_cfg.get("build_params", {}))
     sp = dict(idx_cfg.get("search_params", {}))
     omp_search = str(sp.pop("omp_num_threads_search", "1"))
@@ -123,16 +123,29 @@ def run_experiment(cfg_path, out_dir):
     ds_cfg = cfg["dataset"]
     batch_sizes = ds_cfg["query_batch_sizes"]
     run_params = {
-        "num_trials":             cfg.get("trials", 3),
-        "num_warmup":             cfg.get("warmup", 1),
-        "k_val":                  ds_cfg["k"],
-        "force_rebuild_indices":  cfg.get("force_rebuild", False),
-        "enable_glances":         cfg.get("enable_glances_monitoring", False),
+        "num_trials":            cfg.get("trials", 3),
+        "num_warmup":            cfg.get("warmup", 1),
+        "k_val":                 ds_cfg["k"],
+        "force_rebuild_indices": cfg.get("force_rebuild", False),
+        "force_overwrite":       cfg.get("overwrite", False),
+        "enable_glances":        cfg.get("enable_glances_monitoring", False),
     }
 
     # prepare directories
-    process_logs_dir = out / "process_logs";    process_logs_dir.mkdir(exist_ok=True)
-    index_store_dir  = out / "indices";         index_store_dir.mkdir(exist_ok=True)
+    process_logs_dir = out / "process_logs"; process_logs_dir.mkdir(exist_ok=True)
+    index_store_dir  = out / "indices";      index_store_dir.mkdir(exist_ok=True)
+
+    # load existing results if present
+    results_csv = out / cfg["output"]["results_csv"]
+    print(results_csv)
+    if results_csv.exists() and not run_params["force_overwrite"]:
+        existing_df = pd.read_csv(results_csv)
+        done_pairs = set(zip(existing_df["index"], existing_df["query_batch_size"]))
+        print(done_pairs)
+    else:
+        print("No existing results found")
+        existing_df = None
+        done_pairs = set()
 
     all_rows = []
 
@@ -146,7 +159,7 @@ def run_experiment(cfg_path, out_dir):
         build_env = idx_cfg.get("build_env_vars", {})
         timeout   = idx_cfg.get("process_timeout", cfg.get("default_process_timeout", 7200))
 
-        build_res = common_utils.run_operation_in_process(
+        res = common_utils.run_operation_in_process(
             task_build_index,
             (idx_cfg, ds_cfg, run_params, idx_path),
             env_vars=build_env,
@@ -155,25 +168,26 @@ def run_experiment(cfg_path, out_dir):
             timeout_seconds=timeout,
             enable_glances=run_params["enable_glances"]
         )
-
-        # check build result
-        data = build_res.get("data", {})
-        if build_res.get("status") != "success" or data.get("error"):
-            logger.error(f"[BUILD FAILED] {name}: {data.get('error', 'unknown')}")
+        data = res.get("data", {})
+        if res.get("status")!="success" or data.get("error"):
+            logger.error(f"[BUILD FAILED] {name}: {data.get('error','unknown')}")
         else:
-            logger.info(f"[BUILD OK] {name} → {data.get('index_file_path')} ({data.get('status')})")
+            logger.info(f"[BUILD OK] {name} → {data['index_file_path']}")
 
     # === SEARCH TASKS ===
     for bs in batch_sizes:
         for idx_cfg in cfg["indexes"]:
             name = idx_cfg["name"]
-            idx_path = Path(idx_cfg.get("index_file", index_store_dir/f"{name}.bin"))
+            if (name, bs) in done_pairs:
+                logger.info(f"Skipping existing result for {name}, batch={bs}")
+                continue
 
+            idx_path = Path(idx_cfg.get("index_file", index_store_dir/f"{name}.bin"))
             search_log = process_logs_dir / f"{name}_search_bs{bs}.log"
             search_env = idx_cfg.get("search_env_vars", {})
             timeout    = idx_cfg.get("process_timeout", cfg.get("default_process_timeout", 7200))
 
-            search_res = common_utils.run_operation_in_process(
+            res = common_utils.run_operation_in_process(
                 task_search_index,
                 (idx_cfg, ds_cfg, run_params, idx_path, bs),
                 env_vars=search_env,
@@ -183,33 +197,29 @@ def run_experiment(cfg_path, out_dir):
                 enable_glances=run_params["enable_glances"]
             )
 
-            if search_res.get("status") == "success":
-                data = search_res.get("data", {})
-                if data.get("error"):
-                    row = {"index": name, "query_batch_size": bs, "error": data["error"]}
-                    logger.error(f"[SEARCH ERROR] {name} bs={bs}: {data['error']}")
-                else:
-                    row = {
-                        "index": name,
-                        **data
-                    }
-                    logger.info(f"[SEARCH OK] {name} bs={bs}: latency={data['mean_total_latency_ms']:.2f}ms, recall={data['mean_recall']:.3f}")
+            if res.get("status")=="success" and not res.get("data",{}).get("error"):
+                row = {"index": name, **res["data"]}
+                logger.info(f"[SEARCH OK] {name}, batch={bs}: {row}")
             else:
-                err = search_res.get("data", {}).get("error", "process failed")
+                err = res.get("data",{}).get("error","proc failed")
                 row = {"index": name, "query_batch_size": bs, "error": err}
-                logger.error(f"[SEARCH PROC FAIL] {name} bs={bs}: {err}")
+                logger.error(f"[SEARCH ERR] {name}, batch={bs}: {err}")
 
             all_rows.append(row)
 
-    # === AGGREGATE & PLOT ===
-    df = pd.DataFrame(all_rows)
+    # === MERGE & SAVE ===
+    new_df = pd.DataFrame(all_rows)
+    if existing_df is not None and not run_params["force_overwrite"]:
+        df = pd.concat([existing_df, new_df], ignore_index=True)
+    else:
+        df = new_df
+
     # compute QPS
     df["QPS"] = df["nq"] * 1000.0 / df["mean_total_latency_ms"]
-    out_csv = out / cfg["output"]["results_csv"]
-    df.to_csv(out_csv, index=False)
-    logger.info(f"Wrote results to {out_csv}")
+    df.to_csv(results_csv, index=False)
+    logger.info(f"Wrote results to {results_csv}")
 
-    # plot QPS vs batch size
+    # === PLOT ===
     plt.figure(figsize=(8,6))
     for name, grp in df.groupby("index"):
         grp = grp.sort_values("query_batch_size")
