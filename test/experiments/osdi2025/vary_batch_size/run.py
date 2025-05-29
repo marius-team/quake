@@ -115,118 +115,10 @@ def task_search_index(idx_cfg, ds_cfg, run_params, idx_file: Path, batch_size: i
         "query_batch_size":       batch_size,
     }
 
-
-def bench_scann(cfg_path: str, out_dir: Path, force_rebuild: bool, force_overwrite: bool):
-    """
-    Build and benchmark SCANN across all batch sizes defined in the config. SCANNs serialization is broken, so it needs to be handled separately.
-    """
-    if Scann is None:
-        raise ImportError("SCANN wrapper not installed; please install quake.index_wrappers.scann")
-
-    # load config and dataset settings
-    cfg    = common_utils.load_config(cfg_path)
-    ds_cfg = cfg["dataset"]
-    batch_sizes   = ds_cfg["query_batch_sizes"]
-    k_val         = ds_cfg["k"]
-    num_trials    = cfg.get("trials", 3)
-    num_warmup    = cfg.get("warmup", 1)
-
-    # prepare paths
-    out_dir     = Path(out_dir)
-    results_csv = out_dir / cfg["output"]["results_csv"]
-    results_csv.parent.mkdir(parents=True, exist_ok=True)
-
-    # find SCANN entry in indexes
-    scann_cfg = next((ic for ic in cfg["indexes"] if ic["index"] == "SCANN"), None)
-    if scann_cfg is None:
-        return  # no SCANN to run
-
-    idx_name = scann_cfg["name"]
-    # check existing results
-    if results_csv.exists() and not force_overwrite:
-        df_existing = pd.read_csv(results_csv)
-        if idx_name in df_existing["index"].unique() and not force_rebuild:
-            logger.info(f"[SCANN] results already exist and no force overwrite → skipping")
-            return
-
-    # BUILD SCANN index
-    logger.info(f"[{idx_name} BUILD] building SCANN index")
-    base_vecs, _, _ = common_utils.load_data(ds_cfg["name"], nq_override=1)
-    scann = Scann()
-    scann.build(base_vecs, **scann_cfg.get("build_params", {}))
-    idx_file = Path(scann_cfg.get("index_file", out_dir / "indices" / f"{idx_name}.bin"))
-    idx_file.parent.mkdir(parents=True, exist_ok=True)
-    scann.save(str(idx_file))
-    del base_vecs
-
-    # LOAD queries & GT once
-    _, all_qvecs, all_gt = common_utils.load_data(
-        ds_cfg["name"], nq_override=ds_cfg["num_queries"]
-    )
-    nq = all_qvecs.shape[0]
-
-    # BENCHMARK SCANN over batch sizes
-    records = []
-    for bs in batch_sizes:
-        logger.info(f"[{idx_name} SEARCH] batch_size={bs}")
-        inst = Scann()
-        inst.load(str(idx_file))
-
-        # warmup runs
-        warmup_q = all_qvecs[:bs]
-        for _ in range(num_warmup):
-            inst.search(warmup_q, k_val, **scann_cfg.get("search_params", {}))
-
-        latencies = []
-        recalls   = []
-        for _ in range(num_trials):
-            total_ns = 0
-            ids_batches = []
-            for i in range(0, nq, bs):
-                chunk = all_qvecs[i : min(i + bs, nq)]
-                res = inst.search(chunk, k_val, **scann_cfg.get("search_params", {}))
-                ti = getattr(res, "timing_info", None)
-                ns = getattr(ti, "total_time_ns", None) or getattr(ti, "child_total_time_ns", 0)
-                total_ns += ns
-                ids_batches.append(res.ids)
-
-            latencies.append(total_ns / 1e6)
-            all_ids = np.vstack(ids_batches)
-            recalls.append(float(compute_recall(all_ids, all_gt, k_val).mean()))
-
-        records.append({
-            "index":                 idx_name,
-            "query_batch_size":      bs,
-            "nq":                    nq,
-            "mean_total_latency_ms": float(np.mean(latencies)),
-            "std_total_latency_ms":  float(np.std(latencies)),
-            "mean_recall":           float(np.mean(recalls)),
-            "std_recall":            float(np.std(recalls)),
-            "QPS":                   float(nq * 1000.0 / np.mean(latencies)),
-        })
-
-    # save (or overwrite) SCANN results
-    df = pd.DataFrame(records)
-    df.to_csv(results_csv, index=False)
-    logger.info(f"[{idx_name}] SCANN benchmark results saved to {results_csv}")
-
-
 def run_experiment(cfg_path, out_dir):
-    """
-    Main entrypoint: first runs SCANN via bench_scann, then
-    proceeds with build/search for all other indexes.
-    """
     logging.basicConfig(level=logging.INFO)
     cfg = common_utils.load_config(cfg_path)
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
-
-    # run SCANN special path
-    bench_scann(
-        cfg_path=cfg_path,
-        out_dir=out,
-        force_rebuild=cfg.get("force_rebuild", False),
-        force_overwrite=cfg.get("overwrite", False)
-    )
 
     ds_cfg = cfg["dataset"]
     batch_sizes = ds_cfg["query_batch_sizes"]
@@ -243,33 +135,37 @@ def run_experiment(cfg_path, out_dir):
     process_logs_dir = out / "process_logs"; process_logs_dir.mkdir(exist_ok=True)
     index_store_dir  = out / "indices";      index_store_dir.mkdir(exist_ok=True)
 
-    # load existing results
+    # load existing results if present
     results_csv = out / cfg["output"]["results_csv"]
+    print(results_csv)
     if results_csv.exists() and not run_params["force_overwrite"]:
         existing_df = pd.read_csv(results_csv)
         done_pairs = set(zip(existing_df["index"], existing_df["query_batch_size"]))
+        print(done_pairs)
     else:
+        print("No existing results found")
         existing_df = None
         done_pairs = set()
 
     all_rows = []
 
-    # === BUILD OTHER INDEXES ===
+    # === BUILD TASKS ===
     for idx_cfg in cfg["indexes"]:
-        if idx_cfg["index"] == "SCANN":
-            continue  # already handled
         name = idx_cfg["name"]
         idx_path = Path(idx_cfg.get("index_file", index_store_dir/f"{name}.bin"))
         idx_path.parent.mkdir(parents=True, exist_ok=True)
 
         build_log = process_logs_dir / f"{name}_build.log"
+        build_env = idx_cfg.get("build_env_vars", {})
+        timeout   = idx_cfg.get("process_timeout", cfg.get("default_process_timeout", 7200))
+
         res = common_utils.run_operation_in_process(
             task_build_index,
             (idx_cfg, ds_cfg, run_params, idx_path),
-            env_vars=idx_cfg.get("build_env_vars", {}),
+            env_vars=build_env,
             log_file_path=str(build_log),
             process_name=f"BuildTask_{name}",
-            timeout_seconds=idx_cfg.get("process_timeout", cfg.get("default_process_timeout", 7200)),
+            timeout_seconds=timeout,
             enable_glances=run_params["enable_glances"]
         )
         data = res.get("data", {})
@@ -278,25 +174,26 @@ def run_experiment(cfg_path, out_dir):
         else:
             logger.info(f"[BUILD OK] {name} → {data['index_file_path']}")
 
-    # === SEARCH OTHER INDEXES ===
+    # === SEARCH TASKS ===
     for bs in batch_sizes:
         for idx_cfg in cfg["indexes"]:
-            if idx_cfg["index"] == "SCANN":
-                continue  # skip SCANN in normal loop
             name = idx_cfg["name"]
             if (name, bs) in done_pairs:
                 logger.info(f"Skipping existing result for {name}, batch={bs}")
                 continue
 
-            idx_path   = Path(idx_cfg.get("index_file", index_store_dir/f"{name}.bin"))
+            idx_path = Path(idx_cfg.get("index_file", index_store_dir/f"{name}.bin"))
             search_log = process_logs_dir / f"{name}_search_bs{bs}.log"
+            search_env = idx_cfg.get("search_env_vars", {})
+            timeout    = idx_cfg.get("process_timeout", cfg.get("default_process_timeout", 7200))
+
             res = common_utils.run_operation_in_process(
                 task_search_index,
                 (idx_cfg, ds_cfg, run_params, idx_path, bs),
-                env_vars=idx_cfg.get("search_env_vars", {}),
+                env_vars=search_env,
                 log_file_path=str(search_log),
                 process_name=f"SearchTask_{name}_bs{bs}",
-                timeout_seconds=idx_cfg.get("process_timeout", cfg.get("default_process_timeout", 7200)),
+                timeout_seconds=timeout,
                 enable_glances=run_params["enable_glances"]
             )
 
@@ -310,13 +207,14 @@ def run_experiment(cfg_path, out_dir):
 
             all_rows.append(row)
 
-    # === MERGE & SAVE ALL RESULTS ===
+    # === MERGE & SAVE ===
     new_df = pd.DataFrame(all_rows)
     if existing_df is not None and not run_params["force_overwrite"]:
         df = pd.concat([existing_df, new_df], ignore_index=True)
     else:
         df = new_df
 
+    # compute QPS
     df["QPS"] = df["nq"] * 1000.0 / df["mean_total_latency_ms"]
     df.to_csv(results_csv, index=False)
     logger.info(f"Wrote results to {results_csv}")
