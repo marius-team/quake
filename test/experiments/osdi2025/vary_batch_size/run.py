@@ -72,6 +72,8 @@ def task_search_index(idx_cfg, ds_cfg, run_params, idx_file: Path, batch_size: i
     )
     nq = all_qvecs.shape[0]
 
+    # randomize queries for fair comparison
+
     Cls = INDEX_CLASSES[itype]
     inst = Cls()
     load_kwargs = {
@@ -99,6 +101,9 @@ def task_search_index(idx_cfg, ds_cfg, run_params, idx_file: Path, batch_size: i
     for _ in range(run_params["num_trials"]):
         total_ns = 0
         ids_list = []
+        rand_perm = torch.randperm(nq)
+        all_gt = all_gt[rand_perm]
+        all_qvecs = all_qvecs[rand_perm]
         for i in range(0, nq, batch_size):
             chunk = all_qvecs[i : min(i + batch_size, nq)]
             res = inst.search(chunk, run_params["k_val"], **sp)
