@@ -82,7 +82,7 @@ def task_search_index(idx_cfg, ds_cfg, run_params, idx_file: Path, batch_size: i
     inst.load(str(idx_file), **load_kwargs)
 
     # warmup on one chunk using random vectors
-    warmup = torch.randn(batch_size, all_qvecs.shape[1]).astype(np.float32)
+    warmup = torch.randn(batch_size, all_qvecs.shape[1])
     for _ in range(run_params["num_warmup"]):
         _ = inst.search(warmup, run_params["k_val"], **sp)
 
