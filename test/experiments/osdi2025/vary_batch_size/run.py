@@ -79,6 +79,13 @@ def task_search_index(idx_cfg, ds_cfg, run_params, idx_file: Path, batch_size: i
         for k in ("num_workers", "use_numa", "num_merge_workers", "parent")
         if k in bp
     }
+
+    if itype == "DiskANN":
+        # DiskANN requires special handling for loading, all build params are passed as kwargs
+        load_kwargs = bp.copy()
+        bp.pop("omp_num_threads_build", None)  # remove omp threads from load params
+
+
     inst.load(str(idx_file), **load_kwargs)
 
     # warmup on one chunk using random vectors
