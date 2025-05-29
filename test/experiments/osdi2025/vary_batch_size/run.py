@@ -152,11 +152,10 @@ def bench_scann(cfg_path: str, out_dir: Path, force_rebuild: bool, force_overwri
     # BUILD SCANN index
     logger.info(f"[{idx_name} BUILD] building SCANN index")
     base_vecs, _, _ = common_utils.load_data(ds_cfg["name"], nq_override=1)
-    scann = Scann()
-    scann.build(base_vecs, **scann_cfg.get("build_params", {}))
+    scann_idx = Scann()
+    scann_idx.build(base_vecs, **scann_cfg.get("build_params", {}))
     idx_file = Path(scann_cfg.get("index_file", out_dir / "indices" / f"{idx_name}.bin"))
     idx_file.parent.mkdir(parents=True, exist_ok=True)
-    scann.save(str(idx_file))
     del base_vecs
 
     # LOAD queries & GT once
@@ -169,13 +168,11 @@ def bench_scann(cfg_path: str, out_dir: Path, force_rebuild: bool, force_overwri
     records = []
     for bs in batch_sizes:
         logger.info(f"[{idx_name} SEARCH] batch_size={bs}")
-        inst = Scann()
-        inst.load(str(idx_file))
 
         # warmup runs
         warmup_q = all_qvecs[:bs]
         for _ in range(num_warmup):
-            inst.search(warmup_q, k_val, **scann_cfg.get("search_params", {}))
+            scann_idx.search(warmup_q, k_val, **scann_cfg.get("search_params", {}))
 
         latencies = []
         recalls   = []
@@ -184,7 +181,7 @@ def bench_scann(cfg_path: str, out_dir: Path, force_rebuild: bool, force_overwri
             ids_batches = []
             for i in range(0, nq, bs):
                 chunk = all_qvecs[i : min(i + bs, nq)]
-                res = inst.search(chunk, k_val, **scann_cfg.get("search_params", {}))
+                res = scann_idx.search(chunk, k_val, **scann_cfg.get("search_params", {}))
                 ti = getattr(res, "timing_info", None)
                 ns = getattr(ti, "total_time_ns", None) or getattr(ti, "child_total_time_ns", 0)
                 total_ns += ns
