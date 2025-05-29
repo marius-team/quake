@@ -204,6 +204,12 @@ def bench_scann(cfg_path: str, out_dir: Path, force_rebuild: bool, force_overwri
 
     # save (or overwrite) SCANN results
     df = pd.DataFrame(records)
+
+    # append to existing results if available
+    if results_csv.exists() and not force_overwrite:
+        existing_df = pd.read_csv(results_csv)
+        df = pd.concat([existing_df, df], ignore_index=True)
+
     df.to_csv(results_csv, index=False)
     logger.info(f"[{idx_name}] SCANN benchmark results saved to {results_csv}")
 
