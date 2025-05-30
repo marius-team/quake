@@ -281,9 +281,7 @@ private:
 
     void drain_and_apply_aps(Tensor x,
                             Tensor partition_ids,
-                             bool use_aps,
-                             float recall_target,
-                             int aps_flush_period_us,
+                            shared_ptr<SearchParams> params,
                              shared_ptr<SearchTimingInfo> timing);
 
     std::shared_ptr<SearchResult>

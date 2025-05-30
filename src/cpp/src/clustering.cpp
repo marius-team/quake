@@ -234,38 +234,22 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
     MetricType metric,
     int refinement_iterations) {
 
-    // static void ensure_blas_buffers(QueryCoordinator::CoreResources& res,
-    //                             size_t max_q,
-    //                             size_t db_bs,
-    //                             int    node)
-    // {
-    //     const size_t ip_need = db_bs * max_q;
-    //     if (res.blas_ip_capacity < ip_need) {
-    //         quake_free(res.blas_ip_block, res.blas_ip_capacity * sizeof(float));
-    //         res.blas_ip_block    = static_cast<float*>(quake_alloc(ip_need * sizeof(float), node));
-    //         res.blas_ip_capacity = ip_need;
-    //     }
-    //     if (res.blas_norms_x_cap < max_q) {
-    //         quake_free(res.blas_norms_x, res.blas_norms_x_cap * sizeof(float));
-    //         res.blas_norms_x     = static_cast<float*>(quake_alloc(max_q * sizeof(float), node));
-    //         res.blas_norms_x_cap = max_q;
-    //     }
-    //     if (res.blas_norms_y_cap < db_bs) {
-    //         quake_free(res.blas_norms_y, res.blas_norms_y_cap * sizeof(float));
-    //         res.blas_norms_y     = static_cast<float*>(quake_alloc(db_bs * sizeof(float), node));
-    //         res.blas_norms_y_cap = db_bs;
-    //     }
-    // }
-
-    const size_t ip_need = BLAS_DB_BS * centroids.size(0);
-    float * blas_ip_block = static_cast<float*>(quake_alloc(ip_need * sizeof(float), 0));
-    float * blas_norms_x = static_cast<float*>(quake_alloc(BLAS_DB_BS * sizeof(float), 0));
-    float * blas_norms_y = static_cast<float*>(quake_alloc(BLAS_DB_BS * sizeof(float), 0));
-
+    size_t max_nq = 0;
+    for (auto &p : partitions) {
+        max_nq = std::max(max_nq, (size_t)p->num_vectors_);
+    }
+    max_nq = max_nq * 20; // double the max_nq to ensure enough space for batched_scan_list, as assignments may change.
 
     // Determine number of clusters and dimension.
     int n_clusters = centroids.size(0);
     int d = centroids.size(1);
+
+    const size_t ip_need = n_clusters * max_nq;
+    float * blas_ip_block = static_cast<float*>(quake_alloc(ip_need * sizeof(float), 0));
+    float * blas_norms_x = static_cast<float*>(quake_alloc(max_nq * sizeof(float), 0));
+    float * blas_norms_y = static_cast<float*>(quake_alloc(n_clusters * sizeof(float), 0));
+    vector<shared_ptr<TopkBuffer> > buffers = create_buffers(max_nq, 1, (metric == faiss::METRIC_INNER_PRODUCT), n_clusters);
+
 
     // Run for the desired number of iterations (if refinement_iterations==0, do one pass).
     int iterations = (refinement_iterations > 0) ? refinement_iterations : 1;
@@ -274,14 +258,23 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
     Tensor centroid_counts = torch::zeros({n_clusters}, torch::kInt64);
     auto centroid_sums_accessor = centroid_sums.accessor<float, 2>();
     auto centroid_counts_accessor = centroid_counts.accessor<int64_t, 1>();
+    Tensor centroid_ids = torch::arange(n_clusters, torch::kInt64);
+    auto centroid_ids_ptr = centroid_ids.data_ptr<int64_t>();
 
     vector<shared_ptr<IndexPartition>> prev_partitions = partitions;
     vector<shared_ptr<IndexPartition>> new_partitions;
 
     for (int iter = 0; iter < iterations; iter++) {
-
         if (iter > 0) {
             centroids = centroid_sums / centroid_counts.unsqueeze(1).to(torch::kFloat32);
+
+            // normalize centroids if using inner product metric
+            if (metric == faiss::METRIC_INNER_PRODUCT) {
+                centroids = centroids
+                          / centroids.norm(2,1)
+                                    .unsqueeze(1)
+                                    .to(torch::kFloat32);
+            }
         }
 
         // Reset accumulators.
@@ -299,7 +292,6 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
 
         float *centroids_ptr = centroids.data_ptr<float>();
 
-        // Process each existing partition.
         for (auto &part: partitions) {
             int64_t nvec = part->num_vectors_;
             if (nvec <= 0) continue;
@@ -307,17 +299,10 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
             float *part_vecs = (float *) part->codes_;
             int64_t *part_vec_ids = part->ids_;
 
-            // Create batched TopK buffers (k=1 for nearest centroid).
-            vector<shared_ptr<TopkBuffer> > buffers = create_buffers(nvec, 1, false);
-
             // Use batched_scan_list to get nearest centroid for each vector.
-            int64_t scan_setup_time = 0;
-            int64_t scan_time = 0;
-            int64_t scan_push_time = 0;
-
             batched_scan_list(part_vecs,
                               centroids_ptr,
-                              nullptr,
+                              centroid_ids_ptr,
                               nvec,
                               n_clusters,
                               d,
@@ -343,10 +328,20 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
                 centroid_counts_accessor[assigned_cluster]++;
 
                 new_partitions[assigned_cluster]->append(1, vec_id, (uint8_t *) vec_ptr);
+
+                // reset the buffer for this slot
+                buffers[i]->reset();
             }
         } // end for each partition
+
+
         std::move(new_partitions.begin(), new_partitions.end(), partitions.begin());
     } // end iterations
+
+    // Clean up and return the refined centroids and partitions.
+    quake_free(blas_ip_block, ip_need * sizeof(float));
+    quake_free(blas_norms_x, max_nq * sizeof(float));
+    quake_free(blas_norms_y, BLAS_DB_BS * sizeof(float));
 
     return std::make_tuple(centroids, partitions);
 }

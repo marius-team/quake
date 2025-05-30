@@ -668,7 +668,6 @@ inline void batched_scan_list(const float *query_vecs,
                 pivots
         );
     } else if (metric == faiss::METRIC_L2) {
-        std::cout << "Using L2 metric for batched scan." << std::endl;
         l2_blas(
                 query_vecs,
                 list_vecs,

@@ -643,7 +643,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
         }
     } else {
         /* Build per-partition query lists -------------------------------------- */
-        std::vector<std::vector<std::pair<int,int>>> qlist(partition_manager_->nlist());
+        std::unordered_map<int64_t, std::vector<std::pair<int,int>>> qlist;
         for (int64_t q = 0; q < nQ; ++q) {
             for (int p = 0; p < partition_ids.size(1); ++p) {
                 int64_t pid = pid_acc[q][p];
@@ -719,9 +719,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
 
 void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
                                            Tensor                      partition_ids,
-                                           bool                        use_aps,
-                                           float                       recall_target,
-                                           int                       aps_flush_period_us,
+                                           shared_ptr<SearchParams> search_params,
                                            std::shared_ptr<SearchTimingInfo> timing)
 {
 
@@ -729,8 +727,24 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
     // compute boundary distances
 
     while (total_left_.load(std::memory_order_relaxed) > 0)
-        std::this_thread::sleep_for(std::chrono::microseconds(aps_flush_period_us));
+        std::this_thread::sleep_for(std::chrono::microseconds(search_params->aps_flush_period_us));
 
+
+
+    // mark hits
+    if (search_params->track_hits && maintenance_policy_) {
+        for (int64_t q = 0; q < nQ; ++q) {
+            std::vector<int64_t> scanned_ids;
+            scanned_ids.reserve(partition_ids.size(1));
+            for (int p = 0; p < partition_ids.size(1); ++p) {
+                int64_t pid = partition_ids[q][p].item<int64_t>();
+                if (pid < 0) continue;
+                scanned_ids.emplace_back(pid);
+            }
+            maintenance_policy_->record_query_hits(scanned_ids);
+        }
+        // maintenance_policy_->record_query_hits(std::vector<int64_t>(scanned_ids.begin(), scanned_ids.end()));
+    }
 
 
         // check if we need to apply APS
@@ -824,8 +838,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     Tensor out_dists = torch::empty({nQ, K}, torch::kFloat);
 
     // 4) drain results + APS
-    drain_and_apply_aps(x, partition_ids, use_aps, params->recall_target,
-                        params->aps_flush_period_us, timing);
+    drain_and_apply_aps(x, partition_ids, params, timing);
 
     auto s5 = high_resolution_clock::now();
 
