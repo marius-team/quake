@@ -10,6 +10,7 @@
 #include "index_partition.h"
 #include <list_scanning.h>
 #include <query_coordinator.h>
+#include <omp.h>
 
 #ifdef QUAKE_ENABLE_GPU
 #include <c10/cuda/CUDAStream.h>
@@ -228,11 +229,13 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     }
 }
 
+
 tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
     Tensor centroids,
-    vector<shared_ptr<IndexPartition>> partitions,
+    vector<shared_ptr<IndexPartition>> &partitions,
     MetricType metric,
-    int refinement_iterations) {
+    int refinement_iterations,
+    int num_threads) {
 
     size_t max_nq = 0;
     for (auto &p : partitions) {

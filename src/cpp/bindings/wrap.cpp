@@ -279,10 +279,8 @@ PYBIND11_MODULE(_bindings, m) {
              "Time taken for split operations in microseconds.")
          .def_readonly("delete_time_us", &MaintenanceTimingInfo::delete_time_us,
              "Time taken for delete operations in microseconds.")
-         .def_readonly("split_refine_time_us", &MaintenanceTimingInfo::split_refine_time_us,
+         .def_readonly("refinement_time_us", &MaintenanceTimingInfo::refinement_time_us,
              "Time taken for refinement of split operations in microseconds.")
-         .def_readonly("delete_refine_time_us", &MaintenanceTimingInfo::delete_refine_time_us,
-             "Time taken for refinement of delete operations in microseconds.")
          .def_readonly("n_splits", &MaintenanceTimingInfo::n_splits,
              "Number of partition split operations performed.")
          .def_readonly("n_deletes", &MaintenanceTimingInfo::n_deletes,
@@ -293,8 +291,7 @@ PYBIND11_MODULE(_bindings, m) {
              oss << "\"total_time_us\": " << t.total_time_us << ", ";
              oss << "\"split_time_us\": " << t.split_time_us << ", ";
              oss << "\"delete_time_us\": " << t.delete_time_us << ", ";
-             oss << "\"split_refine_time_us\": " << t.split_refine_time_us << ", ";
-             oss << "\"delete_refine_time_us\": " << t.delete_refine_time_us << ", ";
+             oss << "\"refinement_time_us\": " << t.refinement_time_us << ", ";
              oss << "\"n_splits\": " << t.n_splits << ", ";
              oss << "\"n_deletes\": " << t.n_deletes;
              oss << "}";

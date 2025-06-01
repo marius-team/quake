@@ -81,16 +81,35 @@ def run_experiment(cfg_path: str, output_dir_str: str):
                     per_query_stats.append((best_global_np, final_rec, final_time_ms))
 
             elif method == "APS":
-                for i, q_vec in enumerate(queries):
-                    sp = common_utils.create_search_params(
-                        nprobe=-1, k=k, recall_target=rt,
-                        recompute_threshold=exp_cfg["recompute_ratio"],
-                        use_precomputed=exp_cfg["use_precompute"],
-                        initial_search_fraction=exp_cfg["initial_search_fraction"]
-                    )
-                    nprobe_scan, final_rec, final_time_ms = common_utils.run_search_trial(quake_idx, q_vec, gt[i], k, sp)
-                    logger.debug(f"APS recall: {final_rec:.4f} (target={rt}), nprobe_scanned={nprobe_scan}")
-                    per_query_stats.append((nprobe_scan, final_rec, final_time_ms))
+                sp = common_utils.create_search_params(
+                    nprobe=-1, k=k, recall_target=rt,
+                    recompute_threshold=exp_cfg["recompute_ratio"],
+                    use_precomputed=exp_cfg["use_precompute"],
+                    initial_search_fraction=exp_cfg["initial_search_fraction"],
+                    aps_flush_period_us=exp_cfg["aps_flush_period_us"]
+                )
+                # for i, q_vec in enumerate(queries):
+                #     res = quake_idx.search(q_vec.unsqueeze(0), sp)
+                #     nprobe_scan = res.timing_info.partitions_scanned
+                #     final_rec = common_utils.quake_compute_recall(res.ids, gt[i].unsqueeze(0), k).item()
+                #     final_time_ms = res.timing_info.total_time_ns / 1e6
+                #     boundary_time_ms = res.timing_info.boundary_time_ns / 1e6 if hasattr(res.timing_info, 'boundary_time_ns') else 0.0
+                #     aps_time_ms = res.timing_info.aps_time_ns / 1e6 if hasattr(res.timing_info, 'aps_time_ns') else 0.0
+                #
+                #     logger.info(f"APS recall: {final_rec:.4f} (target={rt}), nprobe_scanned={nprobe_scan}, boundary_time={boundary_time_ms:.2f}ms, aps_time={aps_time_ms:.2f}ms, total_time={final_time_ms:.2f}ms")
+                #     per_query_stats.append((nprobe_scan, final_rec, final_time_ms))
+
+                res = quake_idx.search(queries, sp)
+                nprobe_scan = res.timing_info.partitions_scanned
+                final_recall = common_utils.quake_compute_recall(res.ids, gt, k)
+                final_time_ms = res.timing_info.total_time_ns / 1e6
+                boundary_time_ms = res.timing_info.boundary_distance_time_ns / 1e6
+                aps_time_ms = res.timing_info.aps_time_ns / 1e6
+
+                logger.info(f"APS recall: {final_recall.mean():.4f} (target={rt}), nprobe_scanned={nprobe_scan}, "
+                            f"boundary_time={boundary_time_ms:.2f}ms, aps_time={aps_time_ms:.2f}ms, total_time={final_time_ms:.2f}ms")
+                per_query_stats.append((nprobe_scan, final_recall.mean().item(), final_time_ms))
+
             else:
                 raise ValueError(f"Unknown method: {method}")
 

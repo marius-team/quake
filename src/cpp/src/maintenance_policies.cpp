@@ -183,6 +183,7 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
         local_refinement(split_partitions->partition_ids);
     }
     auto end_total = steady_clock::now();
+    int64_t refinement_time_us = static_cast<int64_t>(duration_cast<microseconds>(end_total - end_split).count());
 
     // STEP 6: Clean up any empty partitions
     vector<int64_t> empty_ids = {};
@@ -199,6 +200,7 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     shared_ptr<MaintenanceTimingInfo> timing_info = std::make_shared<MaintenanceTimingInfo>();
     timing_info->delete_time_us = duration_cast<microseconds>(end_delete - start_delete).count();
     timing_info->split_time_us = duration_cast<microseconds>(end_split - start_split).count();
+    timing_info->refinement_time_us = refinement_time_us;
     timing_info->total_time_us = duration_cast<microseconds>(end_total - start_total).count();
 
     timing_info->n_splits      = static_cast<int64_t>(partitions_to_split.size());

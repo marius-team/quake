@@ -55,48 +55,6 @@ inline void print_array(const float *array, int dimension) {
     std::cout << std::endl << std::endl;
 }
 
-inline std::vector<float>
-compute_boundary_distances(const torch::Tensor& query,
-                           std::vector<float*>& centroids,
-                           bool euclidean /* kept for API */ )
-{
-    int dim = query.size(0);
-    const float* q = query.data_ptr<float>();
-
-    /* --- ensure centroids[0] is the nearest --------------------- */
-    size_t nearest = 0;
-    float  best_d2 = std::numeric_limits<float>::max();
-    for (size_t i = 0; i < centroids.size(); ++i) {
-        float d2 = faiss::fvec_L2sqr(q, centroids[i], dim);
-        if (d2 < best_d2) { best_d2 = d2; nearest = i; }
-    }
-    if (nearest != 0) std::swap(centroids[0], centroids[nearest]);
-
-    const float* c0 = centroids[0];
-    std::vector<float> d(centroids.size(), 0.0f);
-    std::vector<float> v(dim);
-
-    for (size_t j = 1; j < centroids.size(); ++j)
-    {
-        const float* cj = centroids[j];
-
-        /* v = cj - c0,  ||v|| */
-        faiss::fvec_sub(dim, cj, c0, v.data());
-        float v_norm = std::sqrt(
-            faiss::fvec_inner_product(v.data(), v.data(), dim));
-
-        /* b = ½ (||cj||² - ||c0||²) */
-        float b = 0.5f * (
-            faiss::fvec_inner_product(cj, cj, dim) -
-            faiss::fvec_inner_product(c0, c0, dim));
-
-        /* signed distance   (q·v − b) / ||v|| */
-        float dot_qv = faiss::fvec_inner_product(q, v.data(), dim);
-        d[j] = std::fabs(dot_qv - b) / v_norm;          // plane distance
-    }
-    return d;   // d[0] = 0
-}
-
 inline double incomplete_beta(double a, double b, double x) {
     if (x < 0.0 || x > 1.0) return 1.0 / 0.0;
 
@@ -203,8 +161,57 @@ inline double log_hypersphere_volume(double radius, int dimension) {
     return log_volume;
 }
 
+
+inline std::vector<float>
+compute_boundary_distances(const Tensor&               query,
+                           std::vector<float*>&        centroids,
+                           bool                        euclidean)
+{
+    const int   dim = query.size(0);
+    const float* q  = query.data_ptr<float>();
+
+    const float* c0 = centroids[0];
+    std::vector<float> dist(centroids.size(), 0.0f);
+
+    std::vector<float> v(dim);          // c_j - c0
+    std::vector<float> m(dim);          // midpoint for IP
+
+    for (std::size_t j = 1; j < centroids.size(); ++j) {
+        const float* cj = centroids[j];
+
+        if (euclidean) {
+            /* plane distance d = |q·v − b| / ||v|| ,  b = ½(||cj||²−||c0||²) */
+            faiss::fvec_sub(dim, cj, c0, v.data());
+            float v_norm = std::sqrt(faiss::fvec_inner_product(v.data(), v.data(), dim));
+            float b = 0.5f * (faiss::fvec_inner_product(cj, cj, dim) -
+                              faiss::fvec_inner_product(c0, c0, dim));
+            float dot_qv = faiss::fvec_inner_product(q, v.data(), dim);
+            dist[j] = std::fabs(dot_qv - b) / (v_norm + 1e-12f);
+        } else {
+            faiss::fvec_sub(dim, cj, c0, v.data());           // v = cj - c0
+            float v_norm = std::sqrt(faiss::fvec_inner_product(v.data(), v.data(), dim));
+            divide_array_by_constant(v.data(), v_norm, v.data(), dim);   // v̂
+            float s = std::fabs(faiss::fvec_inner_product(q, v.data(), dim));
+            s = std::clamp(s, 0.0f, 1.0f);
+            dist[j] = std::asin(s);                      // 0–π/2
+
+            // /* unit-sphere model – distance is polar angle to great-circle bisector between c0 and cj.  */
+            // add_arrays(c0, cj, m.data(), dim);          // midpoint vector
+            // float m_norm = std::sqrt(faiss::fvec_inner_product(m.data(), m.data(), dim));
+            // if (m_norm > 0) divide_array_by_constant(m.data(), m_norm, m.data(), dim);
+            // float cos_ang = faiss::fvec_inner_product(q, m.data(), dim);
+            // cos_ang = std::clamp(cos_ang, -1.0f, 1.0f);
+            // dist[j] = std::acos(cos_ang);               // radians
+        }
+    }
+    return dist;   // dist[0] = 0 by construction
+}
+
 inline double hyperspherical_cap_volume(double radius, double boundary_distance, int d, bool use_precomputed = true, bool euclidean = true) {
+
+
     if (euclidean) {
+
         // Ensure boundary distance is non-negative double
         boundary_distance = std::max(0.0, boundary_distance);
 
@@ -224,11 +231,32 @@ inline double hyperspherical_cap_volume(double radius, double boundary_distance,
 
         return std::clamp(0.5 * I, 0.0, 0.5);
     } else {
-        // v_i = (1/2) * [ I( sin^2(phi/2); d/2, 1/2 ) - I( sin^2(theta_i/2); d/2, 1/2 ) ]
-        double log_inc_beta = std::log(incomplete_beta((d - 1) / 2.0, 0.5, std::sin(radius / 2.0) * std::sin(radius / 2.0)));
-        double log_inc_beta_boundary = std::log(incomplete_beta((d - 1) / 2.0, 0.5, std::sin(boundary_distance / 2.0) * std::sin(boundary_distance / 2.0)));
-        double log_cap_volume = std::log(0.5) + log_inc_beta - log_inc_beta_boundary;
-        return log_cap_volume;
+        // spherical / IP -----------------------------------------------------------------
+        double theta_q = radius;          // query cap angle (rad)
+        double delta   = boundary_distance;      // distance to bisector (rad)
+
+        /* 1. trivial cases ------------------------------------------------------------ */
+        if (delta >= theta_q)                    return 0.0;                 // cap entirely in c0
+        if (theta_q >= M_PI_2 - delta)           return 1.0;                 // cap entirely in cj
+
+        /* 2. general case: Lee & Kim (2014) cases 9–10 -------------------------------- */
+        double t = std::tan(delta) / std::tan(theta_q);   // 0 ≤ t < 1
+        t = std::clamp(t, 0.0, 1.0);                      // numerical safety
+
+        double alpha = std::acos(t);                      // 0 < α < π/2
+        double x     = std::sin(alpha) * std::sin(alpha); // 0 < x < 1
+
+        double a = 0.5 * (d - 1);
+        double b = 0.5;
+
+        double Ix = incomplete_beta(a, b, x);             // regularised
+        return 0.5 * Ix;                                  // leakage fraction
+
+
+        // double log_inc_beta = std::log(incomplete_beta((d - 1) / 2.0, 0.5, std::sin(radius / 2.0) * std::sin(radius / 2.0)));
+        // double log_inc_beta_boundary = std::log(incomplete_beta((d - 1) / 2.0, 0.5, std::sin((radius - boundary_distance) / 2.0) * std::sin(radius - boundary_distance) / 2.0));
+        // double log_cap_volume = std::log(0.5) + log_inc_beta - log_inc_beta_boundary;
+        // return std::exp(log_cap_volume);
     }
 }
 
@@ -242,6 +270,10 @@ compute_recall_profile(const std::vector<float>& boundary_distances,
 {
     const int m = static_cast<int>(boundary_distances.size());
     const float eps = 1e-9f;
+
+    if (!euclidean) {
+        query_radius = std::acos(query_radius); // Convert to angle in radians for spherical model
+    }
 
     // --- Edge Cases ---
     if (m <= 1) {
@@ -268,6 +300,8 @@ compute_recall_profile(const std::vector<float>& boundary_distances,
     float S1_for_norm = 0.0f;
     for (int j = 1; j < m; ++j) S1_for_norm += norm_vols[j];
 
+    // S1_for_norm = 1.0;
+
     if (S1_for_norm > eps) {
         for (int j = 1; j < m; ++j) norm_vols[j] /= S1_for_norm;
     } else {
@@ -285,19 +319,31 @@ compute_recall_profile(const std::vector<float>& boundary_distances,
     // Ensure P_prime is non-negative
     for (int k = 1; k < m; ++k) P_prime[k] = std::max(0.0f, P_prime[k]);
 
-    // // if the cluster_sizes are given, scale P_prime[k] by the size of the cluster. this is a rudimentary density estimation
-    // if (partition_sizes.size() > 0) {
-    //     for (int k = 1; k < m; ++k) {
-    //         if (partition_sizes[k] > 0) {
-    //             P_prime[k] *= static_cast<float>(partition_sizes[k]);
-    //         }
-    //     }
-    // }
-
-
     // normalize probs
     std::vector<float> probs(m, 0.0f);
     probs[0] = P0;
+
+    // for (int k = 1; k < m; ++k) {
+    //     if (P_prime_sum > eps) {
+    //         probs[k] = norm_vols[k];
+    //     } else {
+    //         probs[k] = 0.0f; // If sum is negligible, set to zero
+    //     }
+    // }
+    //
+    // // normalize probabilities
+    // float S = 0.0f;
+    // for (int k = 0; k < m; ++k) S += probs[k];
+    // if (S > eps) {
+    //     for (int k = 0; k < m; ++k) {
+    //         probs[k] /= S;
+    //     }
+    // } else {
+    //     // If S is zero, all probabilities remain zero
+    //     for (int k = 0; k < m; ++k) {
+    //         probs[k] = 0.0f;
+    //     }
+    // }
 
     float target = 1.0f - P0;
     // Ensure target probability for neighbors is valid [0, 1]
@@ -333,6 +379,29 @@ compute_recall_profile(const std::vector<float>& boundary_distances,
             for (int k = 1; k < m; ++k) probs[k] = 0.0f;
         }
     }
+
+    // if the cluster_sizes are given, scale probs by the size of the cluster and renormalize. this is a rudimentary density estimation
+    // if (partition_sizes.size() > 0) {
+    //     for (int k = 1; k < m; ++k) {
+    //         if (partition_sizes[k] > 0) {
+    //             probs[k] *= static_cast<float>(partition_sizes[k]);
+    //         }
+    //     }
+    // }
+
+    // // renormalize the probabilities to sum to 1
+    // float S = 0.0f;
+    // for (int k = 0; k < m; ++k) S += probs[k];
+    // if (S > eps) {
+    //     for (int k = 0; k < m; ++k) {
+    //         probs[k] /= S;
+    //     }
+    // } else {
+    //     // If S is zero, all probabilities remain zero
+    //     for (int k = 0; k < m; ++k) {
+    //         probs[k] = 0.0f;
+    //     }
+    // }
 
     return probs;
 }

@@ -261,9 +261,8 @@ struct MaintenanceTimingInfo {
     int64_t n_splits; ///< Number of splits.
     int64_t n_deletes; ///< Number of merges.
     int64_t delete_time_us; ///< Time spent on deletions in microseconds.
-    int64_t delete_refine_time_us; ///< Time spent on deletions with refinement in microseconds.
     int64_t split_time_us; ///< Time spent on splits in microseconds.
-    int64_t split_refine_time_us; ///< Time spent on splits with refinement in microseconds.
+    int64_t refinement_time_us; ///< Time spent on refinement in microseconds.
     int64_t total_time_us; ///< Total time spent in microseconds.
 };
 

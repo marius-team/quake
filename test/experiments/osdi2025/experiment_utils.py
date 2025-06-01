@@ -48,17 +48,16 @@ def prepare_quake_index(
         load: bool = True
 ) -> QuakeIndex:
     idx = QuakeIndex()
+
+    build_params = create_index_build_params(**build_params_dict)
+
     if index_file_path.exists() and not force_rebuild:
         if load:
             logger.info(f"Loading index from {index_file_path}")
-            idx.load(str(index_file_path), num_workers_load, use_numa, num_parent_workers_load)
+            idx.load(str(index_file_path), build_params)
     else:
         logger.info(f"Building index -> {index_file_path}")
-        bp = IndexBuildParams()
-        for key, value in build_params_dict.items():
-            setattr(bp, key, value)
-
-        idx.build(vecs, torch.arange(len(vecs)), bp)
+        idx.build(vecs, torch.arange(len(vecs)), build_params)
         index_file_path.parent.mkdir(parents=True, exist_ok=True)
         idx.save(str(index_file_path))
         logger.info(f"Index saved to {index_file_path}")

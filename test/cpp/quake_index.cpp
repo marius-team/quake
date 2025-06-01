@@ -246,7 +246,8 @@ TEST_F(QuakeIndexTest, SaveLoadTest) {
 
     // Load into a new index
     QuakeIndex loaded_index;
-    loaded_index.load(path);
+    shared_ptr<IndexBuildParams> default_params = std::make_shared<IndexBuildParams>();
+    loaded_index.load(path, default_params);
 
     // minimal checks
     EXPECT_EQ(loaded_index.ntotal(), index.ntotal());

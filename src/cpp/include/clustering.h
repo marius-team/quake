@@ -75,8 +75,9 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
  */
 tuple<Tensor, vector<shared_ptr<IndexPartition>>> kmeans_refine_partitions(
     Tensor centroids,
-    vector<shared_ptr<IndexPartition>> index_partitions,
+    vector<shared_ptr<IndexPartition>> &index_partitions,
     MetricType metric,
-    int refinement_iterations = 0);
+    int refinement_iterations = 0,
+    int num_threads = -1);
 
 #endif //CLUSTERING_H

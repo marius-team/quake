@@ -101,7 +101,28 @@ def unified_plot(cfg: Dict[str, Any], out_dir: Path) -> None:
                 if not sub.empty:
                     ax.plot(sub.operation_number, sub.latency_ms, color=colour, **OP_STYLE[op])
 
-        # partitions, resident blank
+        # partitions
+        part_ix = IDX_PART
+        if "nlist" in df:
+            axs[part_ix].plot(df.operation_number, df.nlist, color=colour, marker=marker, lw=1.2)
+        # resident
+        res_ix = IDX_RES
+        if "n_resident" in df:
+            axs[res_ix].plot(df.operation_number, df.n_resident, color=colour, marker=marker, lw=1.2)
+
+        # splits/deletes
+        spl_ix = IDX_SPL
+        if "n_splits" in df and "n_deletes" in df:
+            axs[spl_ix].plot(df.operation_number, df.n_splits, color=colour, marker="x", lw=1.2, label="Splits")
+            axs[spl_ix].plot(df.operation_number, df.n_deletes, color=colour, marker="o", lw=1.2, label="Deletes")
+            # axs[spl_ix].legend(loc="upper left", frameon=False)
+
+        # maintenance time
+        if "maintenance_latency_ms" in df:
+            m_ix = IDX_LAT_M
+            axs[m_ix].plot(df.operation_number, df.maintenance_latency_ms, color=colour, marker=marker, lw=1.2,
+                           label="Maintenance")
+
         # recall
         rec_ix = IDX_REC
         sub = df[df.operation_type=="query"]
@@ -135,7 +156,7 @@ def unified_plot(cfg: Dict[str, Any], out_dir: Path) -> None:
 
 
 def make_time_breakdown(cfg: Dict[str, Any], out_dir: Path) -> None:
-    categories = ["Query","Insert","Delete","Total"]
+    categories = ["Query","Insert","Maintenance", "Total"]
     data = {}
     for idx_cfg in cfg.get("indexes", []):
         name = idx_cfg["name"]
@@ -143,7 +164,7 @@ def make_time_breakdown(cfg: Dict[str, Any], out_dir: Path) -> None:
         data[name] = [
             df[df.operation_type=="query"].latency_ms.sum(),
             df[df.operation_type=="insert"].latency_ms.sum(),
-            df[df.operation_type=="delete"].latency_ms.sum(),
+            df.maintenance_latency_ms.sum() if "maintenance_latency_ms" in df else 0,
         ]
         data[name].append(sum(data[name]))
     fig, ax = plt.subplots(figsize=(8,6))
@@ -187,9 +208,17 @@ def run_experiment(cfg_path_str: str, output_dir_str: str) -> None:
     log.info("Mode: %s", mode)
 
     workload_dir = cfg["workload_dir"]
+    dataset_dir = cfg["dataset_dir"]
 
     if mode in {"run"}:  # Phase 2: evaluation
         for idx_cfg in cfg.get("indexes", []):
+
+            # check if results already exist
+            out_name = out / idx_cfg["name"]
+            if out_name.is_dir() and (out_name / "results.csv").is_file() and not cfg.get("overwrite", False):
+                log.info("Skipping %s, results already exist", idx_cfg["name"])
+                continue
+
             name = idx_cfg["name"]
             key  = idx_cfg["index"]
             Cls = INDEX_CLASSES.get(key)
@@ -198,7 +227,7 @@ def run_experiment(cfg_path_str: str, output_dir_str: str) -> None:
             wrapper = Cls()
             maint = idx_cfg.get("maintenance_params")
             do_maint = maint is not None
-            ev = WikidataWorkloadEvaluator(workload_dir, out/name)
+            ev = WikidataWorkloadEvaluator(workload_dir, out/name, wiki_dataset_dir=dataset_dir)
             ev.evaluate_workload(
                 name=name,
                 index=wrapper,
@@ -206,7 +235,7 @@ def run_experiment(cfg_path_str: str, output_dir_str: str) -> None:
                 search_params=idx_cfg.get("search_params",{}),
                 do_maintenance=do_maint,
                 m_params=maint,
-                batch=bool(idx_cfg.get("batch",False)),
+                batch=cfg.get("batch",False),
             )
     if mode in {"run","plot"}:  # Phase 3
         unified_plot(cfg, out)

@@ -110,6 +110,13 @@ void QueryCoordinator::merge_worker_fn(int mid) {
         if (rj.query_id == -1)  // poison pill
             return;
 
+        if (rj.distances.empty()) {
+            // empty result, nothing to do
+            --per_query_total_left_[rj.query_id];
+            --total_left_;
+            continue;
+        }
+
         // single cast, based on the Compare template
         using Handler = typename faiss::HeapBlockResultHandler<Compare>::SingleResultHandler;
         auto* h = static_cast<Handler*>(MR.handlers[rj.query_id]);
@@ -122,32 +129,31 @@ void QueryCoordinator::merge_worker_fn(int mid) {
         query_dist_pivots_[rj.query_id].store(h->threshold,
                                               std::memory_order_relaxed);
 
+        per_query_total_left_[rj.query_id]--;
+
         // once all ranks for this query are in, finalize & sort
-        if (!job_flags_[rj.query_id][rj.rank]) {
-            job_flags_[rj.query_id][rj.rank] = true;
-            if (--per_query_total_left_[rj.query_id] == 0) {
-                h->end();
+        if (per_query_total_left_[rj.query_id] <= 0) {
+            h->end();
 
-                // pack into pairs for sorting
-                int k = h->k;
-                std::vector<std::pair<float,int64_t>> result;
-                result.reserve(k);
-                for (int i = 0; i < k; ++i) {
-                    result.emplace_back(h->heap_dis[i], h->heap_ids[i]);
-                }
+            // pack into pairs for sorting
+            int k = h->k;
+            std::vector<std::pair<float,int64_t>> result;
+            result.reserve(k);
+            for (int i = 0; i < k; ++i) {
+                result.emplace_back(h->heap_dis[i], h->heap_ids[i]);
+            }
 
-                // for CMin (inner-product) we want descending distances
-                // for CMax (L2) we want ascending distances
-                auto cmp = [](auto& a, auto& b) {
-                    return Compare::cmp(a.first, b.first);
-                };
-                std::sort(result.begin(), result.end(), cmp);
+            // for CMin (inner-product) we want descending distances
+            // for CMax (L2) we want ascending distances
+            auto cmp = [](auto& a, auto& b) {
+                return Compare::cmp(b.first, a.first);
+            };
+            std::sort(result.begin(), result.end(), cmp);
 
-                // write them back
-                for (int i = 0; i < k; ++i) {
-                    h->heap_dis[i] = result[i].first;
-                    h->heap_ids[i] = result[i].second;
-                }
+            // write them back
+            for (int i = 0; i < k; ++i) {
+                h->heap_dis[i] = result[i].first;
+                h->heap_ids[i] = result[i].second;
             }
         }
         --total_left_;
@@ -260,6 +266,13 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
                                              NUMAResources &nr) {
 
     auto start = std::chrono::high_resolution_clock::now();
+
+    // check that the job has not been processed yet
+    if (query_done_flags_[job.query_id].load(std::memory_order_relaxed)) {
+        enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}});
+        return;
+    }
+
     // ensure buffers
     if (res.topk_buffer_pool.size() < 1) {
         res.topk_buffer_pool.resize(1);
@@ -299,6 +312,8 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
             enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}});
             return; // Important to return after enqueueing the placeholder
         }
+
+        job_flags_[job.query_id][job.rank].store(true, std::memory_order_relaxed); // Mark this job as processed
 
         scan_list(nr.local_query_buffer + (job.query_id * D),
                   codes,
@@ -406,17 +421,33 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     // gather queries
     float *qptr = nullptr;
     float *dst = res.batch_queries;
+    vector<int64_t> query_ids;
+    vector<int> ranks;
+    query_ids.reserve(Q);
+    ranks.reserve(Q);
+    int64_t offset = 0;
     for (int64_t i = 0; i < Q; ++i) {
+
         int qid = (*job.query_ids)[i];
-        const float *src = nr.local_query_buffer + size_t(qid) * D;
-        std::memcpy(dst + i * D, src, D * sizeof(float));
+        // check that the job has not been processed yet
+        if (job_flags_[qid][job.rank]) {
+            // already processed, skip
+            enqueue_result_job(ResultJob{qid, job.rank, {}, {}});;
+        } else {
+            // copy query vector to the local buffer
+            const float *src = nr.local_query_buffer + size_t(qid) * D;
+            std::memcpy(dst + offset, src, D * sizeof(float));
+            query_ids.push_back(qid);
+            ranks.push_back((*job.ranks)[i]);
+            offset += D;
+        }
     }
     qptr = dst;
 
     vector<std::atomic<float> *> pivots;
-    pivots.resize(job.num_queries);
-    for (int64_t i = 0; i < Q; ++i) {
-        int qid = (*job.query_ids)[i];
+    pivots.resize(query_ids.size());
+    for (int64_t i = 0; i < query_ids.size(); ++i) {
+        int qid = query_ids[i];
         pivots[i] = &query_dist_pivots_[qid];
     }
 
@@ -462,10 +493,10 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     start = std::chrono::high_resolution_clock::now();
     // collect results for this chunk
     std::vector<ResultJob> results_batch;
-    results_batch.reserve(Q);
-    for (int64_t i = 0; i < Q; ++i) {
-        int global_q = (*job.query_ids)[i];
-        int rank_q   = (*job.ranks)    [i];
+    results_batch.reserve(query_ids.size());
+    for (int64_t i = 0; i < query_ids.size(); ++i) {
+        int global_q = query_ids[i];
+        int rank_q   = ranks[i];
         auto tv = res.topk_buffer_pool[i]->get_topk(false);
         auto ti = res.topk_buffer_pool[i]->get_topk_indices(false);
         enqueue_result_job(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
@@ -556,8 +587,10 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
     }
 
     query_dist_pivots_ = vector<std::atomic<float>>(nQ);
+    query_done_flags_ = vector<std::atomic<bool>>(nQ);
     for (int64_t q = 0; q < nQ; ++q) {
         query_dist_pivots_[q].store(max_val, std::memory_order_relaxed);
+        query_done_flags_[q].store(false, std::memory_order_relaxed);
     }
 }
 
@@ -623,9 +656,30 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
     auto pid_acc = partition_ids.accessor<int64_t,2>();
     if (!params->batched_scan) {
         // one job per (q,p)
-        for (int64_t q = 0; q < nQ; ++q) {
-            const float* qptr = xptr + q*D;
-            for (int p = 0; p < partition_ids.size(1); ++p) {
+
+        // // order by query id then partition rank
+        // for (int64_t q = 0; q < nQ; ++q) {
+        //     const float* qptr = xptr + q*D;
+        //     for (int p = 0; p < partition_ids.size(1); ++p) {
+        //         int64_t pid = pid_acc[q][p];
+        //         if (pid < 0) continue;
+        //         ScanJob job;
+        //         job.job_id        = next_job_id_;
+        //         job.is_batched    = false;
+        //         job.query_id      = (int)q;
+        //         job.partition_id  = pid;
+        //         job.k             = params->k;
+        //         job.rank          = p;
+        //         job_buffer_.push_back(job);
+        //         numa_resources_[core_to_numa[pid % num_workers_]].job_queue.enqueue(next_job_id_);
+        //         next_job_id_++;
+        //         total_left_.fetch_add(1, std::memory_order_relaxed);
+        //     }
+        // }
+
+        // order by partition rank then query id
+        for (int p = 0; p < partition_ids.size(1); ++p) {
+            for (int64_t q = 0; q < nQ; ++q) {
                 int64_t pid = pid_acc[q][p];
                 if (pid < 0) continue;
                 ScanJob job;
@@ -717,19 +771,96 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
 }
 
 
-void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
+void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
                                            Tensor                      partition_ids,
                                            shared_ptr<SearchParams> search_params,
                                            std::shared_ptr<SearchTimingInfo> timing)
 {
 
-    int64_t nQ = x.size(0), D = x.size(1);
-    // compute boundary distances
+    int64_t nQ = queries.size(0), D = queries.size(1);
 
-    while (total_left_.load(std::memory_order_relaxed) > 0)
+    auto start = std::chrono::high_resolution_clock::now();
+    // compute boundary distances
+    bool use_aps = (search_params->recall_target > 0 && parent_);
+    vector<vector<float>> boundary_distances;
+    vector<float> curr_radii;
+    vector<vector<float>> recall_profiles;
+    if (use_aps) {
+        boundary_distances.resize(nQ);
+        recall_profiles.resize(nQ);
+        if (metric_ == faiss::METRIC_INNER_PRODUCT) {
+            curr_radii.resize(nQ, -std::numeric_limits<float>::infinity());
+        } else {
+            curr_radii.resize(nQ, std::numeric_limits<float>::infinity());
+        }
+        for (int64_t q = 0; q < nQ; ++q) {
+            vector<int64_t> curr_pids_vec(partition_ids[q].data_ptr<int64_t>(),
+                                          partition_ids[q].data_ptr<int64_t>() + partition_ids[q].size(0));
+            vector<float *> curr_centroids_vec = parent_->partition_manager_->get_vectors(curr_pids_vec);
+            boundary_distances[q] = compute_boundary_distances(queries[q],
+                                                            curr_centroids_vec,
+                                                            metric_ == faiss::METRIC_L2);
+        }
+
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    timing->boundary_distance_time_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
+    timing->aps_time_ns = 0;
+    while (total_left_.load(std::memory_order_relaxed) > 0) {
         std::this_thread::sleep_for(std::chrono::microseconds(search_params->aps_flush_period_us));
 
+        if (use_aps) {
+            // compute recall profile and mark jobs complete
+            start = std::chrono::high_resolution_clock::now();
+            for (int64_t q = 0; q < nQ; ++q) {
+                int n_left = per_query_total_left_[q].load(std::memory_order_relaxed);
+                bool query_done = query_done_flags_[q].load(std::memory_order_relaxed);
+                if (!query_done && n_left < partition_ids.size(1)) {
 
+                    float query_radius = query_dist_pivots_[q].load(std::memory_order_relaxed);
+
+                    // check if the query radius has changed
+                    float rel_difference = std::abs((curr_radii[q] - query_radius) / query_radius);
+
+                    if (rel_difference > search_params->recompute_threshold) {
+                        // compute the recall profile for queries that are in progress
+                        vector<int64_t> curr_pids_vec(partition_ids[q].data_ptr<int64_t>(),
+                                                    partition_ids[q].data_ptr<int64_t>() + partition_ids[q].size(0));
+
+                        recall_profiles[q] = compute_recall_profile(boundary_distances[q],
+                            query_radius,
+                            D,
+                            {},
+                            search_params->use_precomputed,
+                            metric_ == faiss::METRIC_L2);
+
+                        curr_radii[q] = query_radius;
+
+                    }
+
+                    float recall_estimate = 0.0f;
+
+                    int n_scanned = 0;
+                    for (int p = 0; p < partition_ids.size(1); ++p) {
+                        if (job_flags_[q][p].load(std::memory_order_relaxed)) {
+                            n_scanned++;
+                            recall_estimate += recall_profiles[q][p];
+                        }
+                    }
+
+                    if (recall_estimate >= search_params->recall_target) {
+                        query_done_flags_[q].store(true, std::memory_order_relaxed);
+                    }
+                }
+            }
+            end = std::chrono::high_resolution_clock::now();
+            timing->aps_time_ns +=
+                std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+        }
+
+    }
 
     // mark hits
     if (search_params->track_hits && maintenance_policy_) {
@@ -737,17 +868,16 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      x,
             std::vector<int64_t> scanned_ids;
             scanned_ids.reserve(partition_ids.size(1));
             for (int p = 0; p < partition_ids.size(1); ++p) {
-                int64_t pid = partition_ids[q][p].item<int64_t>();
-                if (pid < 0) continue;
-                scanned_ids.emplace_back(pid);
+                if (job_flags_[q][p].load(std::memory_order_relaxed)) {
+                    int64_t pid = partition_ids[q][p].item<int64_t>();
+                    if (pid < 0) continue;
+                    scanned_ids.emplace_back(pid);
+                }
             }
+            timing->partitions_scanned += scanned_ids.size();
             maintenance_policy_->record_query_hits(scanned_ids);
         }
-        // maintenance_policy_->record_query_hits(std::vector<int64_t>(scanned_ids.begin(), scanned_ids.end()));
     }
-
-
-        // check if we need to apply APS
 }
 
 std::shared_ptr<SearchResult>
@@ -868,7 +998,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     }
 
 
-    // // // print out the per-core resource timers;
+    // // print out the per-core resource timers;
     // for (int i = 0; i < num_workers_; ++i) {
     //     std::cout << "[QueryCoordinator::worker_scan] Core " << i << ": "
     //                 << "job_counter=" << core_resources_[i].job_counter << " "

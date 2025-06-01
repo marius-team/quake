@@ -29,7 +29,7 @@ using torch::Tensor;
 static const int64_t DIM = 128;
 static const int64_t NUM_VECTORS = 100000;   // number of database vectors
 static const int64_t N_LIST = 1000;           // number of clusters for IVF
-static const int64_t NUM_QUERIES = 10000;     // number of queries for search benchmark
+static const int64_t NUM_QUERIES = 1000;     // number of queries for search benchmark
 static const int64_t K = 1;                  // top-K neighbors
 static const int64_t N_PROBE = 20;             // number of probes for IVF
 static const int64_t N_WORKERS = 12;           // number of workers for parallel query coordinator
@@ -517,13 +517,13 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
     QuakeIndex index;
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 100;
-    build_params->metric = "l2";
+    build_params->metric = "ip";
     build_params->niter = 5;
     build_params->num_workers = 1;
 
     auto maintenance_params = std::make_shared<MaintenancePolicyParams>();
-    maintenance_params->refinement_radius = 0;
-    maintenance_params->refinement_iterations = 0;
+    maintenance_params->refinement_radius = 50;
+    maintenance_params->refinement_iterations = 3;
     maintenance_params->split_threshold_ns = 1;
     maintenance_params->delete_threshold_ns = 1;
     maintenance_params->enable_delete_rejection = false;
@@ -537,7 +537,7 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
     // add level
     auto parent_index_build_params = std::make_shared<IndexBuildParams>();
     parent_index_build_params->nlist = 100;
-    parent_index_build_params->metric = "l2";
+    parent_index_build_params->metric = "ip";
     parent_index_build_params->niter = 5;
     parent_index_build_params->num_workers = 1;
     // build_params->parent_params = parent_index_build_params;
@@ -573,12 +573,12 @@ TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
         auto search_params = std::make_shared<SearchParams>();
         search_params->nprobe = 12;
         search_params->k = 10;
-        search_params->batched_scan = false;
+        search_params->batched_scan = true;
         search_params->num_threads = 1;
 
         auto parent_search_params = std::make_shared<SearchParams>();
         parent_search_params->nprobe = 50;
-        parent_search_params->batched_scan = false;
+        parent_search_params->batched_scan = true;
         search_params->parent_params = parent_search_params;
 
         start = std::chrono::high_resolution_clock::now();
