@@ -369,6 +369,7 @@ class WikidataWorkloadEvaluator:
             do_maintenance: bool = False,
             m_params: Optional[Dict] = None,
             batch: bool = False,
+            max_q: int = 1000,
     ) -> List[Dict]:
         """
         Evaluate inserts, deletes, and queries by loading NumPy embeddings directly.
@@ -432,9 +433,8 @@ class WikidataWorkloadEvaluator:
 
                 t0 = time.perf_counter()
 
-                # run first 1000 queries for debugging
-                max_q = 10000
-                queries = queries[:max_q]
+                randperm = torch.randperm(len(queries))
+                queries = queries[randperm[:max_q]]
                 if batch:
                     sr = index.search(queries, **search_params)
                     pred_ids = sr.ids
@@ -446,7 +446,7 @@ class WikidataWorkloadEvaluator:
                     pred_ids = torch.cat(parts)
                 latency_ms = (time.perf_counter() - t0) * 1e3
 
-                gt_ids = torch.load(self.ops_dir / f"{op_id}_gt_ids.pt")[:max_q]
+                gt_ids = torch.load(self.ops_dir / f"{op_id}_gt_ids.pt")[randperm[:max_q]]
                 recall = compute_recall(pred_ids, gt_ids, search_params.get("k")).mean().item()
                 op["recall"] = recall
 
