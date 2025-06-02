@@ -214,13 +214,13 @@ class DynamicWorkloadGenerator:
             index_dir = self.workload_dir / "clustered_index.bin"
         if index_dir.exists():
             index = QuakeWrapper()
-            index.load(index_dir)
+            index.load(index_dir, num_workers=1, parent={"num_workers": 1})
             n_clusters = index.index.nlist()
         else:
             n_clusters = self.base_vectors.shape[0] // self.cluster_size
             index = QuakeWrapper()
             index.build(
-                self.base_vectors, nc=n_clusters, metric=self.metric, ids=torch.arange(self.base_vectors.shape[0])
+                self.base_vectors, nc=n_clusters, metric=self.metric, ids=torch.arange(self.base_vectors.shape[0]), num_workers=1, parent={"num_workers": 1}
             )
             index.save(str(self.workload_dir / "clustered_index.bin"))
 
@@ -421,8 +421,11 @@ class WorkloadEvaluator:
             wrapper.save(idx_file)
             print(f"[{name}] stored → {idx_file}")
         else:
-            wrapper.load(idx_file,
-                         num_workers=build_params.get("num_workers", 0))
+            num_workers = build_params.get("num_workers", 0)
+            use_numa = build_params.get("use_numa", False)
+            parent_params = build_params.get("parent", {})
+            wrapper.load(idx_file, num_workers=num_workers,
+                         use_numa=use_numa, parent=parent_params)
             print(f"[{name}] loaded ← {idx_file}")
 
         if isinstance(wrapper, QuakeWrapper) and m_params:
