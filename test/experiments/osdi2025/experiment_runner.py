@@ -15,6 +15,7 @@ from test.experiments.osdi2025.vary_levels.run import run_experiment as run_vary
 from test.experiments.osdi2025.maintenance_ablation.run import run_experiment as run_ablation
 from test.experiments.osdi2025.vary_batch_size.run import run_experiment as run_vary_batch_size
 from test.experiments.osdi2025.wiki_workload.run import run_experiment as run_wiki_workload
+from test.experiments.osdi2025.read_only_workload.run import run_experiment as run_read_only_workload
 
 EXPERIMENTS = {
     "kick_the_tires":   run_kick_the_tires,
@@ -26,7 +27,8 @@ EXPERIMENTS = {
     "vary_levels":        run_vary_levels,
     "maintenance_ablation": run_ablation,
     "vary_batch_size":    run_vary_batch_size,
-    "wiki_workload":      run_wiki_workload
+    "wiki_workload":      run_wiki_workload,
+    "read_only_workload": run_read_only_workload
 }
 
 def main():
