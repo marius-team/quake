@@ -274,7 +274,7 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
     }
 
     // check the job is not larger than the maximum rank
-    if (job.rank >= max_rank_[job.query_id].load(std::memory_order_relaxed)) {
+    if (job.rank > max_rank_[job.query_id].load(std::memory_order_relaxed)) {
         enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}});
         return;
     }
