@@ -435,20 +435,42 @@ class WikidataWorkloadEvaluator:
 
                 randperm = torch.randperm(len(queries))
                 queries = queries[randperm[:max_q]]
+                t_infos = []
                 if batch:
                     sr = index.search(queries, **search_params)
                     pred_ids = sr.ids
+                    t_infos.append(sr.timing_info)
                 else:
                     parts = []
                     for q in queries:
                         out = index.search(q.unsqueeze(0), **search_params)
                         parts.append(out.ids)
+                        t_infos.append(out.timing_info)
                     pred_ids = torch.cat(parts)
                 latency_ms = (time.perf_counter() - t0) * 1e3
 
                 gt_ids = torch.load(self.ops_dir / f"{op_id}_gt_ids.pt")[randperm[:max_q]]
                 recall = compute_recall(pred_ids, gt_ids, search_params.get("k")).mean().item()
                 op["recall"] = recall
+
+                total_parent_time = 0
+                total_time = 0
+                total_boundary_time = 0
+                total_aps_time = 0
+                total_scan_time = 0
+
+                for t_info in t_infos:
+                    total_parent_time += t_info.parent_info.total_time_ns / 1e6
+                    total_time += t_info.total_time_ns / 1e6
+                    total_boundary_time += t_info.boundary_distance_time_ns / 1e6
+                    total_aps_time += t_info.aps_time_ns / 1e6
+                    total_scan_time += t_info.scan_time_ns / 1e6
+
+                print(f" | parent {total_parent_time:.2f} ms"
+                      f" | total {total_time:.2f} ms"
+                      f" | boundary {total_boundary_time:.2f} ms"
+                      f" | aps {total_aps_time:.2f} ms")
+
 
             else:
                 raise ValueError(f"Unknown op type {typ}")
@@ -472,6 +494,9 @@ class WikidataWorkloadEvaluator:
                 split_time_ms = info.split_time_us / 1000.0
                 refinement_time_ms = info.refinement_time_us / 1000.0
 
+
+
+
             n_resident = index.index_state()["n_total"]
             nlist = index.index_state()["n_list"]
 
@@ -493,6 +518,7 @@ class WikidataWorkloadEvaluator:
                 "refinement_time_ms": refinement_time_ms,
                 "recall": recall,
             }
+            print(row)
 
             results.append(row)
 
