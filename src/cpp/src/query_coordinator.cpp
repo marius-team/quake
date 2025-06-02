@@ -793,6 +793,7 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
     vector<vector<float>> boundary_distances;
     vector<float> curr_radii;
     vector<vector<float>> recall_profiles;
+    vector<bool> recall_profile_set;
     if (use_aps) {
         boundary_distances.resize(nQ);
         recall_profiles.resize(nQ);
@@ -801,6 +802,8 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
         } else {
             curr_radii.resize(nQ, std::numeric_limits<float>::infinity());
         }
+
+        recall_profile_set.resize(nQ, false);
         for (int64_t q = 0; q < nQ; ++q) {
             vector<int64_t> curr_pids_vec(partition_ids[q].data_ptr<int64_t>(),
                                           partition_ids[q].data_ptr<int64_t>() + partition_ids[q].size(0));
@@ -845,33 +848,36 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
                             metric_ == faiss::METRIC_L2);
 
                         curr_radii[q] = query_radius;
+                        recall_profile_set[q] = true;
 
                     }
 
-                    float recall_estimate = 0.0f;
-                    float sum = 0.0f;
-                    int max_rank = 0;
+                    if (recall_profile_set[q]) {
+                        float recall_estimate = 0.0f;
+                        float sum = 0.0f;
+                        int max_rank = 0;
 
-                    for (int p = 0; p < partition_ids.size(1); ++p) {
-                        sum += recall_profiles[q][p];
-                        if (sum >= search_params->recall_target) {
-                            max_rank = p;
-                            break;
+                        for (int p = 0; p < partition_ids.size(1); ++p) {
+                            sum += recall_profiles[q][p];
+                            if (sum >= search_params->recall_target) {
+                                max_rank = p;
+                                break;
+                            }
                         }
-                    }
-                    max_rank_[q].store(max_rank, std::memory_order_relaxed);
+                        max_rank_[q].store(max_rank, std::memory_order_relaxed);
 
-                    int n_scanned = 0;
-                    for (int p = 0; p < partition_ids.size(1); ++p) {
-                        if (job_flags_[q][p].load(std::memory_order_relaxed)) {
-                            n_scanned++;
-                            recall_estimate += recall_profiles[q][p];
+                        int n_scanned = 0;
+                        for (int p = 0; p < partition_ids.size(1); ++p) {
+                            if (job_flags_[q][p].load(std::memory_order_relaxed)) {
+                                n_scanned++;
+                                recall_estimate += recall_profiles[q][p];
+                            }
+                            sum += recall_profiles[q][p];
                         }
-                        sum += recall_profiles[q][p];
-                    }
 
-                    if (recall_estimate >= search_params->recall_target) {
-                        query_done_flags_[q].store(true, std::memory_order_relaxed);
+                        if (recall_estimate >= search_params->recall_target) {
+                            query_done_flags_[q].store(true, std::memory_order_relaxed);
+                        }
                     }
                 }
             }
