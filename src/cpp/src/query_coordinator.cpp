@@ -476,7 +476,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     batched_scan_list(
             qptr,
             codes, ids,
-            Q, part_size, D,
+            query_ids.size(), part_size, D,
             res.topk_buffer_pool,
             metric_,
             res.blas_ip_block,
@@ -1317,6 +1317,11 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
 
     x = x.contiguous();
 
+    // throw error if k <= 0
+    if (search_params->k <= 0) {
+        throw std::runtime_error("[QueryCoordinator::search] k must be greater than 0.");
+    }
+
     auto parent_timing_info = std::make_shared<SearchTimingInfo>();
     auto start = high_resolution_clock::now();
 
@@ -1334,7 +1339,6 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
             parent_search_params->recompute_threshold = search_params->recompute_threshold;
 //            parent_search_params->initial_search_fraction = .5;
             parent_search_params->batched_scan = false;
-
             if (x.size(0) > 10) {
                 parent_search_params->batched_scan = true;
             }
