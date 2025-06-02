@@ -457,19 +457,46 @@ class WikidataWorkloadEvaluator:
                 total_time = 0
                 total_boundary_time = 0
                 total_aps_time = 0
-                total_scan_time = 0
+
+                total_buffer_init_time = 0
+                total_copy_query_time = 0
+                total_job_enqueue_time = 0
+                total_job_wait_time = 0
+                total_result_aggregate_time = 0
+
+#                 res->timing_info->buffer_init_time_ns =
+#         duration_cast<nanoseconds>(s2 - s1).count();
+# res->timing_info->copy_query_time_ns =
+# duration_cast<nanoseconds>(s3 - s2).count();
+# res->timing_info->job_enqueue_time_ns =
+# duration_cast<nanoseconds>(s4 - s3).count();
+# res->timing_info->job_wait_time_ns =
+# duration_cast<nanoseconds>(s5 - s4).count();
+# res->timing_info->result_aggregate_time_ns =
+# duration_cast<nanoseconds>(s6 - s5).count();
 
                 for t_info in t_infos:
                     total_parent_time += t_info.parent_info.total_time_ns / 1e6
                     total_time += t_info.total_time_ns / 1e6
                     total_boundary_time += t_info.boundary_distance_time_ns / 1e6
                     total_aps_time += t_info.aps_time_ns / 1e6
-                    total_scan_time += t_info.scan_time_ns / 1e6
+                    total_buffer_init_time += t_info.buffer_init_time_ns / 1e6
+                    total_copy_query_time += t_info.copy_query_time_ns / 1e6
+                    total_job_enqueue_time += t_info.job_enqueue_time_ns / 1e6
+                    total_job_wait_time += t_info.job_wait_time_ns / 1e6
+                    total_result_aggregate_time += t_info.result_aggregate_time_ns / 1e6
+
+
 
                 print(f" | parent {total_parent_time:.2f} ms"
                       f" | total {total_time:.2f} ms"
                       f" | boundary {total_boundary_time:.2f} ms"
-                      f" | aps {total_aps_time:.2f} ms")
+                      f" | aps {total_aps_time:.2f} ms" 
+                        f" | buffer init {total_buffer_init_time:.2f} ms"
+                        f" | copy query {total_copy_query_time:.2f} ms"
+                        f" | job enqueue {total_job_enqueue_time:.2f} ms"
+                        f" | job wait {total_job_wait_time:.2f} ms"
+                        f" | result aggregate {total_result_aggregate_time:.2f} ms")
 
 
             else:
