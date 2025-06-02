@@ -1,0 +1,46 @@
+# configs/experiment.yaml
+mode: run  # options: build, run, plot
+dataset:
+  name: msturing10m
+  metric: l2
+  path: data
+workload_generator:
+  recall_target: 0.9
+  insert_ratio: 0.0
+  delete_ratio: 0.0
+  query_ratio: 1.0
+  number_of_operations: 100
+  initial_size: 10000000
+  cluster_size: 1000 # N/A for read-only workload
+  update_batch_size: 10000 # N/A for read-only workload
+  query_batch_size: 1000
+  cluster_sample_distribution: uniform # N/A for read-only workload
+  query_cluster_sample_distribution: uniform
+  seed: 9299
+
+indexes:
+  - name: Quake
+    index: Quake
+    build_params:
+      nc: 4000
+      metric: ip
+      num_workers: 8
+      num_merge_workers: 1
+      use_numa: true
+      parent:
+        num_workers: 1
+    search_params:
+      k: 100
+      recall_target: .9
+      initial_search_fraction: .05
+      batched_scan: false
+      parent:
+        batched_scan: false
+        batch_size: 128
+    maintenance_params:
+      refinement_radius: 50
+      split_threshold_ns: 100
+      delete_threshold_ns: 5
+      enable_split_rejection: true
+      enable_delete_rejection: true
+      window_size: 1000
