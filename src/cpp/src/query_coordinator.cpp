@@ -273,6 +273,12 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
         return;
     }
 
+    // check the job is not larger than the maximum rank
+    if (job.rank >= max_rank_[job.query_id].load(std::memory_order_relaxed)) {
+        enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}});
+        return;
+    }
+
     // ensure buffers
     if (res.topk_buffer_pool.size() < 1) {
         res.topk_buffer_pool.resize(1);
@@ -636,6 +642,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
     job_flags_.clear();
     job_flags_.resize(nQ);
     per_query_total_left_ = vector<std::atomic<int>>(nQ);
+    max_rank_ = vector<std::atomic<int>>(nQ);
     for (int64_t q = 0; q < nQ; ++q) {
         job_flags_[q] = vector<std::atomic<bool>>(partition_ids.size(1));
 
@@ -649,6 +656,7 @@ void QueryCoordinator::enqueue_scan_jobs(Tensor x,
             }
         }
         per_query_total_left_[q].store(valid_count, std::memory_order_relaxed);
+        max_rank_[q].store(partition_ids.size(1) - 1, std::memory_order_relaxed);
     }
     job_buffer_.clear();
     job_buffer_.reserve(nQ * partition_ids.size(1));
@@ -841,6 +849,17 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
                     }
 
                     float recall_estimate = 0.0f;
+                    float sum = 0.0f;
+                    int max_rank = 0;
+
+                    for (int p = 0; p < partition_ids.size(1); ++p) {
+                        sum += recall_profiles[q][p];
+                        if (sum >= search_params->recall_target) {
+                            max_rank = p;
+                            break;
+                        }
+                    }
+                    max_rank_[q].store(max_rank, std::memory_order_relaxed);
 
                     int n_scanned = 0;
                     for (int p = 0; p < partition_ids.size(1); ++p) {
@@ -848,6 +867,7 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
                             n_scanned++;
                             recall_estimate += recall_profiles[q][p];
                         }
+                        sum += recall_profiles[q][p];
                     }
 
                     if (recall_estimate >= search_params->recall_target) {
