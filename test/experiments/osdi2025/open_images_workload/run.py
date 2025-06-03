@@ -148,7 +148,8 @@ class OpenImagesEvaluator:
 
             totals[typ] += lat_ms; totals["maintenance"] += maint_ms
             state = wrapper.index_state()
-            rows.append(dict(
+
+            row = dict(
                 operation_number      = op_id,
                 operation_type        = typ,
                 latency_ms            = lat_ms,
@@ -160,9 +161,9 @@ class OpenImagesEvaluator:
                 split_time_ms         = spl_ms,
                 delete_time_ms        = del_ms,
                 refinement_time_ms    = ref_ms,
-                recall                = op.get("recall"),
-            ))
-
+            )
+            print(row)
+            rows.append(row)
         df = pd.DataFrame(rows)
         df.to_csv(self.out_dir / "results.csv", index=False)
         self._plots(df, totals, name)
