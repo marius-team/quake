@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import torch
 import quake
+import test.experiments.osdi2025.experiment_utils as common_utils
 from quake.utils import to_path, compute_recall
 from quake.index_wrappers.quake import QuakeWrapper
 from quake.index_wrappers.faiss_ivf import FaissIVF
@@ -195,7 +196,8 @@ class OpenImagesEvaluator:
         plt.savefig(self.out_dir / "time_breakdown.png", dpi=150); plt.close()
 
 # ──────────────────────────────────────────────────────────────────────────
-def run_experiment(cfg: Dict[str, Any], output_root: Union[str, Path]) -> None:
+def run_experiment(cfg_path_str: Dict[str, Any], output_root: Union[str, Path]) -> None:
+    cfg = common_utils.load_config(cfg_path_str)
     wdir  = Path(cfg["workload_dir"]).expanduser()
     dset  = Path(cfg["dataset_dir"]).expanduser()
     out   = Path(output_root).expanduser()
