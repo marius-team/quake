@@ -1,0 +1,186 @@
+workload_dir: data/wikidata/workload
+dataset_dir: /Users/jason/projects/compass/data/wikidata/wikidata
+overwrite: True
+batch: False
+
+indexes:
+  - name: Quake_Serial_NoAPS_NoMaintenance
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: ip
+      num_workers: 1
+      use_numa: true
+      parent:
+        num_workers: 1
+    search_params:
+      k: 100
+      nprobe: 10
+      initial_search_fraction: .05
+      batched_scan: false
+      parent:
+        batched_scan: false
+        batch_size: 128
+    maintenance_params:
+      refinement_radius: 50
+      split_threshold_ns: 500000
+      delete_threshold_ns: 500000
+      enable_split_rejection: true
+      enable_delete_rejection: false
+      window_size: 1000
+
+  - name: Quake_Serial_NoAPS
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: ip
+      num_workers: 1
+      use_numa: true
+      parent:
+        num_workers: 1
+    search_params:
+      k: 100
+      nprobe: 30
+      initial_search_fraction: .05
+      batched_scan: false
+      parent:
+        batched_scan: true
+        batch_size: 128
+    maintenance_params:
+      refinement_radius: 50
+      split_threshold_ns: 250
+      delete_threshold_ns: 500000
+      enable_split_rejection: true
+      enable_delete_rejection: false
+      window_size: 10000
+
+  - name: Quake_Serial
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: ip
+      num_workers: 1
+      use_numa: true
+      parent:
+        num_workers: 1
+    search_params:
+      k: 100
+      recall_target: .9
+      initial_search_fraction: .05
+      batched_scan: false
+      parent:
+        batched_scan: true
+        batch_size: 128
+    maintenance_params:
+      refinement_radius: 50
+      split_threshold_ns: 250
+      delete_threshold_ns: 500000
+      enable_split_rejection: true
+      enable_delete_rejection: false
+      window_size: 10000
+
+  - name: QuakeNoMaintenanceNoAPS
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: ip
+      num_workers: 8
+      use_numa: true
+      parent:
+        num_workers: 2
+    search_params:
+      k: 100
+      nprobe: 30
+      batched_scan: false
+      aps_flush_period_us: 10
+      parent:
+        batched_scan: true
+        batch_size: 128
+    maintenance_params:
+      refinement_radius: 50
+      split_threshold_ns: 500000
+      delete_threshold_ns: 500000
+      enable_split_rejection: true
+      enable_delete_rejection: false
+      window_size: 10000
+
+  - name: QuakeNoMaintenance
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: ip
+      num_workers: 8
+      use_numa: true
+      parent:
+        num_workers: 2
+    search_params:
+      k: 100
+      recall_target: .9
+      batched_scan: false
+      recompute_threshold: 0.01
+      use_precomputed: true
+      initial_search_fraction: .05
+      aps_flush_period_us: 10
+      parent:
+        batched_scan: true
+        batch_size: 128
+    maintenance_params:
+      refinement_radius: 50
+      split_threshold_ns: 500000
+      delete_threshold_ns: 500000
+      enable_split_rejection: true
+      enable_delete_rejection: false
+      window_size: 10000
+
+  - name: QuakeNoAPS
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: ip
+      num_workers: 8
+      use_numa: true
+      parent:
+        num_workers: 2
+    search_params:
+      k: 100
+      nprobe: 30
+      batched_scan: false
+      aps_flush_period_us: 10
+      parent:
+        batched_scan: true
+        batch_size: 128
+    maintenance_params:
+      refinement_radius: 50
+      split_threshold_ns: 250
+      delete_threshold_ns: 500000
+      enable_split_rejection: true
+      enable_delete_rejection: false
+      window_size: 10000
+
+  - name: Quake
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: ip
+      num_workers: 8
+      use_numa: true
+      parent:
+        num_workers: 2
+    search_params:
+      k: 100
+      recall_target: .9
+      batched_scan: false
+      recompute_threshold: 0.01
+      use_precomputed: true
+      initial_search_fraction: .05
+      aps_flush_period_us: 10
+      parent:
+        batched_scan: true
+        batch_size: 128
+    maintenance_params:
+      refinement_radius: 50
+      split_threshold_ns: 250
+      delete_threshold_ns: 500000
+      enable_split_rejection: true
+      enable_delete_rejection: false
+      window_size: 10000
