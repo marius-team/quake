@@ -98,6 +98,7 @@ class OpenImagesEvaluator:
         totals  = dict(query=0.0, insert=0.0, delete=0.0, maintenance=0.0)
         rows: List[Dict[str, Any]] = []
 
+        recall = None
         for key, op in runbook["operations"].items():
             op_id = int(key); typ = op["type"]; t0 = time.perf_counter()
 
@@ -161,6 +162,7 @@ class OpenImagesEvaluator:
                 split_time_ms         = spl_ms,
                 delete_time_ms        = del_ms,
                 refinement_time_ms    = ref_ms,
+                recall                = recall,
             )
             print(row)
             rows.append(row)
