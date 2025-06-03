@@ -1,5 +1,5 @@
-workload_dir: data/wikidata/workload
-dataset_dir: /Users/jason/projects/compass/data/wikidata/wikidata
+workload_dir: data/prepped_openimages/openimages
+dataset_dir: data/openimages13m
 overwrite: True
 batch: False
 
