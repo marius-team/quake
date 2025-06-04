@@ -225,10 +225,8 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
             }
             auto search_params = make_shared<SearchParams>();
             search_params->k = 1;
-            search_params->recall_target = .999;
-            if (n > 10) {
-                search_params->batched_scan = true;
-            }
+            search_params->scan_all = true;
+            search_params->track_hits = false;
             auto parent_search_result = parent_->search(vectors, search_params);
             Tensor label_out = parent_search_result->ids;
             auto lbl_ptr = label_out.data_ptr<int64_t>();

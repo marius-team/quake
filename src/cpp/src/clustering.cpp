@@ -241,16 +241,12 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
     for (auto &p : partitions) {
         max_nq = std::max(max_nq, (size_t)p->num_vectors_);
     }
-    max_nq = max_nq * 20; // double the max_nq to ensure enough space for batched_scan_list, as assignments may change.
+    max_nq = max_nq * 5; // double the max_nq to ensure enough space for batched_scan_list, as assignments may change.
 
     // Determine number of clusters and dimension.
     int n_clusters = centroids.size(0);
     int d = centroids.size(1);
 
-    const size_t ip_need = n_clusters * max_nq;
-    float * blas_ip_block = static_cast<float*>(quake_alloc(ip_need * sizeof(float), 0));
-    float * blas_norms_x = static_cast<float*>(quake_alloc(max_nq * sizeof(float), 0));
-    float * blas_norms_y = static_cast<float*>(quake_alloc(n_clusters * sizeof(float), 0));
     vector<shared_ptr<TopkBuffer> > buffers = create_buffers(max_nq, 1, (metric == faiss::METRIC_INNER_PRODUCT), n_clusters);
 
 
@@ -311,10 +307,12 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
                               d,
                               buffers,
                                 metric,
-                                /* BLAS scratch */ blas_ip_block,
-                                                  blas_norms_x,
-                                                  blas_norms_y,
-                                BLAS_DB_BS);
+                                nullptr,
+                                nullptr,
+                                nullptr,
+                                128,
+                                BLAS_DB_BS,
+                                {});
 
             // For each vector in this partition, determine its assignment.
             for (int i = 0; i < nvec; i++) {
@@ -337,14 +335,7 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
             }
         } // end for each partition
 
-
         std::move(new_partitions.begin(), new_partitions.end(), partitions.begin());
     } // end iterations
-
-    // Clean up and return the refined centroids and partitions.
-    quake_free(blas_ip_block, ip_need * sizeof(float));
-    quake_free(blas_norms_x, max_nq * sizeof(float));
-    quake_free(blas_norms_y, BLAS_DB_BS * sizeof(float));
-
     return std::make_tuple(centroids, partitions);
 }

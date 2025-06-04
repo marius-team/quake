@@ -15,6 +15,12 @@
 #include "sorting/heap_select.h"
 #include "parallel.h"
 #include "blas_dist.h"
+#include <faiss/impl/ResultHandler.h>
+
+using IP_Handler = faiss::HeapBlockResultHandler<faiss::CMin<float,int64_t>>;
+using L2_Handler = faiss::HeapBlockResultHandler<faiss::CMax<float,int64_t>>;
+using IP_Single   = IP_Handler::SingleResultHandler;
+using L2_Single   = L2_Handler::SingleResultHandler;
 
 inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     Tensor num_correct = torch::zeros(ids.size(0), torch::kInt64);
@@ -163,15 +169,15 @@ public:
 
     void reset() {
         head_ = 0;
-        for (int i = 0; i < k_; i++) {
-            if (is_desc_) {
-                vals_[i] = -std::numeric_limits<T>::infinity();
-                ids_[i] = -1;
-            } else {
-                vals_[i] = std::numeric_limits<T>::infinity();
-                ids_[i] = -1;
-            }
-        }
+        // for (int i = 0; i < k_; i++) {
+        //     if (is_desc_) {
+        //         vals_[i] = -std::numeric_limits<T>::infinity();
+        //         ids_[i] = -1;
+        //     } else {
+        //         vals_[i] = std::numeric_limits<T>::infinity();
+        //         ids_[i] = -1;
+        //     }
+        // }
     }
 
     inline void add(T dist, I idx) {
@@ -303,31 +309,31 @@ inline vector<shared_ptr<TopkBuffer>> create_buffers(int batch_size, int k, bool
     return buffers;
 }
 
-//vector<shared_ptr<TopkBuffer>> local_buffers = create_buffers(batch_size, k, (metric_ == faiss::METRIC_INNER_PRODUCT));
+// vector<shared_ptr<TopkBuffer>> local_buffers = create_buffers(batch_size, k, (metric_ == faiss::METRIC_INNER_PRODUCT));
 
-inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer>> buffers) {
-    int n = buffers.size();
-    int k = buffers[0]->k();
-    Tensor topk_distances = torch::empty({n, k}, torch::kFloat32);
-    Tensor topk_indices = torch::empty({n, k}, torch::kInt64);
+ inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer>> buffers) {
+     int n = buffers.size();
+     int k = buffers[0]->k();
+     Tensor topk_distances = torch::empty({n, k}, torch::kFloat32);
+     Tensor topk_indices = torch::empty({n, k}, torch::kInt64);
 
-    auto topk_distances_accessor = topk_distances.accessor<float, 2>();
-    auto topk_indices_accessor = topk_indices.accessor<int64_t, 2>();
+     auto topk_distances_accessor = topk_distances.accessor<float, 2>();
+     auto topk_indices_accessor = topk_indices.accessor<int64_t, 2>();
 
-    for (int i = 0; i < n; i++) {
-        vector<float> distances = buffers[i]->get_topk();
-        vector<int64_t> indices = buffers[i]->get_topk_indices();
+     for (int i = 0; i < n; i++) {
+         vector<float> distances = buffers[i]->get_topk();
+         vector<int64_t> indices = buffers[i]->get_topk_indices();
 
-        int curr_k = std::min(k, (int) distances.size());
+         int curr_k = std::min(k, (int) distances.size());
 
-        for (int j = 0; j < curr_k; j++) {
-            topk_distances_accessor[i][j] = distances[j];
-            topk_indices_accessor[i][j] = indices[j];
-        }
-    }
+         for (int j = 0; j < curr_k; j++) {
+             topk_distances_accessor[i][j] = distances[j];
+             topk_indices_accessor[i][j] = indices[j];
+         }
+     }
 
-    return std::make_tuple(topk_indices, topk_distances);
-}
+     return std::make_tuple(topk_indices, topk_distances);
+ }
 
 inline void scan_list_no_ids_inner_product(const float *query_vec,
                                                    const float *list_vecs,
@@ -390,7 +396,7 @@ inline void scan_list_with_ids_l2(const float *query_vec,
     for (int l = 0; l < list_size; l++) {
         float dist = sqrt(faiss::fvec_L2sqr(query_vec, vec, d));
         if (dist < pivot) {
-            buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
+            buffer.add(dist, list_ids[l]);
         }
         vec += d;
     }
@@ -634,59 +640,326 @@ inline void l2_blas(
 inline void batched_scan_list(const float *query_vecs,
                               const float *list_vecs,
                               const int64_t *list_ids,
-                              int num_queries,
-                              int list_size,
-                              int dim,
-                              vector<shared_ptr<TopkBuffer>> &topk_buffers,
-                              MetricType metric,
-                              float *ip_block,
-                              float *norms_x,
-                              float *norms_y_buf,
-                              int blas_db_bs = BLAS_DB_BS,
-                              vector<std::atomic<float>*> pivots = {}) {
-    if (list_size == 0 || list_vecs == nullptr) {
-        // No list vectors to process;
+                              int           num_queries,
+                              int           list_size,
+                              int           dim,
+                              std::vector<std::shared_ptr<TopkBuffer>> &topk_buffers,
+                              MetricType    metric,
+                              /* optional scratch supplied by caller: may be nullptr */
+                              float        *ip_block       /* = nullptr */,
+                              float        *norms_x        /* = nullptr */,
+                              float        *norms_y_buf    /* = nullptr */,
+                              int            blas_db_bs    /* = BLAS_DB_BS */,
+                              int            blas_q_bs     /* = 128 */,
+                              std::vector<std::atomic<float>*> pivots /* = {} */)
+{
+    if (list_size == 0 || num_queries == 0 || list_vecs == nullptr) {
         return;
     }
 
-    // Ensure k does not exceed list_size
-    int k = topk_buffers[0]->k();
-    int k_max = std::min(k, list_size);
+    const bool need_norm = (metric == faiss::METRIC_L2);
+    const int  k         = std::min(topk_buffers[0]->k(), list_size);
 
-    if (metric == faiss::METRIC_INNER_PRODUCT) {
-        ip_blas(
-                query_vecs,
-                list_vecs,
-                list_ids,
-                dim,
-                num_queries,
-                list_size,
-                blas_db_bs,
-                k_max,
-                topk_buffers,
-                ip_block,
-                pivots
-        );
-    } else if (metric == faiss::METRIC_L2) {
-        l2_blas(
-                query_vecs,
-                list_vecs,
-                list_ids,
-                dim,
-                num_queries,
-                list_size,
-                blas_db_bs,
-                k_max,
-                topk_buffers,
-                ip_block,
-                norms_x,
-                norms_y_buf,
-                pivots
-        );
-    } else {
-        throw std::runtime_error("Metric type not supported");
+    // ---------------------------------------------------------------
+    //  thread‐local scratch buffers: reused across calls, resized only if
+    //  current block exceeds previous capacity
+    // ---------------------------------------------------------------
+    thread_local std::vector<float>  TLS_ip;     // holds up to (blas_q_bs × blas_db_bs)
+    thread_local std::vector<float>  TLS_nx;     // holds up to blas_q_bs
+    thread_local std::vector<float>  TLS_ny;     // holds up to blas_db_bs
+
+    // ---------------------------------------------------------------
+    //  If L2 and caller gave no norms_x, ensure TLS_nx can hold blas_q_bs
+    // ---------------------------------------------------------------
+    if (need_norm && norms_x == nullptr) {
+        if ((int)TLS_nx.size() < blas_q_bs) {
+            TLS_nx.resize(blas_q_bs);
+        }
+    }
+
+    // ---------------------------------------------------------------
+    //  Loop over query‐blocks of size ≤ blas_q_bs
+    // ---------------------------------------------------------------
+    for (int q_off = 0; q_off < num_queries; q_off += blas_q_bs) {
+        int q_blk = std::min(blas_q_bs, num_queries - q_off);
+        const float *q_ptr  = query_vecs + size_t(q_off) * dim;
+        float       *q_norms;
+
+        // If caller supplied norms_x, point at offset; else use TLS_nx[0..q_blk-1]
+        if (need_norm) {
+            if (norms_x != nullptr) {
+                q_norms = norms_x + q_off;
+            } else {
+                q_norms = TLS_nx.data();
+                // compute ‖x‖² for this q‐block
+                for (int i = 0; i < q_blk; ++i) {
+                    const float *xptr = q_ptr + size_t(i) * dim;
+                    float sumsq = 0.f;
+                    for (int d = 0; d < dim; ++d) {
+                        sumsq += xptr[d] * xptr[d];
+                    }
+                    q_norms[i] = sumsq;
+                }
+            }
+        } else {
+            q_norms = nullptr;
+        }
+
+        // build a small vector of the q_blk TopkBuffers
+        std::vector<std::shared_ptr<TopkBuffer>> sub_buffers;
+        sub_buffers.reserve(q_blk);
+        for (int i = 0; i < q_blk; ++i) {
+            sub_buffers.push_back(topk_buffers[q_off + i]);
+        }
+
+        // ---------------------------------------------------------------
+        //  Ensure TLS_ip can hold q_blk × blas_db_bs distances if needed
+        // ---------------------------------------------------------------
+        if (ip_block == nullptr) {
+            size_t need_ip = size_t(q_blk) * size_t(blas_db_bs);
+            if (TLS_ip.size() < need_ip) {
+                std::cout << "Resizing TLS_ip from " << TLS_ip.size()
+                          << " to " << need_ip << std::endl;
+                TLS_ip.resize(need_ip);
+            }
+        }
+
+        // ---------------------------------------------------------------
+        //  Loop over database blocks of size ≤ blas_db_bs
+        // ---------------------------------------------------------------
+        for (int db_off = 0; db_off < list_size; db_off += blas_db_bs) {
+            int blk = std::min(blas_db_bs, list_size - db_off);
+            const float    *d_ptr  = list_vecs + size_t(db_off) * dim;
+            const int64_t  *d_ids  = list_ids  + db_off;
+
+            // Decide where to write "ip_block": either caller‐owned or TLS_ip
+            float *blk_ip = (ip_block != nullptr ? ip_block
+                                                 : TLS_ip.data());
+
+            // If L2 and caller gave no norms_y_buf, ensure TLS_ny fits blk
+            float *blk_norm_y = nullptr;
+            if (need_norm) {
+                if (norms_y_buf != nullptr) {
+                    blk_norm_y = norms_y_buf;
+                } else {
+                    if ((int)TLS_ny.size() < blk) {
+                        TLS_ny.resize(blk);
+                    }
+                    blk_norm_y = TLS_ny.data();
+                }
+            }
+
+            // Dispatch to the appropriate BLAS kernel
+            if (metric == faiss::METRIC_INNER_PRODUCT) {
+                ip_blas(q_ptr,
+                        d_ptr,
+                        d_ids,
+                        dim,
+                        q_blk,
+                        blk,
+                        blk,
+                        k,
+                        sub_buffers,
+                        blk_ip,
+                        pivots);
+            } else {  // faiss::METRIC_L2
+                l2_blas(q_ptr,
+                        d_ptr,
+                        d_ids,
+                        dim,
+                        q_blk,
+                        blk,
+                        blk,
+                        k,
+                        sub_buffers,
+                        blk_ip,
+                        q_norms,
+                        blk_norm_y,
+                        pivots);
+            }
+        }
     }
 }
+
+// inline void batched_scan_list(const float *query_vecs,
+//                               const float *list_vecs,
+//                               const int64_t *list_ids,
+//                               int           num_queries,
+//                               int           list_size,
+//                               int           dim,
+//                               std::vector<std::shared_ptr<TopkBuffer>> &topk_buffers,
+//                               MetricType    metric,
+//                               /* optional scratch supplied by caller: may be nullptr */
+//                               float        *ip_block       /* = nullptr */,
+//                               float        *norms_x        /* = nullptr */,
+//                               float        *norms_y_buf    /* = nullptr */,
+//                               int            blas_db_bs    /* = BLAS_DB_BS */,
+//                               int            blas_q_bs     /* = 128 */,
+//                               std::vector<std::atomic<float>*> pivots /* = {} */)
+// {
+//     if (list_size == 0 || num_queries == 0 || list_vecs == nullptr) {
+//         return;
+//     }
+//
+//     const bool need_norm = (metric == faiss::METRIC_L2);
+//     // each query has a TopkBuffer in topk_buffers[0..num_queries-1]
+//     const int k = std::min(topk_buffers[0]->k(), list_size);
+//
+//     /* ------------------------------------------------------------------ */
+//     /*  TEMPORARY BUFFERS (only if caller did NOT supply)                 */
+//     /* ------------------------------------------------------------------ */
+//     std::vector<float> tmp_ip;    // for caller‐absent ip_block
+//     std::vector<float> tmp_nx;    // for norms_x if caller did not supply
+//     std::vector<float> tmp_ny;    // for norms_y_buf if caller did not supply
+//
+//     /* ------------------------------------------------------------------ */
+//     /*  PRE‐COMPUTE ‖x‖² FOR ALL QUERIES IF L2 AND NO norms_x GIVEN         */
+//     /* ------------------------------------------------------------------ */
+//     if (need_norm && norms_x == nullptr) {
+//         tmp_nx.resize(blas_q_bs);
+//         norms_x = tmp_nx.data();
+//     }
+//
+//     /* ------------------------------------------------------------------ */
+//     /*  LOOP OVER QUERY BLOCKS OF SIZE ≤ blas_q_bs                          */
+//     /* ------------------------------------------------------------------ */
+//     for (int q_off = 0; q_off < num_queries; q_off += blas_q_bs) {
+//         int q_blk = std::min(blas_q_bs, num_queries - q_off);
+//         const float    *q_ptr     = query_vecs + size_t(q_off) * dim;
+//         float          *q_norms   = need_norm ? (norms_x + q_off) : nullptr;
+//
+//         // build a subvector of TopkBuffers for these q_blk queries
+//         std::vector<std::shared_ptr<TopkBuffer>> sub_buffers;
+//         sub_buffers.reserve(q_blk);
+//         for (int i = 0; i < q_blk; ++i) {
+//             sub_buffers.push_back(topk_buffers[q_off + i]);
+//         }
+//
+//         /* ------------------------------------------------------------------ */
+//         /*  OPTIONALLY GROW tmp_ip TO HOLD q_blk × blas_db_bs DISTANCES       */
+//         /*  (only if caller did not supply ip_block)                           */
+//         /* ------------------------------------------------------------------ */
+//         if (ip_block == nullptr) {
+//             size_t needed = size_t(q_blk) * size_t(blas_db_bs);
+//             if (tmp_ip.size() < needed) {
+//                 tmp_ip.resize(needed);
+//             }
+//         }
+//
+//         /* ------------------------------------------------------------------ */
+//         /*  LOOP OVER DATABASE BLOCKS OF SIZE ≤ blas_db_bs                      */
+//         /* ------------------------------------------------------------------ */
+//         for (int db_off = 0; db_off < list_size; db_off += blas_db_bs) {
+//             int blk = std::min(blas_db_bs, list_size - db_off);
+//             const float    *d_ptr      = list_vecs + size_t(db_off) * dim;
+//             const int64_t  *d_ids      = list_ids + db_off;
+//             float          *blk_ip     = ip_block     ? ip_block     : tmp_ip.data();
+//             float          *blk_norm_y = nullptr;
+//
+//             /* if L2 and no caller norms_y_buf given, grow tmp_ny to size blk */
+//             if (need_norm) {
+//                 if (norms_y_buf != nullptr) {
+//                     blk_norm_y = norms_y_buf;
+//                 } else {
+//                     if ((int)tmp_ny.size() < blk) {
+//                         tmp_ny.resize(blk);
+//                     }
+//                     blk_norm_y = tmp_ny.data();
+//                 }
+//             }
+//
+//             if (metric == faiss::METRIC_INNER_PRODUCT) {
+//                 // q_blk queries, blk database rows → distances in blk_ip
+//                 ip_blas(q_ptr,
+//                         d_ptr,
+//                         d_ids,
+//                         dim,
+//                         q_blk,
+//                         blk,
+//                         blk,
+//                         k,
+//                         sub_buffers,
+//                         blk_ip,
+//                         pivots);
+//             } else if (metric == faiss::METRIC_L2) {
+//                 l2_blas(q_ptr,
+//                         d_ptr,
+//                         d_ids,
+//                         dim,
+//                         q_blk,
+//                         blk,
+//                         blk,
+//                         k,
+//                         sub_buffers,
+//                         blk_ip,
+//                         q_norms,
+//                         blk_norm_y,
+//                         pivots);
+//             } else {
+//                 throw std::runtime_error("batched_scan_list: unsupported metric");
+//             }
+//         }
+//     }
+// }
+
+//
+//
+// inline void batched_scan_list(const float *query_vecs,
+//                               const float *list_vecs,
+//                               const int64_t *list_ids,
+//                               int num_queries,
+//                               int list_size,
+//                               int dim,
+//                               vector<shared_ptr<TopkBuffer>> &topk_buffers,
+//                               MetricType metric,
+//                               float *ip_block = nullptr,
+//                               float *norms_x = nullptr,
+//                               float *norms_y_buf = nullptr,
+//                               int blas_db_bs = BLAS_DB_BS,
+//                               vector<std::atomic<float>*> pivots = {}) {
+//     if (list_size == 0 || list_vecs == nullptr) {
+//         // No list vectors to process;
+//         return;
+//     }
+//
+//     // Ensure k does not exceed list_size
+//     int k = topk_buffers[0]->k();
+//     int k_max = std::min(k, list_size);
+//
+//     if (metric == faiss::METRIC_INNER_PRODUCT) {
+//         ip_blas(
+//                 query_vecs,
+//                 list_vecs,
+//                 list_ids,
+//                 dim,
+//                 num_queries,
+//                 list_size,
+//                 blas_db_bs,
+//                 k_max,
+//                 topk_buffers,
+//                 ip_block,
+//                 pivots
+//         );
+//     } else if (metric == faiss::METRIC_L2) {
+//         l2_blas(
+//                 query_vecs,
+//                 list_vecs,
+//                 list_ids,
+//                 dim,
+//                 num_queries,
+//                 list_size,
+//                 blas_db_bs,
+//                 k_max,
+//                 topk_buffers,
+//                 ip_block,
+//                 norms_x,
+//                 norms_y_buf,
+//                 pivots
+//         );
+//     } else {
+//         throw std::runtime_error("Metric type not supported");
+//     }
+// }
 
 
 // }

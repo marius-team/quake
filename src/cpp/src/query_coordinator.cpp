@@ -42,6 +42,7 @@ QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
                                    shared_ptr<PartitionManager> partition_manager,
                                    shared_ptr<MaintenancePolicy> maintenance_policy,
                                    MetricType metric,
+                                   int current_level,
                                    int num_workers,
                                    bool use_numa,
                                    int num_merge_workers)
@@ -49,6 +50,7 @@ QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
       partition_manager_(partition_manager),
       maintenance_policy_(maintenance_policy),
       metric_(metric),
+        current_level_(current_level),
       num_workers_(num_workers),
     num_merge_workers_(num_merge_workers),
       workers_initialized_(false) {
@@ -110,29 +112,21 @@ void QueryCoordinator::merge_worker_fn(int mid) {
         if (rj.query_id == -1)  // poison pill
             return;
 
-        if (rj.distances.empty()) {
-            // empty result, nothing to do
-            --per_query_total_left_[rj.query_id];
-            --total_left_;
-            continue;
-        }
-
-        // single cast, based on the Compare template
         using Handler = typename faiss::HeapBlockResultHandler<Compare>::SingleResultHandler;
         auto* h = static_cast<Handler*>(MR.handlers[rj.query_id]);
 
-        // feed all partial results
-        for (size_t i = 0; i < rj.distances.size(); ++i) {
-            h->add_result(rj.distances[i], rj.indices[i]);
+        if (!rj.distances.empty()) {
+            // feed all partial results
+            for (size_t i = 0; i < rj.distances.size(); ++i) {
+                h->add_result(rj.distances[i], rj.indices[i]);
+            }
+            // update pivot
+            query_dist_pivots_[rj.query_id].store(h->threshold,
+                                                  std::memory_order_relaxed);
         }
-        // update pivot
-        query_dist_pivots_[rj.query_id].store(h->threshold,
-                                              std::memory_order_relaxed);
-
-        per_query_total_left_[rj.query_id]--;
 
         // once all ranks for this query are in, finalize & sort
-        if (per_query_total_left_[rj.query_id] <= 0) {
+        if (per_query_total_left_[rj.query_id].fetch_sub(1, std::memory_order_acq_rel) == 1) {
             h->end();
 
             // pack into pairs for sorting
@@ -265,8 +259,6 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
                                              CoreResources &res,
                                              NUMAResources &nr) {
 
-    auto start = std::chrono::high_resolution_clock::now();
-
     // check that the job has not been processed yet
     if (query_done_flags_[job.query_id].load(std::memory_order_relaxed)) {
         enqueue_result_job(ResultJob{job.query_id, job.rank, {}, {}});
@@ -320,6 +312,8 @@ void QueryCoordinator::handle_nonbatched_job(const ScanJob &job,
         }
 
         job_flags_[job.query_id][job.rank].store(true, std::memory_order_relaxed); // Mark this job as processed
+
+        auto start = std::chrono::high_resolution_clock::now();
 
         scan_list(nr.local_query_buffer + (job.query_id * D),
                   codes,
@@ -489,6 +483,7 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
             res.blas_norms_x,
             res.blas_norms_y,
             BLAS_DB_BS,
+            max_q,
             pivots);
 
     auto s4 = std::chrono::high_resolution_clock::now();
@@ -812,7 +807,6 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
                                                             curr_centroids_vec,
                                                             metric_ == faiss::METRIC_L2);
         }
-
     }
     auto end = std::chrono::high_resolution_clock::now();
     timing->boundary_distance_time_ns =
@@ -867,13 +861,23 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
                         max_rank_[q].store(max_rank, std::memory_order_relaxed);
 
                         int n_scanned = 0;
+                        float partition_recall_in_flight = 0.0f;
+                        int count_in_flight = 0;
                         for (int p = 0; p < partition_ids.size(1); ++p) {
                             if (job_flags_[q][p].load(std::memory_order_relaxed)) {
                                 n_scanned++;
                                 recall_estimate += recall_profiles[q][p];
+                            } else {
+                                if (count_in_flight < num_workers_) {
+                                    count_in_flight++;
+                                    partition_recall_in_flight += recall_profiles[q][p];
+                                }
+
                             }
-                            sum += recall_profiles[q][p];
                         }
+
+                        // add the in-flight recall to the estimate
+                        recall_estimate += partition_recall_in_flight;
 
                         if (recall_estimate >= search_params->recall_target) {
                             query_done_flags_[q].store(true, std::memory_order_relaxed);
@@ -888,7 +892,6 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
 
     }
 
-    // mark hits
     if (search_params->track_hits && maintenance_policy_) {
         for (int64_t q = 0; q < nQ; ++q) {
             std::vector<int64_t> scanned_ids;
@@ -915,9 +918,13 @@ QueryCoordinator::aggregate_scan_results(int64_t nQ,
     auto id_acc = out_ids.accessor<int64_t,2>();
     auto d_acc  = out_dists.accessor<float,2>();
 
+
+
+
     // copy results from the global heaps to the output tensors
     if (metric_ == faiss::METRIC_INNER_PRODUCT) {
         for (int64_t q = 0; q < nQ; ++q) {
+
             for (int64_t i = 0; i < K; ++i) {
                 id_acc[q][i]  = global_max_heaps_->heap_ids_tab[q * K + i];
                 d_acc [q][i]  = global_max_heaps_->heap_dis_tab[q * K + i];
@@ -961,9 +968,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
     vector<int64_t> core_process_preamble_time_ns(num_workers_, 0);
     vector<int64_t> core_enqueue_time_ns(num_workers_, 0);
     vector<int64_t> core_job_time_ns(num_workers_, 0);
-    vector<int64_t> core_scan_setup_time_ns(num_workers_, 0);
     vector<int64_t> core_scan_time_ns(num_workers_, 0);
-    vector<int64_t> core_scan_push_time_ns(num_workers_, 0);
     for (int i = 0; i < num_workers_; ++i) {
         core_wait_time_ns[i] = core_resources_[i].wait_time_ns;
         core_process_time_ns[i] = core_resources_[i].process_time_ns;
@@ -1022,6 +1027,30 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
         core_job_time_ns[i] = core_resources_[i].job_time_ns - core_job_time_ns[i];
         core_scan_time_ns[i] = core_resources_[i].scan_time_ns - core_scan_time_ns[i];
     }
+
+    // add timers to timing info. average across all workers
+    int64_t num_workers = num_workers_;
+    double wait_time_ns = 0;
+    double process_time_ns = 0;
+    double process_preamble_time_ns = 0;
+    double enqueue_time_ns = 0;
+    double job_time_ns = 0;
+    double scan_time_ns = 0;
+
+    for (int i = 0; i < num_workers; ++i) {
+        wait_time_ns += core_wait_time_ns[i];
+        process_time_ns += core_process_time_ns[i];
+        process_preamble_time_ns += core_process_preamble_time_ns[i];
+        enqueue_time_ns += core_enqueue_time_ns[i];
+        job_time_ns += core_job_time_ns[i];
+        scan_time_ns += core_scan_time_ns[i];
+    }
+    res->timing_info->worker_wait_time_ns = wait_time_ns / num_workers;
+    res->timing_info->worker_process_time_ns = process_time_ns / num_workers;
+    res->timing_info->worker_process_preamble_time_ns = process_preamble_time_ns / num_workers;
+    res->timing_info->worker_enqueue_time_ns = enqueue_time_ns / num_workers;
+    res->timing_info->worker_job_time_ns = job_time_ns / num_workers;
+    res->timing_info->worker_scan_time_ns = scan_time_ns / num_workers;
 
 
     // // print out the per-core resource timers;
@@ -1198,8 +1227,6 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
 
         auto t2 = high_resolution_clock::now();
 
-
-
         Tensor partition_sizes = partition_manager_->get_partition_sizes(partition_ids[q]);
         vector<int64_t> partition_sizes_vec = vector<int64_t>(partition_sizes.data_ptr<int64_t>(),
                                                               partition_sizes.data_ptr<int64_t>() + partition_sizes.size(0));
@@ -1354,9 +1381,10 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
     // if there is no parent, then the coordinator is operating on a flat index and we need to scan all partitions
     Tensor partition_ids_to_scan;
     Tensor partition_distances;
-    if (parent_ == nullptr) {
+    if (parent_ == nullptr || search_params->scan_all) {
         // scan all partitions for each query
         partition_ids_to_scan = partition_manager_->get_partition_ids();
+        search_params->batched_scan = true;
     } else {
         auto parent_search_params = make_shared<SearchParams>();
         if (search_params->parent_params == nullptr) {
@@ -1404,6 +1432,15 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
     search_result->timing_info->total_time_ns = duration_cast<nanoseconds>(end - start).
             count();
 
+    // print out the results and report curren_level_
+    // std::cout << "[QueryCoordinator::search] "
+    //             << "current_level_=" << current_level_ << " "
+    //             << "n_queries=" << x.size(0) << " "
+    //             << "k=" << search_params->k << " "
+    //             << "batched_scan=" << search_params->batched_scan << " "
+    //             << "total_time_ms=" << (float) search_result->timing_info->total_time_ns / 1e6 << " "
+    //             << "parent_total_time_ms=" << (float) parent_timing_info->total_time_ns / 1e6 << " " << std::endl;
+
     return search_result;
 }
 
@@ -1445,9 +1482,6 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
         return empty_res;
     }
 
-    static CoreResources serial_res;                    // one per process
-    ensure_blas_buffers(serial_res, x.size(0), BLAS_DB_BS, /*node=*/0);
-
     // Timing info (could be extended as needed)
     auto timing_info = std::make_shared<SearchTimingInfo>();
     auto start = high_resolution_clock::now();
@@ -1456,7 +1490,8 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
     int k = (search_params && search_params->k > 0) ? search_params->k : 1;
 
     // Global Top-K buffers: one for each query.
-    vector<shared_ptr<TopkBuffer>> global_buffers = create_buffers(num_queries, k, (metric_ == faiss::METRIC_INNER_PRODUCT));
+    vector<shared_ptr<TopkBuffer>> global_buffers = create_buffers(num_queries, k, (metric_ == faiss::METRIC_INNER_PRODUCT),
+                                                                   /*cap=*/10 * k);
 
     // Ensure partition_ids is 2D. If it’s 1D, assume every query scans the same set.
     if (partition_ids.dim() == 1) {
@@ -1481,7 +1516,7 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
         queries_vec.push_back(entry);
     }
 
-    parallel_for((int64_t) 0, (int64_t) queries_by_partition.size(), [&](int64_t i) {
+    for (int i = 0; i < queries_vec.size(); i++) {
         int64_t pid = queries_vec[i].first;
         auto query_indices = queries_vec[i].second;
 
@@ -1509,10 +1544,12 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
                           d,
                           local_buffers,
                           metric_,
-                          /* BLAS scratch */ serial_res.blas_ip_block,
-                                            serial_res.blas_norms_x,
-                                            serial_res.blas_norms_y,
-                          BLAS_DB_BS);
+                          nullptr,
+                          nullptr,
+                          nullptr,
+                          BLAS_DB_BS,
+                          128,
+                          {});
 
         // Merge the local results into the corresponding global buffers.
         for (int i = 0; i < batch_size; i++) {
@@ -1522,9 +1559,7 @@ shared_ptr<SearchResult> QueryCoordinator::batched_serial_scan(
             // Merge: global buffer adds the new candidate distances/ids.
             global_buffers[global_q]->batch_add(local_dists.data(), local_ids.data(), local_ids.size());
         }
-
-
-    }, search_params->num_threads);
+    }
 
     // Aggregate the final results into output tensors.
     auto topk_ids = torch::full({num_queries, k}, -1, torch::kInt64);

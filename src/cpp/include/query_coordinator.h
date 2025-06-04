@@ -132,6 +132,8 @@ public:
     std::atomic<int64_t> total_left_;
     vector<std::atomic<int>> per_query_total_left_; ///< Total jobs left for each query.
 
+    int current_level_; ///< Current level of the coordinator, used for debugging.
+
     /**
     * @brief Constructs a QueryCoordinator.
     *
@@ -145,6 +147,7 @@ public:
         shared_ptr<PartitionManager> partition_manager,
         shared_ptr<MaintenancePolicy> maintenance_policy,
         MetricType metric,
+        int current_level = 0,
         int num_workers=0,
         bool use_numa=false,
         int num_merge_workers=1);

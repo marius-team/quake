@@ -179,6 +179,15 @@ compute_boundary_distances(const Tensor&               query,
     for (std::size_t j = 1; j < centroids.size(); ++j) {
         const float* cj = centroids[j];
 
+        if (centroids[j] == nullptr) {
+            if (euclidean) {
+                dist[j] = std::numeric_limits<float>::infinity();
+            } else {
+                dist[j] = M_PI_2;  // max distance on unit sphere
+            }
+            continue;
+        }
+
         if (euclidean) {
             /* plane distance d = |q·v − b| / ||v|| ,  b = ½(||cj||²−||c0||²) */
             faiss::fvec_sub(dim, cj, c0, v.data());
@@ -194,14 +203,6 @@ compute_boundary_distances(const Tensor&               query,
             float s = std::fabs(faiss::fvec_inner_product(q, v.data(), dim));
             s = std::clamp(s, 0.0f, 1.0f);
             dist[j] = std::asin(s);                      // 0–π/2
-
-            // /* unit-sphere model – distance is polar angle to great-circle bisector between c0 and cj.  */
-            // add_arrays(c0, cj, m.data(), dim);          // midpoint vector
-            // float m_norm = std::sqrt(faiss::fvec_inner_product(m.data(), m.data(), dim));
-            // if (m_norm > 0) divide_array_by_constant(m.data(), m_norm, m.data(), dim);
-            // float cos_ang = faiss::fvec_inner_product(q, m.data(), dim);
-            // cos_ang = std::clamp(cos_ang, -1.0f, 1.0f);
-            // dist[j] = std::acos(cos_ang);               // radians
         }
     }
     return dist;   // dist[0] = 0 by construction
@@ -381,27 +382,27 @@ compute_recall_profile(const std::vector<float>& boundary_distances,
     }
 
     // if the cluster_sizes are given, scale probs by the size of the cluster and renormalize. this is a rudimentary density estimation
-    // if (partition_sizes.size() > 0) {
-    //     for (int k = 1; k < m; ++k) {
-    //         if (partition_sizes[k] > 0) {
-    //             probs[k] *= static_cast<float>(partition_sizes[k]);
-    //         }
-    //     }
-    // }
+    if (partition_sizes.size() > 0) {
+        for (int k = 0; k < m; ++k) {
+            if (partition_sizes[k] > 0) {
+                probs[k] *= static_cast<float>(partition_sizes[k]);
+            }
+        }
+    }
 
-    // // renormalize the probabilities to sum to 1
-    // float S = 0.0f;
-    // for (int k = 0; k < m; ++k) S += probs[k];
-    // if (S > eps) {
-    //     for (int k = 0; k < m; ++k) {
-    //         probs[k] /= S;
-    //     }
-    // } else {
-    //     // If S is zero, all probabilities remain zero
-    //     for (int k = 0; k < m; ++k) {
-    //         probs[k] = 0.0f;
-    //     }
-    // }
+    // renormalize the probabilities to sum to 1
+    float S = 0.0f;
+    for (int k = 0; k < m; ++k) S += probs[k];
+    if (S > eps) {
+        for (int k = 0; k < m; ++k) {
+            probs[k] /= S;
+        }
+    } else {
+        // If S is zero, all probabilities remain zero
+        for (int k = 0; k < m; ++k) {
+            probs[k] = 0.0f;
+        }
+    }
 
     return probs;
 }

@@ -96,6 +96,7 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
                     auto search_params = make_shared<SearchParams>();
                     search_params->k = 2; // get the top 2 partitions, ignore the first one as it is the partition itself
                     search_params->batched_scan = true;
+                    search_params->track_hits = false;
                     float *partition_vectors = (float *) partition_manager_->partition_store_->partitions_[partition_id]->codes_;
                     Tensor part_vecs = torch::from_blob(partition_vectors, {(int64_t) partition_manager_->partition_store_->list_size(partition_id),
                                                                            partition_manager_->d()}, torch::kFloat32);
@@ -223,6 +224,8 @@ void MaintenancePolicy::local_refinement(const torch::Tensor &partition_ids) {
     auto search_params = std::make_shared<SearchParams>();
     search_params->nprobe = 1000;
     search_params->k = params_->refinement_radius;
+    search_params->batched_scan = true;
+    search_params->track_hits = false;
 
     if (params_->refinement_radius == 0) {
         return;

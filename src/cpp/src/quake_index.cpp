@@ -86,6 +86,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
     initialize_maintenance_policy(default_params);
 
     // create query coordinator
+    std::cout << "[QuakeIndex::build] Initializing QueryCoordinator with " << build_params_->num_workers << " workers." << std::endl;
     query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, build_params_->num_workers, build_params_->use_numa);
 
     auto end = std::chrono::high_resolution_clock::now();
@@ -305,6 +306,7 @@ void QuakeIndex::load(const std::string& dir_path, shared_ptr<IndexBuildParams> 
         partition_manager_,
         maintenance_policy_,
         metric_,
+        current_level_,
         build_params->num_workers,
         build_params->use_numa,
         build_params->num_merge_workers);

@@ -32,6 +32,7 @@
 #include <thread>
 #include <pthread.h>
 #include <ctime>
+#include <omp.h>
 
 #ifdef QUAKE_USE_NUMA
 #include <numa.h>
@@ -53,6 +54,18 @@ using std::chrono::microseconds;
 using std::chrono::milliseconds;
 using faiss::idx_t;
 using faiss::MetricType;
+
+struct _EnsureSingleOmp {
+    _EnsureSingleOmp() {
+        // Disable OpenMP’s dynamic adjustment and nested teams:
+        omp_set_dynamic(0);
+        omp_set_max_active_levels(0);
+        // Force exactly one thread:
+        omp_set_num_threads(1);
+    }
+};
+
+static _EnsureSingleOmp _ensure_single_omp;
 
 // constants
 static const uint32_t SerializationMagicNumber = 0x44494E4C;
@@ -184,6 +197,7 @@ struct SearchParams {
     int batch_size = MAX_SUBBATCH;
 
     bool track_hits = true;
+    bool scan_all = false;
 
     // APS params
     bool use_precomputed = DEFAULT_PRECOMPUTED;
@@ -252,6 +266,12 @@ struct SearchTimingInfo {
     int64_t job_wait_time_ns; ///< Time spent waiting for jobs to complete in nanoseconds.
     int64_t result_aggregate_time_ns; ///< Time spent on aggregating results in nanoseconds.
     int64_t total_time_ns; ///< Total time spent in nanoseconds.
+    double worker_wait_time_ns = 0; ///< Average worker wait time in nanoseconds.
+    double worker_process_time_ns = 0; ///< Average worker process time in nanoseconds.
+    double worker_process_preamble_time_ns = 0; ///< Average worker process preamble time in nanoseconds.
+    double worker_enqueue_time_ns = 0; ///< Average worker enqueue time in nanoseconds.
+    double worker_job_time_ns = 0; ///< Average worker job time in nanoseconds.
+    double worker_scan_time_ns = 0; ///< Average worker scan time in nanoseconds.
 };
 
 /**

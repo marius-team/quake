@@ -318,6 +318,14 @@ PYBIND11_MODULE(_bindings, m) {
              return oss.str();
          });
 
+
+    // double worker_wait_time_ns = 0; ///< Average worker wait time in nanoseconds.
+    // double worker_process_time_ns = 0; ///< Average worker process time in nanoseconds.
+    // double worker_process_preamble_time_ns = 0; ///< Average worker process preamble time in nanoseconds.
+    // double worker_enqueue_time_ns = 0; ///< Average worker enqueue time in nanoseconds.
+    // double worker_job_time_ns = 0; ///< Average worker job time in nanoseconds.
+    // double worker_scan_time_ns = 0; ///< Average worker scan time in nanoseconds.
+
     /*********** SearchTimingInfo Binding ***********/
     class_<SearchTimingInfo, shared_ptr<SearchTimingInfo>>(m, "SearchTimingInfo")
          .def(init<>())
@@ -349,6 +357,18 @@ PYBIND11_MODULE(_bindings, m) {
             "Time spent on APS in nanoseconds.")
         .def_readwrite("scan_time_ns", &SearchTimingInfo::scan_time_ns,
             "Time spent on scanning in nanoseconds.")
+            .def_readwrite("worker_wait_time_ns", &SearchTimingInfo::worker_wait_time_ns,
+                "Average worker wait time in nanoseconds.")
+        .def_readwrite("worker_process_time_ns", &SearchTimingInfo::worker_process_time_ns,
+                 "Average worker process time in nanoseconds.")
+        .def_readwrite("worker_process_preamble_time_ns", &SearchTimingInfo::worker_process_preamble_time_ns,
+                 "Average worker process preamble time in nanoseconds.")
+        .def_readwrite("worker_enqueue_time_ns", &SearchTimingInfo::worker_enqueue_time_ns,
+                 "Average worker enqueue time in nanoseconds.")
+        .def_readwrite("worker_job_time_ns", &SearchTimingInfo::worker_job_time_ns,
+                 "Average worker job time in nanoseconds.")
+        .def_readwrite("worker_scan_time_ns", &SearchTimingInfo::worker_scan_time_ns,
+                 "Average worker scan time in nanoseconds.")
          .def("__repr__", [](const SearchTimingInfo &s) {
              std::ostringstream oss;
              oss << "{";
