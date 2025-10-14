@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM neurips23
 
 # -----------------------------
 # Set up environment variables
@@ -37,9 +37,12 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
     bash /tmp/miniconda.sh -b -p $CONDA_DIR && \
     rm /tmp/miniconda.sh
 
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+RUN conda update -n base -c defaults conda
 
 # Copy in your conda environment YAML
-COPY environments/ubuntu-cpu/conda.yaml /tmp/conda.yaml
+COPY conda.yaml /tmp/conda.yaml
 
 # Create quake-env
 RUN conda env create -f /tmp/conda.yaml && conda clean -afy

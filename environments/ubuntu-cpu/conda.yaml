@@ -10,6 +10,8 @@ dependencies:
   - faiss-cpu
   - matplotlib
   - pytest
+  - scipy
+  - scikit-learn
   - pip
   - pip:
     - sphinx
@@ -17,3 +19,7 @@ dependencies:
     - sphinxcontrib-mermaid
     - graphviz
     - pyyaml
+    - ansicolors
+    - h5py
+    - psutil
+    - jinja2
