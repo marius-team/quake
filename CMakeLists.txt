@@ -95,7 +95,7 @@ add_compile_options(-march=native)
 
 # Switch ABI mode
 if(QUAKE_SET_ABI_MODE)
-    add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+    add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
 endif()
 
 
