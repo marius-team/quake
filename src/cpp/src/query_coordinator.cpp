@@ -19,8 +19,6 @@ static void ensure_blas_buffers(QueryCoordinator::CoreResources& res,
 {
     const size_t ip_need = db_bs * max_q;
     if (res.blas_ip_capacity < ip_need) {
-        std::cerr << "Reallocating BLAS buffers: " << res.blas_ip_capacity
-                  << " -> " << ip_need << std::endl;
         if (res.blas_ip_block) quake_free(res.blas_ip_block, res.blas_ip_capacity * sizeof(float));
         res.blas_ip_block    = static_cast<float*>(quake_alloc(ip_need * sizeof(float), node));
         res.blas_ip_capacity = ip_need;
@@ -55,6 +53,7 @@ QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
     num_merge_workers_(num_merge_workers),
       workers_initialized_(false) {
 
+    if (debug_) std::cout << "[QueryCoordinator::QueryCoordinator] Coordinator intiialized with " << num_workers_ << " workers" << std::endl;
     if (num_workers_ > 0) {
         initialize_workers(num_workers_, num_merge_workers_, use_numa);
     }
@@ -892,6 +891,7 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
 
     }
 
+    if (debug_) std::cout << "[QueryCoordinator::drain_and_apply_aps] drain_and_apply Mainteance Params: Track Hits - " << search_params->track_hits << ", Mainteance Policy - " << (maintenance_policy_ != nullptr) << std::endl;
     if (search_params->track_hits && maintenance_policy_) {
         for (int64_t q = 0; q < nQ; ++q) {
             std::vector<int64_t> scanned_ids;
@@ -904,6 +904,7 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
                 }
             }
             timing->partitions_scanned += scanned_ids.size();
+            if (debug_) std::cout << "[QueryCoordinator::drain_and_apply_aps] record_query_hits being called with " << scanned_ids.size() << " ids" << std::endl;
             maintenance_policy_->record_query_hits(scanned_ids);
         }
     }

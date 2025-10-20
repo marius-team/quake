@@ -118,7 +118,7 @@ public:
 
     std::mutex global_mutex_;                          ///< Mutex for global synchronization.
     std::condition_variable global_cv_;                ///< Condition variable for thread coordination.
-    std::atomic<bool> stop_workers_;                    ///< Flag to signal workers to terminate.
+    std::atomic<bool> stop_workers_;                   ///< Flag to signal workers to terminate.
     bool debug_ = false;                               ///< Debug mode flag.
 
     std::vector<ScanJob> job_buffer_;

@@ -58,6 +58,9 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
         auto parent_build_params = make_shared<IndexBuildParams>();
         if (build_params->parent_params == nullptr) {
             parent_build_params->num_workers = build_params_->num_workers;
+            parent_build_params->num_merge_workers = build_params_->num_merge_workers;
+            parent_build_params->use_numa = build_params_->use_numa;
+
         } else {
             parent_build_params = build_params_->parent_params;
         }
@@ -87,7 +90,7 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
 
     // create query coordinator
     std::cout << "[QuakeIndex::build] Initializing QueryCoordinator with " << build_params_->num_workers << " workers." << std::endl;
-    query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, build_params_->num_workers, build_params_->use_numa);
+    query_coordinator_ = make_shared<QueryCoordinator>(parent_, partition_manager_, maintenance_policy_, metric_, current_level_, build_params_->num_workers, build_params_->use_numa, build_params_->num_merge_workers);
 
     auto end = std::chrono::high_resolution_clock::now();
     timing_info->total_time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
