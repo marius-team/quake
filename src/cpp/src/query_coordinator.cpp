@@ -428,16 +428,18 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     for (int64_t i = 0; i < Q; ++i) {
 
         int qid = (*job.query_ids)[i];
+        int qrank = (*job.ranks)[i];
+
         // check that the job has not been processed yet
-        if (job_flags_[qid][job.rank]) {
+        if (job_flags_[qid][qrank]) {
             // already processed, skip
-            enqueue_result_job(ResultJob{qid, job.rank, {}, {}});;
+            enqueue_result_job(ResultJob{qid, qrank, {}, {}});;
         } else {
             // copy query vector to the local buffer
             const float *src = nr.local_query_buffer + size_t(qid) * D;
             std::memcpy(dst + offset, src, D * sizeof(float));
             query_ids.push_back(qid);
-            ranks.push_back((*job.ranks)[i]);
+            ranks.push_back(qrank);
             offset += D;
         }
     }
@@ -497,6 +499,8 @@ void QueryCoordinator::handle_batched_job(const ScanJob &job,
     for (int64_t i = 0; i < query_ids.size(); ++i) {
         int global_q = query_ids[i];
         int rank_q   = ranks[i];
+        job_flags_[global_q][rank_q].store(true, std::memory_order_relaxed); // Mark that the job has been processed
+
         auto tv = res.topk_buffer_pool[i]->get_topk(false);
         auto ti = res.topk_buffer_pool[i]->get_topk_indices(false);
         enqueue_result_job(ResultJob{global_q, rank_q, std::move(tv), std::move(ti)});
@@ -891,20 +895,19 @@ void QueryCoordinator::drain_and_apply_aps(Tensor                      queries,
 
     }
 
-    if (debug_) std::cout << "[QueryCoordinator::drain_and_apply_aps] drain_and_apply Mainteance Params: Track Hits - " << search_params->track_hits << ", Mainteance Policy - " << (maintenance_policy_ != nullptr) << std::endl;
     if (search_params->track_hits && maintenance_policy_) {
+        size_t partitions_per_query = partition_ids.size(1);
         for (int64_t q = 0; q < nQ; ++q) {
             std::vector<int64_t> scanned_ids;
-            scanned_ids.reserve(partition_ids.size(1));
-            for (int p = 0; p < partition_ids.size(1); ++p) {
+            scanned_ids.reserve(partitions_per_query);
+            for (int p = 0; p < partitions_per_query; ++p) {
                 if (job_flags_[q][p].load(std::memory_order_relaxed)) {
                     int64_t pid = partition_ids[q][p].item<int64_t>();
                     if (pid < 0) continue;
                     scanned_ids.emplace_back(pid);
-                }
+                } 
             }
             timing->partitions_scanned += scanned_ids.size();
-            if (debug_) std::cout << "[QueryCoordinator::drain_and_apply_aps] record_query_hits being called with " << scanned_ids.size() << " ids" << std::endl;
             maintenance_policy_->record_query_hits(scanned_ids);
         }
     }
@@ -1322,6 +1325,7 @@ shared_ptr<SearchResult> QueryCoordinator::serial_scan(Tensor x, Tensor partitio
         timing_info->partitions_scanned = scanned_ids.size();
 
         if (search_params->track_hits && maintenance_policy_) {
+            if (debug_) std::cout << "[QueryCoordinator::serial_scan] record_query_hits being called with " << scanned_ids.size() << " ids" << std::endl;
             maintenance_policy_->record_query_hits(std::vector<int64_t>(scanned_ids.begin(), scanned_ids.end()));
         }
 

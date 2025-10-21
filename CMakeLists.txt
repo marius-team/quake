@@ -192,7 +192,7 @@ add_dependencies(bindings _bindings)
 # ---------------------------------------------------------------
 # Benchmarks
 # ---------------------------------------------------------------
-file(GLOB BENCHMARK_SOURCES "src/cpp/test/benchmark/*.cpp")
+file(GLOB BENCHMARK_SOURCES "scripts/cpp/benchmark/*.cpp")
 
 foreach(SOURCE ${BENCHMARK_SOURCES})
     get_filename_component(EXECUTABLE_NAME ${SOURCE} NAME_WE)

@@ -47,6 +47,7 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
                                                         all_partition_ids_tens.size(0));
 
     if (params_->max_partition_size != -1) {
+        if constexpr(debug_) std::cout << "Mainteance bounding partition sizes to [" << params_->min_partition_size << "," << params_->max_partition_size << "]" << std::endl;
         for (const auto &partition_id: all_partition_ids) {
             int partition_size = partition_manager_->get_partition_size(partition_id);
 
@@ -58,6 +59,8 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
         }
 
     } else {
+        if constexpr(debug_) std::cout << "Using the cost model to determine delete/split" << std::endl;
+
         int64_t num_queries = hit_count_tracker_->get_num_queries_recorded();
         if (hit_count_tracker_->get_num_queries_recorded() < params_->window_size) {
             std::cout << "Window not full yet. " << num_queries << " queries recorded and " << params_->window_size
@@ -88,8 +91,10 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
             // Deletion decision.
             float delete_delta = cost_estimator_->compute_delete_delta(
                 partition_size, hit_rate, total_partitions, current_scan_fraction, avg_partition_size);
+            bool consider_partition_for_delete = delete_delta < -params_->delete_threshold_ns;
+            // if constexpr(debug_) std::cout << "For partition " << partition_id << " of size " << partition_size << " got delete delta " << delete_delta << " leading to delete decision of " << consider_partition_for_delete << std::endl;
 
-            if (delete_delta < -params_->delete_threshold_ns) {
+            if (consider_partition_for_delete) {
 
                 if (params_->enable_delete_rejection && partition_size > params_->min_partition_size) {
                     // check the assignments of the partitions to be deleted.
@@ -139,10 +144,13 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
                     partitions_to_delete.push_back(partition_id);
                 }
             } else {
+                bool partition_large_enough = partition_size > params_->min_partition_size;
                 if (partition_size > params_->min_partition_size) {
                     float split_delta = cost_estimator_->compute_split_delta(
                         partition_size, hit_rate, total_partitions);
-                    if (split_delta < -params_->split_threshold_ns) {
+                    bool should_split = split_delta < -params_->split_threshold_ns;
+                    if constexpr(debug_) std::cout << "For partition " << partition_id << " of size " << partition_size << " got split delta " << split_delta << " leading to split decision of " << should_split << std::endl;
+                    if (should_split) {
                         partitions_to_split.push_back(partition_id);
                     }
                 }

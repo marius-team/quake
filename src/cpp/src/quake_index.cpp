@@ -60,7 +60,6 @@ shared_ptr<BuildTimingInfo> QuakeIndex::build(Tensor x, Tensor ids, shared_ptr<I
             parent_build_params->num_workers = build_params_->num_workers;
             parent_build_params->num_merge_workers = build_params_->num_merge_workers;
             parent_build_params->use_numa = build_params_->use_numa;
-
         } else {
             parent_build_params = build_params_->parent_params;
         }

@@ -57,6 +57,8 @@ class MaintenancePolicy {
    * @param partition_ids Tensor of partition IDs.
    */
   void local_refinement(const Tensor& partition_ids);
+private:
+  static constexpr bool debug_ = false;   
 };
 
 #endif  // MAINTENANCE_POLICY_REFACTORED_H
