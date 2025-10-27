@@ -99,7 +99,7 @@ public:
 
     struct MergeResources {
      moodycamel::BlockingConcurrentQueue<ResultJob> queue;
-     std::vector<void*> handlers;        // points to HandlerIP or HandlerL2
+     std::vector<shared_ptr<void>> handlers;        // points to HandlerIP or HandlerL2
     };
 
     vector<CoreResources> core_resources_;             ///< Per‑core resources for worker threads.
@@ -112,6 +112,11 @@ public:
     vector<std::thread> worker_threads_;               ///< Container for worker threads.
     vector<std::thread> merge_threads_;                 ///< Container for merge threads.
     vector<int64_t> worker_job_counter_;               ///< Job counters for each worker.
+
+    // The underlying buffers holding the data for the global buffers 
+    float* global_heap_vals_buffer_{nullptr}; 
+    int64_t* global_heap_ids_buffer_{nullptr};
+    size_t global_heap_buffer_capacity_{0};
 
     shared_ptr<faiss::HeapBlockResultHandler<faiss::CMax<float, int64_t>>> global_min_heaps_; ///< Global aggregator buffers.
     shared_ptr<faiss::HeapBlockResultHandler<faiss::CMin<float, int64_t>>> global_max_heaps_; ///< Global aggregator buffers.

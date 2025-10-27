@@ -9,7 +9,8 @@
 IndexPartition::IndexPartition(int64_t num_vectors,
                                uint8_t* codes,
                                idx_t* ids,
-                               int64_t code_size) {
+                               int64_t code_size,
+                               float delete_resize_threshold) {
     buffer_size_ = 0;
     num_vectors_ = 0;
     code_size_ = code_size;
@@ -17,6 +18,7 @@ IndexPartition::IndexPartition(int64_t num_vectors,
     ids_ = nullptr;
     numa_node_ = -1;
     core_id_ = -1;
+    delete_resize_threshold_ = delete_resize_threshold;
     ensure_capacity(num_vectors);
     append(num_vectors, ids, codes);
 }
@@ -90,6 +92,12 @@ int64_t IndexPartition::remove(int64_t idx)
     }
     --num_vectors_;
     return (idx == last) ? -1 : idx;   // <‑‑ the new occupant of slot idx
+
+    // Determine if we should do a resize or not
+    float occupied_threshold = (1.0 * num_vectors_)/buffer_size_;
+    if(occupied_threshold < delete_resize_threshold_) { 
+        resize(num_vectors_);
+    }
 }
 
 void IndexPartition::resize(int64_t new_capacity) {

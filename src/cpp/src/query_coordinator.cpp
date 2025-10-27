@@ -62,6 +62,16 @@ QueryCoordinator::QueryCoordinator(shared_ptr<QuakeIndex> parent,
 // Destructor
 QueryCoordinator::~QueryCoordinator() {
     shutdown_workers();
+    
+    // Free up numa node local buffers
+    for (int node = 0; node < get_num_numa_nodes(); ++node) {
+        auto &nr = numa_resources_[node];
+        if(nr.local_query_buffer) quake_free(nr.local_query_buffer, nr.buffer_size);
+    }
+
+    // Free up global merger buffers
+    if (global_heap_vals_buffer_ != nullptr) quake_free(global_heap_vals_buffer_, global_heap_buffer_capacity_ * sizeof(float));
+    if (global_heap_ids_buffer_ != nullptr) quake_free(global_heap_ids_buffer_, global_heap_buffer_capacity_ * sizeof(int64_t));
 }
 
 void QueryCoordinator::allocate_core_resources(int core_idx,
@@ -112,7 +122,7 @@ void QueryCoordinator::merge_worker_fn(int mid) {
             return;
 
         using Handler = typename faiss::HeapBlockResultHandler<Compare>::SingleResultHandler;
-        auto* h = static_cast<Handler*>(MR.handlers[rj.query_id]);
+        auto h = std::static_pointer_cast<Handler>(MR.handlers[rj.query_id]);
 
         if (!rj.distances.empty()) {
             // feed all partial results
@@ -198,6 +208,12 @@ void QueryCoordinator::partition_scan_worker_fn(int core_index) {
         //           << ", Enqueue time: " << res.enqueue_time_ns / 1e6 << " ms"
         //           << ", Job time: " << res.job_time_ns / 1e6 << " ms" << std::endl;
     }
+
+    // Cleanup resources associated with worker
+    if (res.blas_ip_block) quake_free(res.blas_ip_block, res.blas_ip_capacity * sizeof(float));
+    if (res.blas_norms_x) quake_free(res.blas_norms_x, res.blas_norms_x_cap * sizeof(float));
+    if (res.blas_norms_y) quake_free(res.blas_norms_y, res.blas_norms_y_cap * sizeof(float));
+    if (res.batch_queries) quake_free(res.batch_queries, res.batch_q_capacity * sizeof(float));
 }
 
 void QueryCoordinator::process_scan_job(ScanJob job,
@@ -546,26 +562,36 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
                                            Tensor &partition_ids,
                                            shared_ptr<SearchParams> params) {
     std::lock_guard<std::mutex> lg(global_mutex_);
-    // resize or reset
 
-    float * vals = (float *) quake_alloc(nQ * K * sizeof(float), 0);
-    int64_t * ids = (int64_t *) quake_alloc(nQ * K * sizeof(int64_t), 0);
-    std::fill_n(ids,  nQ * K, -1);
+    // resize or reset
+    size_t query_capacity = nQ * K;
+    if(global_heap_vals_buffer_ == nullptr || global_heap_ids_buffer_ == nullptr || global_heap_buffer_capacity_ < query_capacity) { 
+        // Free any existing buffers
+        if (global_heap_vals_buffer_ != nullptr) quake_free(global_heap_vals_buffer_, global_heap_buffer_capacity_ * sizeof(float));
+        if (global_heap_ids_buffer_ != nullptr) quake_free(global_heap_ids_buffer_, global_heap_buffer_capacity_ * sizeof(int64_t));
+
+        // Allocate the new buffers
+        global_heap_vals_buffer_ = (float *) quake_alloc(query_capacity * sizeof(float), 0);
+        global_heap_ids_buffer_ = (int64_t *) quake_alloc(query_capacity * sizeof(int64_t), 0);
+        global_heap_buffer_capacity_ = query_capacity;
+    }
+
+    std::fill_n(global_heap_ids_buffer_,  query_capacity, -1);
 
     float max_val = (metric_ == faiss::METRIC_INNER_PRODUCT)
               ? -std::numeric_limits<float>::infinity()
               :  std::numeric_limits<float>::infinity();
 
-    std::fill_n(vals, nQ * K, max_val);
+    std::fill_n(global_heap_vals_buffer_, query_capacity, max_val);
 
     if (metric_ == faiss::METRIC_INNER_PRODUCT) {
         global_max_heaps_ = std::make_shared<
             faiss::HeapBlockResultHandler<
-                faiss::CMin<float,int64_t>>>(nQ, vals, ids, K);
+                faiss::CMin<float,int64_t>>>(nQ, global_heap_vals_buffer_, global_heap_ids_buffer_, K);
     } else {
         global_min_heaps_ = std::make_shared<
             faiss::HeapBlockResultHandler<
-                faiss::CMax<float,int64_t>>>(nQ, vals, ids, K);
+                faiss::CMax<float,int64_t>>>(nQ, global_heap_vals_buffer_, global_heap_ids_buffer_, K);
     }
 
     for (auto& mr : merge_res_) {
@@ -577,15 +603,17 @@ void QueryCoordinator::init_global_buffers(int64_t nQ,
             using H = faiss::HeapBlockResultHandler<
                         faiss::CMin<float,int64_t>>::SingleResultHandler;
             for (int64_t q = 0; q < nQ; ++q) {
-                mr.handlers[q] = new H(*global_max_heaps_);
-                static_cast<H*>(mr.handlers[q])->begin(q);
+                mr.handlers[q] = std::make_shared<H>(*global_max_heaps_);
+                std::shared_ptr<H> ip_ptr = std::static_pointer_cast<H>(mr.handlers[q]);
+                ip_ptr->begin(q);
             }
         } else {
             using H = faiss::HeapBlockResultHandler<
                         faiss::CMax<float,int64_t>>::SingleResultHandler;
             for (int64_t q = 0; q < nQ; ++q) {
-                mr.handlers[q] = new H(*global_min_heaps_);
-                static_cast<H*>(mr.handlers[q])->begin(q);
+                mr.handlers[q] = std::make_shared<H>(*global_min_heaps_);
+                std::shared_ptr<H> lp_ptr = std::static_pointer_cast<H>(mr.handlers[q]);
+                lp_ptr->begin(q);
             }
         }
     }
@@ -1091,15 +1119,16 @@ void QueryCoordinator::initialize_workers(int num_workers, int num_merge_workers
         return;
     }
 
-    std::cout << "[QueryCoordinator::initialize_workers] Initializing " << num_workers << " worker threads with use_numa=" << use_numa <<
-            std::endl;
+    int num_cores = std::thread::hardware_concurrency();
+    std::cout << "[QueryCoordinator::initialize_workers] Initializing " << num_workers << " worker threads with use_numa=" << use_numa 
+              << " with " << num_cores << " cores" << std::endl;
 
     partition_manager_->distribute_partitions(num_workers, use_numa);
     core_resources_.resize(num_workers);
     worker_threads_.resize(num_workers);
     stop_workers_.store(false);
     for (int i = 0; i < num_workers; i++) {
-        if (!set_thread_affinity(i)) {
+        if (!set_thread_affinity(i % num_cores)) {
             std::cout << "[QueryCoordinator::initialize_workers] Failed to set thread affinity on core " << i << std::endl;
         }
         allocate_core_resources(i, 1, 10, partition_manager_->d());

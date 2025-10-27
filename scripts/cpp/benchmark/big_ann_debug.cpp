@@ -12,6 +12,7 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <cstring>
+#include <cstdlib>
 
 #include <torch/script.h>    // For c10::IValue
 #include <torch/serialize.h> // For torch::load
@@ -160,15 +161,17 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
         exit(1);
     }
 
+    // Allocate some memory but don't free it (to trigger LSAN)
+    char* allocated_memory = reinterpret_cast<char*>(std::malloc(100 * sizeof(char)));
+
     // Create and build the index
     std::shared_ptr<QuakeIndex> index = std::make_shared<QuakeIndex>();
 
     std::shared_ptr<IndexBuildParams> build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 8192;
-    build_params->num_workers = 32;
+    build_params->num_workers = 8;
     build_params->metric = "l2";
     build_params->use_numa = true;
-    build_params->num_merge_workers = 1;
 
     /*
     build_params->parent_params = std::make_shared<IndexBuildParams>();
@@ -185,11 +188,11 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
     // Also initialize with the default mainteance policy
     std::shared_ptr<MaintenancePolicyParams> mainteance_policy = std::make_shared<MaintenancePolicyParams>();
     mainteance_policy->window_size = 5000;
-    mainteance_policy->split_threshold_ns = 100;
+    mainteance_policy->split_threshold_ns = 500;
     mainteance_policy->delete_threshold_ns = 5000;
-    mainteance_policy->refinement_radius = 500;
-    mainteance_policy->refinement_iterations = 3;
-    mainteance_policy->min_partition_size = 64;
+    mainteance_policy->refinement_radius = 50;
+    mainteance_policy->refinement_iterations = 2;
+    mainteance_policy->min_partition_size = 1024;
     mainteance_policy->enable_split_rejection = true;
     mainteance_policy->enable_delete_rejection = true;
     index->initialize_maintenance_policy(mainteance_policy);
@@ -221,7 +224,7 @@ void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step) {
     search_params->nprobe = 32;
     search_params->recall_target = 0.9;
     search_params->batched_scan = true;
-    search_params->batch_size = 1000;
+    search_params->batch_size = 256;
 
     /*
     search_params->parent_params = std::make_shared<SearchParams>();
@@ -236,16 +239,42 @@ void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step) {
     // print_search_metrics(search_result->timing_info->parent_info, 1);
 }
 
+constexpr size_t INSERT_CHUNK_SIZE = 1000;
 void perform_insert(std::shared_ptr<QuakeIndex> index, Step& insert_step) { 
     // Load the arguments
     Tensor insert_vectors = load_tensor(insert_step.vectors_path).to(torch::kFloat32);
     Tensor insert_ids = load_tensor(insert_step.ids_path).to(torch::kInt64);
-    index->add(insert_vectors, insert_ids);
+
+    // Insert in the vectors in chunk
+    int total_time_us = 0;
+    size_t num_vectors = insert_vectors.size(0);
+    size_t num_chunks = (num_vectors + INSERT_CHUNK_SIZE - 1)/INSERT_CHUNK_SIZE;
+    for(size_t i = 0; i < num_chunks; i++) { 
+        size_t start_idx = i * INSERT_CHUNK_SIZE;
+        size_t end_idx = std::min(start_idx + INSERT_CHUNK_SIZE, num_vectors);
+
+        auto result = index->add(insert_vectors.slice(0, start_idx, end_idx), insert_ids.slice(0, start_idx, end_idx));
+        total_time_us += result->modify_time_us;
+    }
+    std::cout << "Finished insertion in " << num_chunks << " chunks in " << total_time_us << " us" << std::endl;
 }
 
+constexpr size_t DELETE_CHUNK_SIZE = 1000;
 void perform_delete(std::shared_ptr<QuakeIndex> index, Step& delete_step) { 
     Tensor delete_ids = load_tensor(delete_step.ids_path).to(torch::kInt64);
-    index->remove(delete_ids);
+
+    // Insert in the vectors in chunk
+    int total_time_us = 0;
+    size_t num_vectors = delete_ids.size(0);
+    size_t num_chunks = (num_vectors + DELETE_CHUNK_SIZE - 1)/DELETE_CHUNK_SIZE;
+    for(size_t i = 0; i < num_chunks; i++) { 
+        size_t start_idx = i * DELETE_CHUNK_SIZE;
+        size_t end_idx = std::min(start_idx + DELETE_CHUNK_SIZE, num_vectors);
+
+        auto result = index->remove(delete_ids.slice(0, start_idx, end_idx));
+        total_time_us += result->modify_time_us;
+    }
+    std::cout << "Finished delete in " << num_chunks << " chunks in " << total_time_us << " us" << std::endl;
 }
 
 int main() { 
@@ -259,7 +288,7 @@ int main() {
     std::cout << "Initialized index" << std::endl;
 
     // Now perform the streaming operations against the index
-    size_t num_test_operations = 20; // steps_arr.size();
+    size_t num_test_operations = steps_arr.size();
     for(size_t i = 1; i <= num_test_operations; i++) { 
         // Run the step
         Step& curr_step = steps_arr[i];
