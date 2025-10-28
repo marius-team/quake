@@ -20,7 +20,7 @@
 
 using torch::Tensor;
 
-constexpr const char* DIRECTORY_PATH = "/home/devesh/big-ann-benchmark/big-ann-benchmarks/data/MSTuring-30M-clustered/index_arguments/";
+constexpr const char* DIRECTORY_PATH = "/home/app/index_arguments/"; // /home/devesh/big-ann-benchmark/big-ann-benchmarks/data/MSTuring-30M-clustered/index_arguments
 constexpr const bool RUN_MAINTEANCE = true;
 constexpr float MS_TO_US = 1000.0;
 constexpr float MS_TO_NS = 1000.0 * 1000.0;
@@ -188,11 +188,11 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
     // Also initialize with the default mainteance policy
     std::shared_ptr<MaintenancePolicyParams> mainteance_policy = std::make_shared<MaintenancePolicyParams>();
     mainteance_policy->window_size = 5000;
-    mainteance_policy->split_threshold_ns = 500;
+    mainteance_policy->split_threshold_ns = 75;
     mainteance_policy->delete_threshold_ns = 5000;
-    mainteance_policy->refinement_radius = 50;
+    mainteance_policy->refinement_radius = 0;
     mainteance_policy->refinement_iterations = 2;
-    mainteance_policy->min_partition_size = 1024;
+    mainteance_policy->min_partition_size = 512;
     mainteance_policy->enable_split_rejection = true;
     mainteance_policy->enable_delete_rejection = true;
     index->initialize_maintenance_policy(mainteance_policy);
@@ -203,7 +203,7 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
 void perform_mainteance(std::shared_ptr<QuakeIndex> index) { 
     if(RUN_MAINTEANCE) { 
         std::shared_ptr<MaintenanceTimingInfo> result = index->maintenance();
-        std::cout << "Mainteance Metrics: Num Splits - " << result->n_splits << ", Num Deletes - " << result->n_deletes << ", Delete Time ms - " << result->delete_time_us/MS_TO_US;
+        std::cout << "Mainteance Metrics: Total Time ms - " << result->total_time_us/MS_TO_US << ", Num Splits - " << result->n_splits << ", Num Deletes - " << result->n_deletes << ", Delete Time ms - " << result->delete_time_us/MS_TO_US;
         std::cout << ", Split Time ms - " << result->split_time_us/MS_TO_US << ", Refinement Time - " << result->refinement_time_us/MS_TO_US << std::endl;
     }
 }
@@ -239,7 +239,7 @@ void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step) {
     // print_search_metrics(search_result->timing_info->parent_info, 1);
 }
 
-constexpr size_t INSERT_CHUNK_SIZE = 1000;
+constexpr size_t INSERT_CHUNK_SIZE = 2500;
 void perform_insert(std::shared_ptr<QuakeIndex> index, Step& insert_step) { 
     // Load the arguments
     Tensor insert_vectors = load_tensor(insert_step.vectors_path).to(torch::kFloat32);
@@ -259,7 +259,7 @@ void perform_insert(std::shared_ptr<QuakeIndex> index, Step& insert_step) {
     std::cout << "Finished insertion in " << num_chunks << " chunks in " << total_time_us << " us" << std::endl;
 }
 
-constexpr size_t DELETE_CHUNK_SIZE = 1000;
+constexpr size_t DELETE_CHUNK_SIZE = 2500;
 void perform_delete(std::shared_ptr<QuakeIndex> index, Step& delete_step) { 
     Tensor delete_ids = load_tensor(delete_step.ids_path).to(torch::kInt64);
 
@@ -275,6 +275,28 @@ void perform_delete(std::shared_ptr<QuakeIndex> index, Step& delete_step) {
         total_time_us += result->modify_time_us;
     }
     std::cout << "Finished delete in " << num_chunks << " chunks in " << total_time_us << " us" << std::endl;
+}
+
+constexpr float BYTES_TO_GB = 1000.0 * 1000.0 * 1000.0;
+
+void log_memory_stats(std::shared_ptr<QuakeIndex> index, int level) { 
+    auto partition_map = index->partition_manager_->partition_store_->partitions_;
+    int64_t total_vectors = 0;
+    int64_t buffer_capacity = 0;
+    int64_t total_memory = 0;
+
+    for(const auto& pair : partition_map) {
+        total_vectors += pair.second->num_vectors_;
+        buffer_capacity += pair.second->buffer_size_;
+        total_memory += pair.second->buffer_size_ * (pair.second->code_size_ + sizeof(idx_t));
+    }
+
+    float total_memory_gb = total_memory/BYTES_TO_GB;
+    std::cout << "Level " << level << " Memory Consumption: Vectors - " << total_vectors << ", Buffer Capacity - " << buffer_capacity << ", Memory (GB) - " << total_memory_gb << std::endl;
+
+    if(index->parent_ != nullptr) { 
+        log_memory_stats(index->parent_, level + 1);
+    }
 }
 
 int main() { 
@@ -307,8 +329,10 @@ int main() {
         // Run the mainteance
         std::cout << std::endl;
         perform_mainteance(index);
-        std::cout << "------ FINISH: Step " << curr_step.step_number << " of type " << curr_step.type << " ------\n" << std::endl;
 
+        std::cout << std::endl;
+        log_memory_stats(index, 0);
+        std::cout << "------ FINISH: Step " << curr_step.step_number << " of type " << curr_step.type << " ------\n" << std::endl;
     }
 
     return 0;

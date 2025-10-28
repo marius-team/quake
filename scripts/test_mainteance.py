@@ -1,4 +1,4 @@
-from quake import MaintenancePolicyParams
+from quake import MaintenancePolicyParams, IndexPartition
 from quake.index_wrappers.quake import QuakeWrapper
 import torch
 
@@ -49,4 +49,7 @@ def mainteance_test():
     print("Added", num_add_vectors, "vectors to index")
 
 if __name__ == "__main__":
-    mainteance_test()
+    IndexPartition.delete_resize_threshold = 0.8
+    IndexPartition.capacity_resize_threshold = 1.2
+    print(IndexPartition.delete_resize_threshold, IndexPartition.capacity_resize_threshold)
+    # mainteance_test()

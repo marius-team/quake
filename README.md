@@ -133,8 +133,8 @@ Quake’s Python API provides a set of core operations. The following sections d
 ### Devesh Notes
 Running Big ANN debug script:
 ```
-cmake -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DQUAKE_SET_ABI_MODE=ON ..
-make big_ann_debug -j$(nproc) && ./big_ann_debug
+cmake -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DQUAKE_USE_ASAN=OFF -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DQUAKE_SET_ABI_MODE=ON ..
+make big_ann_debug -j$(nproc) && ./big_ann_debug &> big_ann_param_tuning.out
 ```
 
 ## Further Documentation

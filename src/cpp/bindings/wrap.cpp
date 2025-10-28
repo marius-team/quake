@@ -53,6 +53,11 @@ PYBIND11_MODULE(_bindings, m) {
         and maintain your index.
     )pbdoc";
 
+    /*********** Index Partition Bindings ***********/
+    class_<IndexPartition>(m, "IndexPartition")
+        .def_readwrite_static("delete_resize_threshold", &IndexPartition::delete_resize_threshold_)
+        .def_readwrite_static("capacity_resize_threshold", &IndexPartition::capacity_resize_threshold_);
+
     /*********** QuakeIndex Binding ***********/
     class_<QuakeIndex, shared_ptr<QuakeIndex>>(m, "QuakeIndex")
         .def(init<int>(), arg("current_level") = 0,

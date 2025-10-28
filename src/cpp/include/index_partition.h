@@ -9,8 +9,6 @@
 
 #include <common.h>
 
-constexpr float DEFAULT_DELETE_RESIZE_THRESHOLD = 0.95;
-
 /**
  * @brief Represents a partition (sub-index) of encoded vectors.
  *
@@ -20,13 +18,16 @@ constexpr float DEFAULT_DELETE_RESIZE_THRESHOLD = 0.95;
  */
 class IndexPartition {
 public:
+    // Static field for all index partitions
+    static float delete_resize_threshold_;
+    static float capacity_resize_threshold_;
+
     int numa_node_ = -1;    ///< Assigned NUMA node (-1 if not set)
     int core_id_ = -1;    ///< Mapped thread ID for processing
 
     int64_t buffer_size_ = 0;   ///< Allocated capacity (in number of vectors)
     int64_t num_vectors_ = 0;   ///< Current number of stored vectors
     int64_t code_size_ = 0;     ///< Size of each code in bytes (must be set before adding vectors)
-    float delete_resize_threshold_ = DEFAULT_DELETE_RESIZE_THRESHOLD;
 
     uint8_t* codes_ = nullptr;  ///< Pointer to the encoded vectors (raw memory block)
     idx_t* ids_ = nullptr;      ///< Pointer to the vector IDs
@@ -45,13 +46,11 @@ public:
      * @param codes Pointer to the buffer holding the encoded vectors.
      * @param ids Pointer to the vector IDs.
      * @param code_size Size of each code in bytes.
-     * @param delete_resize_threshold The ratio between the num vectors/buffer capacity to cause a resize after deletes
      */
     IndexPartition(int64_t num_vectors,
                    uint8_t* codes,
                    idx_t* ids,
-                   int64_t code_size,
-                   float delete_resize_threshold = DEFAULT_DELETE_RESIZE_THRESHOLD);
+                   int64_t code_size);
 
     /**
      * @brief Move constructor.

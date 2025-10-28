@@ -166,17 +166,23 @@ endif()
 
 target_link_libraries(${PROJECT_NAME} PUBLIC ${LINK_LIBS})
 
-IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
+IF(QUAKE_USE_TSAN)
     message("Using thread sanitizer")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
     set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=thread")
-ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
+ENDIF(QUAKE_USE_TSAN)
 
-IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
+IF(QUAKE_USE_ASAN)
     message("Using address sanitizer")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize-recover=address")
     set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=address")
-ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
+ENDIF(QUAKE_USE_ASAN)
+
+IF(QUAKE_USE_LSAN)
+    message("Using leak sanitizer")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=leak")
+    set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=leak")
+ENDIF(QUAKE_USE_LSAN)
 
 # ---------------------------------------------------------------
 # Python Bindings
