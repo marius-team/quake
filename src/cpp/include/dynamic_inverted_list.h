@@ -128,9 +128,10 @@ namespace faiss {
         /**
          * @brief Remove specified vectors from all partitions.
          *
-         * @param vectors_to_remove A set of vector IDs to remove.
+         * @param vectors_to_remove A ptr to the vectors to remove
+         * @param num_vectors The vectors to remove
          */
-        void remove_vectors(std::set<idx_t> vectors_to_remove);
+        void remove_vectors(int64_t* vectors_to_remove, size_t num_vectors);
 
         /**
          * @brief Append new entries (codes and IDs) to a partition.

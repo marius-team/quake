@@ -94,12 +94,6 @@ int64_t IndexPartition::remove(int64_t idx)
         ids_[idx] = ids_[last];
     }
     --num_vectors_;
-
-    // Determine if we should do a resize or not (ensure that if less than threshold % unoccupied then we downsize)
-    float occupied_threshold = (1.0 * num_vectors_)/buffer_size_;
-    if(occupied_threshold <= delete_resize_threshold_) { 
-        resize(num_vectors_);
-    }
     
     return (idx == last) ? -1 : idx;   // <‑‑ the new occupant of slot idx
 }
@@ -127,6 +121,13 @@ void IndexPartition::clear() {
     code_size_ = 0;
     codes_ = nullptr;
     ids_ = nullptr;
+}
+
+void IndexPartition::check_buffer_size() { 
+    float curr_occupancy = (1.0 * num_vectors_)/buffer_size_;
+    if(curr_occupancy <= IndexPartition::delete_resize_threshold_) { 
+        resize(num_vectors_ * IndexPartition::capacity_resize_threshold_);
+    }
 }
 
 int64_t IndexPartition::find_id(idx_t id) const {
@@ -250,7 +251,7 @@ void IndexPartition::reallocate_memory(int64_t new_capacity) {
 
 void IndexPartition::ensure_capacity(int64_t required) {
     if(buffer_size_ <= required) { 
-        reallocate_memory(required * capacity_resize_threshold_);
+        reallocate_memory(required * IndexPartition::capacity_resize_threshold_);
     }   
 }
 

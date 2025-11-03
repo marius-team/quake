@@ -133,6 +133,14 @@ public:
     void clear();
 
     /**
+     * @brief Checks if the index buffer should be downsized
+     * 
+     * If the partition determines that its partition is too large, it downsizes the buffer. Note that this
+     * is a best effort method so the partition could decide not to downsize
+     */
+    void check_buffer_size();
+
+    /**
      * @brief Find the index of a vector by its ID.
      *
      * Performs a linear search.

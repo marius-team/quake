@@ -148,21 +148,37 @@ namespace faiss {
         }
     }
 
-    void DynamicInvertedLists::remove_vectors(std::set<idx_t> vectors_to_remove) {
-        // Remove from all partitions
-        for (auto &kv: partitions_) {
-            shared_ptr<IndexPartition> part = kv.second;
-            for (int64_t i = 0; i < part->num_vectors_;) {
-                if (vectors_to_remove.count(part->ids_[i])) {
-                    idx_t victim   = part->ids_[i];
-                    int64_t swapped = part->remove(i);
-                    map_erase(victim);
-                    if (swapped != -1)
-                        map_swap(part.get(), i, part->ids_[i]);
-                } else {
-                    i++;
-                }
+    void DynamicInvertedLists::remove_vectors(int64_t* vectors_to_remove, size_t num_vectors) {
+        // Create a map of all the ids to remove for each partition
+        std::unordered_map<IndexPartition*, std::vector<idx_t>> ids_to_delete;
+
+        #pragma unroll
+        for(int i = 0; i < num_vectors; i++) { 
+            idx_t vector_id = static_cast<idx_t>(vectors_to_remove[i]);
+            auto vector_details = id_to_location_[vector_id];
+            assert(vector_details.second >= 0 && vector_details.second < vector_details.first->num_vectors_);
+            ids_to_delete[vector_details.first].push_back(vector_id);
+        }
+
+        // Now perform the deletes for each partition
+        for(auto& curr_partition_deletes : ids_to_delete) { 
+            IndexPartition* partition = curr_partition_deletes.first;
+            for(int64_t id_to_remove : curr_partition_deletes.second) { 
+                // First lookup the offset of the id to remove
+                // The reason we access it here rather than storing it in the map because
+                // ids position previous deletes may have changed this
+                int64_t delete_idx = id_to_location_[id_to_remove].second;
+
+                // Now actually delete the item at that offset
+                map_erase(id_to_remove);
+                int64_t swapped = partition->remove(delete_idx);
+
+                // Update the position of the vector we swapped into the deleted vectors position
+                if (swapped != -1) map_swap(partition, delete_idx, partition->ids_[delete_idx]);
             }
+
+            // Finally check if the index should be resized after these operations
+            partition->check_buffer_size();
         }
     }
 

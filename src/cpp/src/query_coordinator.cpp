@@ -985,7 +985,7 @@ std::shared_ptr<SearchResult> QueryCoordinator::worker_scan(
 {
     int64_t nQ = x.size(0), D = x.size(1);
     int     K  = params->k;
-    bool    use_aps = (params->recall_target>0 && !params->batched_scan && parent_);
+    bool    use_aps = (params->recall_target>0 && parent_);
 
     int64_t nJobsExpected = 0;
 
@@ -1435,7 +1435,7 @@ shared_ptr<SearchResult> QueryCoordinator::search(Tensor x, shared_ptr<SearchPar
         }
 
         // if recall_target is set, we need an initial set of partitions to consider
-        if (search_params->recall_target > 0.0 && !search_params->batched_scan) {
+        if (search_params->recall_target > 0.0) {
             int initial_num_partitions_to_search = std::max(
                 (int) (partition_manager_->nlist() * search_params->initial_search_fraction), 1);
             parent_search_params->k = initial_num_partitions_to_search;

@@ -311,17 +311,8 @@ shared_ptr<ModifyTimingInfo> PartitionManager::remove(const Tensor &ids) {
     auto e1 = std::chrono::high_resolution_clock::now();
     timing_info->input_validation_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e1 - s1).count();
 
-    auto s2 = std::chrono::high_resolution_clock::now();
-    std::set<faiss::idx_t> to_remove;
-    auto ptr = ids.data_ptr<int64_t>();
-    for (int64_t i = 0; i < ids.size(0); i++) {
-        to_remove.insert(static_cast<faiss::idx_t>(ptr[i]));
-    }
-    auto e2 = std::chrono::high_resolution_clock::now();
-    timing_info->find_partition_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e2 - s2).count();
-
     auto s3 = std::chrono::high_resolution_clock::now();
-    partition_store_->remove_vectors(to_remove);
+    partition_store_->remove_vectors(ids.data_ptr<int64_t>(), ids.size(0));
     if (debug_) {
         std::cout << "[PartitionManager] remove: Completed removal." << std::endl;
     }
