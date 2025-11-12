@@ -50,6 +50,7 @@ class MaintenancePolicy {
   shared_ptr<MaintenancePolicyParams> params_;        ///< Maintenance parameters.
   shared_ptr<MaintenanceCostEstimator> cost_estimator_; ///< Cost estimator for maintenance actions.
   shared_ptr<HitCountTracker> hit_count_tracker_;       ///< Hit count tracker for partition hit rates.
+  std::unordered_map<int64_t, int64_t> snapshot_sizes_; /// Map to keep track of index sizes
 
   /**
    * @brief Perform local refinement on a set of partition IDs.

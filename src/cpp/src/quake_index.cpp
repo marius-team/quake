@@ -150,7 +150,7 @@ shared_ptr<ModifyTimingInfo> QuakeIndex::add(Tensor x, Tensor ids) {
         throw std::runtime_error("[QuakeIndex::add()] No partition manager. Build the index first.");
     }
 
-    auto modify_info = partition_manager_->add(x, ids);
+    auto modify_info = partition_manager_->add(x, ids, torch::Tensor(), false, true);
     modify_info->n_vectors = x.size(0);
     return modify_info;
 }
@@ -160,7 +160,7 @@ shared_ptr<ModifyTimingInfo> QuakeIndex::remove(Tensor ids) {
         throw std::runtime_error("[QuakeIndex::remove()] No partition manager. Build the index first.");
     }
 
-    auto modify_info = partition_manager_->remove(ids);
+    auto modify_info = partition_manager_->remove(ids, true);
     modify_info->n_vectors = ids.size(0);
     return modify_info;
 }

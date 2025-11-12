@@ -8,6 +8,8 @@
 #define LIST_SCANNING_H
 
 #include <common.h>
+#include <immintrin.h>
+
 #include "faiss/utils/Heap.h"
 #include "faiss/utils/distances.h"
 #include "sorting/pdqsort.h"
@@ -521,7 +523,6 @@ inline void ip_blas(
         }
     }
 }
-
 
 inline void l2_blas(
         const float*   __restrict x,

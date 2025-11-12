@@ -82,6 +82,10 @@ public:
         int64_t scan_time_ns = 0; ///< Time spent on scanning.
         int64_t enqueue_time_ns = 0; ///< Time spent enqueuing.
         int64_t job_time_ns = 0; ///< Time spent on job processing (excluding waiting).
+
+        int64_t bytes_scan_total = 0; ///< Total partition bytes scanned for throughput calculation. 
+        int64_t partition_size = 0; 
+        int64_t num_scan_jobs = 0;
     };
 
     struct NUMAResources {

@@ -12,7 +12,7 @@ SRC_DIR = "big_ann_perf_numbers"
 DST_DIR = "bigann_perf_vis"
 
 NUM_OPERATIONS_TO_VISUALIZE = 1300
-def visualize_perf(src_dataset):
+def visualize_perf(src_dataset, config_details):
     # Load CSV
     df = pd.read_csv(os.path.join(SRC_DIR, src_dataset))
     df = df.head(NUM_OPERATIONS_TO_VISUALIZE)
@@ -44,12 +44,13 @@ def visualize_perf(src_dataset):
     total_all_min = total_search_min + total_delete_min + total_insert_min + total_maintenance_min
 
     # Create 3 rows x 2 columns subplots
-    fig, axs = plt.subplots(3, 2, figsize=(15, 10), sharex=True)
+    fig, axs = plt.subplots(4, 2, figsize=(12, 12), sharex=True)
 
     # Row 0
     axs[0, 0].plot(x, recall_mean, color='green')
     axs[0, 0].set_ylabel('Recall@10')
     axs[0, 0].set_title('Recall Mean')
+    print("Average Recall across the run is", np.mean(recall_mean), "for", src_dataset)
 
     axs[0, 1].plot(x, latency_search, color='purple')
     axs[0, 1].set_ylabel('Latency (ms)')
@@ -70,11 +71,46 @@ def visualize_perf(src_dataset):
     axs[2, 0].set_ylabel('Latency (ms)')
     axs[2, 0].set_title(f'Maintenance Latency (Total: {total_maintenance_min:.2f} min)')
 
-    # Hide unused subplot (2,1)
-    axs[2, 1].axis('off')
+    axs[2, 0].plot(x_maintenance, latency_maintenance, color='blue')
+
+    # Bottom right subplot: Vectors and Partitions over time
+    non_search_df = df[df['step_type'] != 'search']
+    ax1 = axs[2, 1]
+    ax1.plot(non_search_df['step_num'].values, non_search_df['num_vectors'].values, color='olive', label='Num Vectors')
+    ax1.set_xlabel('Step Num')
+    ax1.set_ylabel('Num Vectors', color='olive')
+    ax1.tick_params(axis='y', labelcolor='olive')
+
+    # Create second y-axis sharing the same x-axis
+    ax2 = ax1.twinx()
+
+    # Plot num_partitions on right y-axis
+    ax2.plot(non_search_df['step_num'].values, non_search_df['num_partitions'].values, color='brown', label='Num Partitions')
+    ax2.set_ylabel('Num Partitions', color='brown')
+    ax2.tick_params(axis='y', labelcolor='brown')
+
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines_1 + lines_2, labels_1 + labels_2)
+
+    axs[2, 1].set_title('Vector and Partition Count')
+
+    # Plot the scan percentage needed to cover the ground truth vectors
+    axs[3, 0].plot(search_df['step_num'].values, search_df['gt_scan_mean'].values, color='green')
+    axs[3, 0].fill_between(search_df['step_num'].values, search_df['gt_scan_mean'].values - search_df['gt_scan_dev'].values, search_df['gt_scan_mean'].values + search_df['gt_scan_dev'].values, 
+        color='green', alpha=0.3)
+    axs[3, 0].set_xlabel('Step Num')
+    axs[3, 0].set_ylabel('Partition Scan Percentage')
+    axs[3, 0].set_title('Rank of GT partitions as Search Candidates')
+
+    # Hide unused subplot (3,1)
+    axs[3, 1].axis('off')
+    for i in range (4):
+        for j in range(2):
+            axs[i, j].tick_params(labelbottom=True)
 
     # Overall title including total latency sum in minutes
-    fig.suptitle(f'BigANN streaming task query performance (k=10, Target Recall = 0.9, Num Operations = {NUM_OPERATIONS_TO_VISUALIZE})\nTotal Latency: {total_all_min:.2f} minutes', fontsize=16)
+    fig.suptitle(f'{config_details}\nTotal Latency: {total_all_min:.2f} minutes', fontsize=16)
     
     fig.tight_layout()
     plt.savefig(os.path.join(DST_DIR, src_dataset.replace("csv", "png")), dpi=300)
@@ -99,7 +135,7 @@ def visualize_percentage_variation(src_dataset):
     axes[0].set_title('Search Latency over Step Number')
     axes[0].legend()
 
-    # Bottom subplot: recall_mean vs step_num
+    # Bottom left subplot: recall_mean vs step_num
     for i, nprobe in enumerate(nprobe_values):
         sub_df = search_df[search_df['nprobe_percentage'] == nprobe]
         axes[1].plot(sub_df['step_num'].values, sub_df['recall_mean'].values, label=f'Factor Scanned: {nprobe}', color=colors[i])
@@ -111,10 +147,10 @@ def visualize_percentage_variation(src_dataset):
     plt.savefig(os.path.join(DST_DIR, src_dataset.replace("csv", "png")), dpi=300)
 
 if __name__ == "__main__":
-    # visualize_perf("scan_all_no_batch_no_aps.csv")
-    # visualize_perf("scan_all_using_batching_250_no_aps.csv")
-    # visualize_perf("scan_all_using_batching_2500_no_aps.csv")
-    visualize_perf("scan_using_batching_250_aps_recall_0.9_search_0.3.csv")
-    visualize_perf("scan_using_batching_250_aps_recall_0.9_search_0.15.csv")
-    visualize_perf("scan_using_batching_250_aps_recall_0.9_search_0.15_0.05.csv")
-    visualize_percentage_variation("scan_vary_using_batching_250_no_aps.csv")
+    configs_to_visualize = [
+        ("scan_0.1_no_aps_refinment_wma_delete.csv", "Scan Percentage = 10%, Mainteance with No Refinment and Search with No APS"),
+        ("scan_0.12_no_aps_refinment_wma_delete.csv", "Scan Percentage = 12%, Mainteance with No Refinment and Search with No APS")
+    ]
+
+    for dataset, config_details in configs_to_visualize:
+        visualize_perf(dataset, config_details)

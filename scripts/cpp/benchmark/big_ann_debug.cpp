@@ -20,6 +20,7 @@
 #include <numeric>
 #include <iterator>
 #include <utility>
+#include <chrono>
 
 #include <torch/script.h>    // For c10::IValue
 #include <torch/serialize.h> // For torch::load
@@ -31,7 +32,6 @@ using torch::Tensor;
 #define DIRECTORY_PATH DATASET_PATH "index_arguments/"
 #define GROUND_TRUTH_PATH DATASET_PATH "29998994/final_runbook.yaml/"
 
-constexpr bool RUN_MAINTEANCE = true;
 constexpr float DELETE_THRESHOLD = 0.7;
 constexpr float CAPACITY_THRESHOLD = 1.15;
 
@@ -167,13 +167,15 @@ Tensor load_tensor(std::string file_path) {
     return loaded_module.attr("tensor").toTensor();;
 }
 
+constexpr bool RUN_MAINTEANCE = true;
 void perform_mainteance(std::shared_ptr<QuakeIndex> index, std::ofstream& result_writer) { 
     if(RUN_MAINTEANCE) { 
         std::shared_ptr<MaintenanceTimingInfo> result = index->maintenance();
         result_writer << result->total_time_us/MS_TO_US << ",";
         
-        std::cout << "Mainteance Metrics: Total Time ms - " << result->total_time_us/MS_TO_US << ", Num Splits - " << result->n_splits << ", Num Deletes - " << result->n_deletes << ", Delete Time ms - " << result->delete_time_us/MS_TO_US;
-        std::cout << ", Split Time ms - " << result->split_time_us/MS_TO_US << ", Refinement Time ms - " << result->refinement_time_us/MS_TO_US << std::endl;
+        std::cout << "Mainteance Metrics: Total Time ms - " << result->total_time_us/MS_TO_US << ", Num Splits - " << result->n_splits << ", Num Deletes - " << result->n_deletes;
+        std::cout << ", Num Reclusters - " << result->n_recluster << ", Delete Time ms - " << result->delete_time_us/MS_TO_US << ", Split Time ms - " << result->split_time_us/MS_TO_US;
+        std::cout << ", Recluster Time ms - " <<  result->recluster_time_us/MS_TO_US << ", Refinement Time ms - " << result->refinement_time_us/MS_TO_US << std::endl;
     }
 }
 
@@ -189,15 +191,19 @@ void print_search_metrics(std::shared_ptr<SearchTimingInfo> timing_info, int lev
     std::cout << "\t[Main] Job Wait Time ms - " << timing_info->job_wait_time_ns/MS_TO_NS << std::endl;
     std::cout << "\t[Main] Result Aggregate Time ms - " << timing_info->result_aggregate_time_ns/MS_TO_NS << std::endl << std::endl;
 
+    std::cout << "\t[Worker] Total Worker Jobs Executed - " << timing_info->total_worker_jobs << std::endl;
     std::cout << "\t[Worker] Job Time ms - " << timing_info->worker_job_time_ns/MS_TO_NS << std::endl;
     std::cout << "\t[Worker] Wait Time ms - " << timing_info->worker_wait_time_ns/MS_TO_NS << std::endl;
     std::cout << "\t[Worker] Process Preamable Time ms - " << timing_info->worker_process_preamble_time_ns/MS_TO_NS << std::endl;
     std::cout << "\t[Worker] Scan Time ms - " << timing_info->worker_scan_time_ns/MS_TO_NS << std::endl;
+    std::cout << "\t[Worker] Partition Size - " << timing_info->worker_partition_size << std::endl;
+    std::cout << "\t[Worker] Partition Scan Bytes - " << timing_info->worker_partition_size_bytes << std::endl;
+    std::cout << "\t[Worker] Partition Scan Through (GB/s) - " << timing_info->worker_scan_throughput << std::endl;
     std::cout << "\t[Worker] Result Enque Time ms - " << timing_info->worker_enqueue_time_ns/MS_TO_NS << std::endl;
     std::cout << "\t[Worker] Process Time ms - " << timing_info->worker_process_time_ns/MS_TO_NS << std::endl;
 }
 
-Tensor load_ground_truth_ids(uint32_t step_num) { 
+std::pair<Tensor, Tensor> load_ground_truth_data(uint32_t step_num) { 
     // Open the input file
     std::string gt_path = std::string(GROUND_TRUTH_PATH) + "step" + std::to_string(step_num) + ".gt100";
     std::ifstream input_file(gt_path, std::ios::binary | std::ios::in);
@@ -211,10 +217,16 @@ Tensor load_ground_truth_ids(uint32_t step_num) {
     input_file.read(reinterpret_cast<char*>(&d), sizeof(uint32_t));
 
     // Read the gt ids
-    std::vector<int32_t> I_data(n * d);
-    input_file.read(reinterpret_cast<char*>(I_data.data()), n * d * sizeof(int32_t));
+    std::vector<int32_t> ids_data(n * d);
+    input_file.read(reinterpret_cast<char*>(ids_data.data()), n * d * sizeof(int32_t));
+    Tensor gt_ids = torch::from_blob(ids_data.data(), {static_cast<long>(n), static_cast<long>(d)}, torch::kInt32).clone();
 
-    return torch::from_blob(I_data.data(), {static_cast<long>(n), static_cast<long>(d)}, torch::kInt32).clone();
+    // Read the gt distances 
+    std::vector<float> distances_data(n * d);
+    input_file.read(reinterpret_cast<char*>(distances_data.data()), n * d * sizeof(float));
+    Tensor gt_distances = torch::from_blob(distances_data.data(), {static_cast<long>(n), static_cast<long>(d)}, torch::kFloat32).clone();
+
+    return std::make_pair(gt_ids, gt_distances); // Return empty tensor for distances
 }
 
 float calculateStandardDeviation(const std::vector<float>& data, float mean) {
@@ -232,10 +244,17 @@ float calculateStandardDeviation(const std::vector<float>& data, float mean) {
     return std::sqrt(sum_sq_diff / (data.size() - 1));
 }
 
-std::pair<float, float> calculate_recall(std::shared_ptr<SearchResult> search_result, uint32_t step_num) { 
+constexpr bool LOG_RECALL_IDS = false;
+constexpr bool PRINT_GT_DISTANCES = false;
+std::pair<float, float> calculate_recall(std::shared_ptr<QuakeIndex> index, Tensor queries, std::shared_ptr<SearchResult> search_result, uint32_t step_num) { 
     // Load the tensors
-    Tensor gt_ids = load_ground_truth_ids(step_num).to(torch::kInt64);
+    std::pair<torch::Tensor, torch::Tensor> gt_data = load_ground_truth_data(step_num);
+    Tensor gt_ids = gt_data.first.to(torch::kInt64).contiguous();
+    Tensor gt_distances = gt_data.second.to(torch::kFloat32).contiguous();
+
     Tensor predicted_ids = search_result->ids.to(torch::kInt64).contiguous();
+    Tensor predicted_distances = search_result->distances.to(torch::kFloat32).contiguous();
+
     assert(gt_ids.sizes()[0] == predicted_ids.sizes()[0]);
 
     // Calculate the recall for each query
@@ -246,12 +265,16 @@ std::pair<float, float> calculate_recall(std::shared_ptr<SearchResult> search_re
     // Calculate the recall for each query
     std::vector<float> per_query_recall;
     int64_t* gt_ids_ptr = gt_top_k.data_ptr<int64_t>();
+    float* gt_distances_ptr = gt_distances.data_ptr<float>();
+
     int64_t* predicted_ids_ptr = predicted_ids.data_ptr<int64_t>();
+    float* predicted_distances_ptr = predicted_distances.data_ptr<float>();
     for(int i = 0; i < num_queries; i++) {
         // Get the ground truth and predicted sets
-        int64_t* query_gt = gt_ids_ptr + i * k;
-        int64_t* query_predicted = predicted_ids_ptr + i * k;
+        int64_t* query_gt = gt_ids_ptr + i * k; float* query_gt_distances = gt_distances_ptr + i * k;
+        int64_t* query_predicted = predicted_ids_ptr + i * k; float* query_predicted_distances = predicted_distances_ptr + i * k;
         std::set<int64_t> gt_ids; std::set<int64_t> predicted_ids; 
+        if constexpr(LOG_RECALL_IDS) std::cout << "Query " << i << " Result: " << std::endl;
         for(int j = 0; j < k; j++) { 
             gt_ids.insert(query_gt[j]);
             predicted_ids.insert(query_predicted[j]);
@@ -267,6 +290,46 @@ std::pair<float, float> calculate_recall(std::shared_ptr<SearchResult> search_re
         float query_recall = (1.0 * intersection_set.size())/k;
         per_query_recall.push_back(query_recall);
     }
+
+    std::shared_ptr<faiss::DynamicInvertedLists> partition_store = index->partition_manager_->partition_store_;
+    queries = queries.contiguous();
+    float* all_queries_vectors_ptr = queries.data_ptr<float>();
+    int d = partition_store->d_;
+
+    if constexpr(PRINT_GT_DISTANCES) { 
+        for(int i = 0; i < num_queries; i++) {
+            std::cout << "-------------" << std::endl;
+            std::cout << "Query " << i << " Ground Truth Details: " << std::endl;
+            int64_t* query_gt = gt_ids_ptr + i * k; float* query_gt_distances = gt_distances_ptr + i * k;
+            int64_t* query_predicted = predicted_ids_ptr + i * k; float* query_predicted_distances = predicted_distances_ptr + i * k;
+            float* query_vector_ptr = all_queries_vectors_ptr + i * d;
+
+            // First log GT vector results
+            for(int j = 0; j < k; j++) { 
+                int64_t curr_gt_id = query_gt[j];
+                std::cout << "\tGT Result " << j << " - ID: " << curr_gt_id << ", GT Distance: " << query_gt_distances[j];
+
+                // Also calculate the distance of the gt vector to the query vector
+                std::pair<IndexPartition*, int64_t> vector_location = partition_store->id_to_location_[curr_gt_id];
+                float* gt_vector_ptr = reinterpret_cast<float*>(vector_location.first->codes_) + vector_location.second * d;
+                float distance = std::sqrt(faiss::fvec_L2sqr(query_vector_ptr, reinterpret_cast<float*>(gt_vector_ptr), d));
+
+                std::cout << ", GT Vector Faiss L2 Distance: " << distance << std::endl;
+            }
+
+            std::cout << std::endl;
+
+            // Now log the predicted results
+            std::cout << "Query " << i << " Search Details: " << std::endl;
+            for(int j = 0; j < k; j++) {
+                float curr_distance = query_predicted_distances[j];
+                float l2_value = std::pow(curr_distance, 2);
+                std::cout << "\tSearch Result " << j << " - ID: " << query_predicted[j] << ", L2 Distance: " << l2_value << std::endl;
+            }
+
+            std::cout << "-------------" << std::endl;
+        }
+    }
     
     // Return the average recall across all the queries
     float mean = std::accumulate(per_query_recall.begin(), per_query_recall.end(), 0.0) / per_query_recall.size();
@@ -281,18 +344,19 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
         exit(1);
     }
 
-    // Allocate some memory but don't free it (to trigger LSAN)
-    char* allocated_memory = reinterpret_cast<char*>(std::malloc(100 * sizeof(char)));
-
     // Create and build the index
     std::shared_ptr<QuakeIndex> index = std::make_shared<QuakeIndex>();
 
     std::shared_ptr<IndexBuildParams> build_params = std::make_shared<IndexBuildParams>();
-    build_params->nlist = 512;
+    build_params->dimension = 100;
+    build_params->nlist = 1024;
     build_params->num_workers = 8;
     build_params->metric = "l2";
+    build_params->niter = 25;
 
     build_params->parent_params = std::make_shared<IndexBuildParams>();
+    build_params->parent_params->dimension = 100;
+    build_params->parent_params->nlist = 1;
     build_params->parent_params->metric = "l2";
     build_params->parent_params->num_workers = 0;
 
@@ -302,12 +366,15 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
 
     // Also initialize with the default mainteance policy
     std::shared_ptr<MaintenancePolicyParams> mainteance_policy = std::make_shared<MaintenancePolicyParams>();
-    mainteance_policy->window_size = 2500;
-    mainteance_policy->split_threshold_ns = 10000;
-    mainteance_policy->delete_threshold_ns = 75000;
-    mainteance_policy->refinement_radius = 10;
-    mainteance_policy->refinement_iterations = 1;
-    mainteance_policy->min_partition_size = 8192;
+    mainteance_policy->window_size = 5000;
+    mainteance_policy->split_threshold_ns = 2100;
+    mainteance_policy->split_knn_iterations = 10;
+    mainteance_policy->delete_threshold_ns = 2750;
+    mainteance_policy->partition_reduction_threshold = 0.45;
+    mainteance_policy->refinement_radius = 0;
+    mainteance_policy->refinement_iterations = 5;
+    mainteance_policy->churn_recluster_threshold = 0.75;
+    mainteance_policy->min_partition_size = 1024;
     mainteance_policy->enable_split_rejection = true;
     mainteance_policy->enable_delete_rejection = true;
     index->initialize_maintenance_policy(mainteance_policy);
@@ -315,7 +382,160 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
     return index;
 }
 
-constexpr float RECALL_TARGET = 0.9;
+constexpr bool CALCULATE_RECALL_GIVEN_GT_PARITITONS = false;
+std::pair<float, float> check_gt_partitions_scanned(std::shared_ptr<QuakeIndex> index, Step& search_step, float partition_search_fraction) { 
+    // Load the search query
+    Tensor search_queries = load_tensor(search_step.vectors_path).to(torch::kFloat32);
+
+    // Get the ground ids that were scanned
+    std::pair<torch::Tensor, torch::Tensor> gt_data = load_ground_truth_data(search_step.step_number);
+    Tensor gt_ids = gt_data.first.to(torch::kInt64);
+    int k = 10;
+    Tensor gt_top_k = gt_ids.slice(1, 0, k).contiguous();
+
+    // Get the partitions that the ground ids belong to
+    int64_t* gt_ids_ptr = gt_top_k.data_ptr<int64_t>();
+    int num_queries = gt_ids.sizes()[0];
+    std::shared_ptr<faiss::DynamicInvertedLists> partition_store = index->partition_manager_->partition_store_;
+    if (partition_store->id_to_location_.empty()) partition_store->build_map();
+
+    std::vector<std::vector<int64_t>> gt_partitions(num_queries);
+    for(int i = 0; i < num_queries; i++) {
+        int64_t* query_gt = gt_ids_ptr + i * k;
+        for(int j = 0; j < k; j++) { 
+            // Get the partition id for this gt id
+            int64_t vector_id = query_gt[j];
+            if(partition_store->id_to_location_.find(vector_id) == partition_store->id_to_location_.end()) { 
+                std::string err_message = std::string("[ERROR] Failed to find id ") + std::to_string(vector_id) + " in partition store";
+                throw std::runtime_error(err_message);
+            }
+
+            IndexPartition* partition = partition_store->id_to_location_[vector_id].first;
+            if(partition->partition_id_ == -1) { 
+                std::string err_message = std::string("[ERROR] Vector id ") + std::to_string(vector_id) + " maps to partition with invalid partition id -1";
+                throw std::runtime_error(err_message);
+            }
+
+            gt_partitions[i].push_back(partition->partition_id_);
+        }
+    }
+
+    if constexpr(CALCULATE_RECALL_GIVEN_GT_PARITITONS) { 
+        // Initialize the tensor of the gt partitions
+        Tensor partitions_to_scan = torch::full({num_queries, k}, -1, torch::kInt64);
+        auto search_partition_id_accessor = partitions_to_scan.accessor<int64_t, 2>();
+        for(int i = 0; i < num_queries; i++) {
+            std::set<int64_t> unique_partitions;
+            for(int j = 0; j < k; j++) { 
+                int64_t curr_partition_id = static_cast<int64_t>(gt_partitions[i][j]);
+                if(unique_partitions.find(curr_partition_id) != unique_partitions.end()) {
+                    curr_partition_id = -1;
+                } else { 
+                    unique_partitions.insert(curr_partition_id);
+                }
+                search_partition_id_accessor[i][j] = curr_partition_id;
+            }  
+        }
+
+        // Create the search params for the partition scan
+        std::shared_ptr<SearchParams> search_params = std::make_shared<SearchParams>();
+        search_params->nprobe = k;
+        search_params->k = k;
+        search_params->recall_target = -1.0;
+        search_params->batched_scan = true;
+        search_params->batch_size = 500;
+        search_params->track_hits = false;
+
+        // Get the resulting vectors and return the recall/mean
+        std::shared_ptr<SearchResult> gt_search_result = index->query_coordinator_->scan_partitions(search_queries, partitions_to_scan, search_params);
+
+        std::pair<float, float> recall_result = calculate_recall(index, search_queries, gt_search_result, search_step.step_number);
+        std::cout << "Scanning index with GT partitions Recall: Mean - " << recall_result.first << ", Std Dev - " << recall_result.second << std::endl;
+    }
+
+    // Now search the parent for the query vectors to get the partitions that were scanned
+    std::shared_ptr<SearchParams> search_params = std::make_shared<SearchParams>();
+    int num_partitions_to_scan = static_cast<int>(index->nlist());
+    search_params->k = num_partitions_to_scan;
+    search_params->batched_scan = true;
+    search_params->track_hits = false;
+    search_params->batch_size = 500;
+    std::shared_ptr<QuakeIndex> parent_index = index->parent_;
+    std::shared_ptr<SearchResult> search_result = parent_index->search(search_queries, search_params);
+
+    // Verify that the ground truth partitions were scanned
+    Tensor searched_ids = search_result->ids.to(torch::kInt64).contiguous();
+    int64_t* searched_ids_ptr = searched_ids.data_ptr<int64_t>();
+    Tensor search_dists = search_result->distances.to(torch::kFloat32).contiguous();
+    float* searched_dists_ptr = search_dists.data_ptr<float>();
+
+    std::shared_ptr<faiss::DynamicInvertedLists> parent_partition_store = parent_index->partition_manager_->partition_store_;
+    int d = parent_partition_store->d_;
+
+    search_queries = search_queries.contiguous();
+    float* all_queries_vectors_ptr = search_queries.data_ptr<float>();
+    std::vector<float> per_query_scan_fraction(num_queries);
+    for(int i = 0; i < num_queries; i++) {
+        // Get the ranking of the partitions for this query
+        float* query_vec_ptr = all_queries_vectors_ptr + i * d;
+        int64_t* query_searched = searched_ids_ptr + i * num_partitions_to_scan;
+        float* query_searched_dists = searched_dists_ptr + i * num_partitions_to_scan;
+        std::unordered_map<int64_t, std::pair<int, float>> partition_loc_map; 
+
+        for(int j = 0; j < num_partitions_to_scan; j++) { 
+            int64_t partition_id = query_searched[j];
+            if(partition_id != -1) partition_loc_map[partition_id] = std::make_pair(j, query_searched_dists[j]);
+        }
+
+        // Now determine the max rank of the gt partitions
+        bool log_query = false;
+        if(log_query) std::cout << "Query " << i << " GT Partition Ranks: " << std::endl;
+        int max_rank = -1;
+        for(int64_t gt_partition_id : gt_partitions[i]) { 
+            if(partition_loc_map.find(gt_partition_id) == partition_loc_map.end()) { 
+                std::cerr << "[ERROR] Query " << i << " didn't get rank for gt partition id " << gt_partition_id << std::endl;
+                std::cout << "Result for " << num_partitions_to_scan << " partitions: ";
+                for(int j = 0; j < num_partitions_to_scan; j++) { 
+                    std::cout << "(" << query_searched[j] << "," << query_searched_dists[j] << std::endl;
+                }
+                std::cout << std::endl;
+                exit(1);
+            }
+            std::pair<int, float> partition_details = partition_loc_map[gt_partition_id];
+
+            max_rank = std::max(max_rank, partition_details.first);
+            if(log_query) { 
+                std::cout << "\t GT Partition ID: " << gt_partition_id << ", Rank: " << partition_details.first << "/" << num_partitions_to_scan << ", Quake Distance: " << partition_details.second;
+                
+                // Get the centroid with the ground truth partition id 
+                if(parent_partition_store->id_to_location_.empty()) parent_partition_store->build_map();
+                if(parent_partition_store->id_to_location_.find(gt_partition_id) == parent_partition_store->id_to_location_.end()) { 
+                    std::string err_message = std::string("[ERROR] Failed to find partition id ") + std::to_string(gt_partition_id) + " in parent partition store";
+                    throw std::runtime_error(err_message);
+                }
+
+                // Calculate the distance to it from the query vector
+                std::pair<IndexPartition*, int64_t> vector_location = parent_partition_store->id_to_location_[gt_partition_id];
+                float* centorid_vec_ptr = reinterpret_cast<float*>(vector_location.first->codes_) + vector_location.second * d;
+                float faiss_distance = std::sqrt(faiss::fvec_L2sqr(query_vec_ptr, centorid_vec_ptr, d));
+                std::cout << ", Faiss Distance: " << faiss_distance << std::endl;
+            } 
+        }
+        if(log_query) std::cout << std::endl;
+
+        // Now calculate the percentage of centroids we would need to scan to get all the gt partitions
+        per_query_scan_fraction[i] = (100.0 * max_rank)/num_partitions_to_scan;
+    }
+
+    // Calculate the mean and std dev of scan fraction
+    float mean = std::accumulate(per_query_scan_fraction.begin(), per_query_scan_fraction.end(), 0.0) / per_query_scan_fraction.size();
+    float standard_dev = calculateStandardDeviation(per_query_scan_fraction, mean);
+    return std::make_pair(mean, standard_dev);
+}
+
+constexpr bool CHECK_QUERY_RECALL = true;
+constexpr bool CHECK_GT_PARITIONS_SCANNED = true;
+constexpr float RECALL_TARGET = -1.0; // Use this to enable/disable APS
 void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step, std::ofstream& result_writer, float partition_search_fraction) { 
     // Load the search query
     Tensor search_queries = load_tensor(search_step.vectors_path).to(torch::kFloat32);
@@ -328,22 +548,36 @@ void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step, std::o
     search_params->initial_search_fraction = partition_search_fraction;
     search_params->batched_scan = true;
     search_params->batch_size = 500;
+    search_params->track_hits = true;
 
     // Run the search
     std::shared_ptr<SearchResult> search_result = index->search(search_queries, search_params);
     print_search_metrics(search_result->timing_info->parent_info, 0);
     std::cout << std::endl;
     print_search_metrics(search_result->timing_info, 1);
+    std::cout << std::endl;
     
-    // Log the results
-    std::pair<float, float> recall_result = calculate_recall(search_result, search_step.step_number);
-    std::cout << "\nSearch Recall: Mean - " << recall_result.first << ", Std Dev - " << recall_result.second << std::endl;
-
+    // Calculate the recall
     result_writer << search_step.step_number << ",search," << search_result->timing_info->total_time_ns/MS_TO_NS << ","; 
-    result_writer << recall_result.first << "," << recall_result.second << ",";
+    if constexpr(CHECK_QUERY_RECALL) { 
+        std::pair<float, float> recall_result = calculate_recall(index, search_queries, search_result, search_step.step_number);
+        std::cout << "\nSearch Recall: Mean - " << recall_result.first << ", Std Dev - " << recall_result.second << std::endl;  
+        result_writer << recall_result.first << "," << recall_result.second << ",";
+    } else { 
+        result_writer << "-1.0,-1.0,";   
+    }    
+
+    // Optionally perform gt checks
+    if constexpr(CHECK_GT_PARITIONS_SCANNED) { 
+        std::pair<float, float> gt_partitions_result = check_gt_partitions_scanned(index, search_step, partition_search_fraction);
+        std::cout << "\nGT Percent of Partitions to Scan: Mean - " << gt_partitions_result.first << ", Std Dev - " << gt_partitions_result.second << std::endl;
+        result_writer << gt_partitions_result.first << "," << gt_partitions_result.second << ",";
+    } else { 
+        result_writer << "-1.0,-1.0,";
+    }
 }
 
-constexpr size_t INSERT_CHUNK_SIZE = 5000;
+constexpr size_t INSERT_CHUNK_SIZE = 128;
 void perform_insert(std::shared_ptr<QuakeIndex> index, Step& insert_step, std::ofstream& result_writer) { 
     // Load the arguments
     Tensor insert_vectors = load_tensor(insert_step.vectors_path).to(torch::kFloat32);
@@ -362,7 +596,7 @@ void perform_insert(std::shared_ptr<QuakeIndex> index, Step& insert_step, std::o
     }
     std::cout << "Finished insertion in " << num_chunks << " chunks in " << total_time_us << " us" << std::endl;
 
-    result_writer << insert_step.step_number << ",insert," << total_time_us/MS_TO_US << ",-1.0,-1.0,";
+    result_writer << insert_step.step_number << ",insert," << total_time_us/MS_TO_US << ",-1.0,-1.0,-1.0,-1.0,";
 }
 
 constexpr size_t DELETE_CHUNK_SIZE = 5000;
@@ -382,7 +616,7 @@ void perform_delete(std::shared_ptr<QuakeIndex> index, Step& delete_step, std::o
     }
     std::cout << "Finished delete in " << num_chunks << " chunks in " << total_time_us << " us" << std::endl;
 
-    result_writer << delete_step.step_number << ",delete," << total_time_us/MS_TO_US << ",-1.0,-1.0,";
+    result_writer << delete_step.step_number << ",delete," << total_time_us/MS_TO_US << ",-1.0,-1.0,-1.0,-1.0,";
 }
 
 constexpr float BYTES_TO_GB = 1000.0 * 1000.0 * 1000.0;
@@ -402,7 +636,7 @@ float log_memory_stats(std::shared_ptr<QuakeIndex> index, int level, std::ofstre
     // Only log the memory for the first level
     float total_memory_gb = total_memory/BYTES_TO_GB;
 
-    std::cout << "Level " << level << " Memory Consumption: Vectors - " << total_vectors << ", Buffer Capacity - " << buffer_capacity << ", Memory (GB) - " << total_memory_gb << std::endl;
+    // std::cout << "Level " << level << " Memory Consumption: Vectors - " << total_vectors << ", Buffer Capacity - " << buffer_capacity << ", Memory (GB) - " << total_memory_gb << std::endl;
 
     if(index->parent_ != nullptr) { 
         total_memory_gb += log_memory_stats(index->parent_, level + 1, result_writer);
@@ -411,11 +645,12 @@ float log_memory_stats(std::shared_ptr<QuakeIndex> index, int level, std::ofstre
     return total_memory_gb;
 }
 
-constexpr float SCAN_PERCENTAGE_RANGE[2] = {0.1, 0.2};
+constexpr float SCAN_PERCENTAGE_RANGE[2] = {0.12, 0.12};
+constexpr size_t MIN_OPERATIONS_BEFORE_MAINTEANCE = 0;
 constexpr size_t NUM_OPERATIONS_BETWEEN_MAINTEANCE = 1;
 constexpr size_t NUM_TEST_OPERATIONS = 0;
 
-#define RESULT_WRITE_PATH "../scripts/big_ann_perf_numbers/scan_using_batching_250_aps_recall_0.9_search_0.2_0.1.csv"
+#define RESULT_WRITE_PATH "../scripts/big_ann_perf_numbers/scan_0.12_no_aps_refinment_wma_delete.csv"
 
 int main() { 
     // Configure global params
@@ -429,10 +664,13 @@ int main() {
 
     // Create the output csv file
     std::ofstream result_writer(RESULT_WRITE_PATH);
-    result_writer << "step_num,step_type,latency_ms,recall_mean,recall_std_dev,mainteance_ms,index_mem_gb,num_partitions" << std::endl;
+    result_writer << "step_num,step_type,latency_ms,recall_mean,recall_std_dev,gt_scan_mean,gt_scan_dev,mainteance_ms,index_mem_gb,num_partitions,num_vectors" << std::endl;
 
+    auto build_start_time = std::chrono::high_resolution_clock::now();
     std::shared_ptr<QuakeIndex> index = build_index(steps_arr[0]); 
-    std::cout << "Initialized Quake Index " << std::endl;
+    auto build_end_time = std::chrono::high_resolution_clock::now();
+    int64_t build_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(build_end_time - build_start_time).count();
+    std::cout << "Initialized Quake Index in " << build_time_ns/MS_TO_NS << " ms" << std::endl;
 
     // Now perform the streaming operations against the index
     size_t num_test_operations = NUM_TEST_OPERATIONS; 
@@ -459,7 +697,7 @@ int main() {
         }
 
         // Run the mainteance
-        if(curr_step.step_number % NUM_OPERATIONS_BETWEEN_MAINTEANCE == 0) {
+        if(curr_step.step_number > MIN_OPERATIONS_BEFORE_MAINTEANCE && curr_step.step_number % NUM_OPERATIONS_BETWEEN_MAINTEANCE == 0) {
             std::cout << std::endl;
             perform_mainteance(index, result_writer);
         } else { 
@@ -468,7 +706,7 @@ int main() {
 
         std::cout << std::endl;
         float index_memory_gb = log_memory_stats(index, 0, result_writer);
-        result_writer << index_memory_gb << "," << index->nlist() << std::endl;
+        result_writer << index_memory_gb << "," << index->nlist() << "," << index->ntotal() << std::endl;
         std::cout << "------ FINISH: Step " << curr_step.step_number << " of type " << curr_step.type << " ------\n" << std::endl;
 
         curr_scan_percentage -= scan_percentage_step;

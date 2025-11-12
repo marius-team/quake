@@ -22,8 +22,10 @@ namespace faiss {
      * It supports dynamic operations (addition, update, removal) across multiple partitions and includes
      * NUMA-aware functionality.
      */
-    class DynamicInvertedLists : public InvertedLists {
+    class DynamicInvertedLists {
     public:
+        size_t nlist;     ///< number of possible key values
+        size_t code_size; ///< code size per vector in bytes
 
         int curr_list_id_ = 0;         ///< Next available partition ID.
         int total_numa_nodes_ = 0;     ///< Total NUMA nodes available.
@@ -49,7 +51,7 @@ namespace faiss {
          *
          * Frees memory by relying on each IndexPartition’s destructor.
          */
-        ~DynamicInvertedLists() override;
+        ~DynamicInvertedLists();
 
          /**
          * @brief Return the total number of vectors stored across all partitions.
@@ -65,7 +67,7 @@ namespace faiss {
          * @return Count of vectors in the partition.
          * @throws std::runtime_error if the partition does not exist.
          */
-        size_t list_size(size_t list_no) const override;
+        size_t list_size(size_t list_no) const;
 
         /**
          * @brief Get the pointer to the encoded vectors for a partition.
@@ -74,7 +76,7 @@ namespace faiss {
          * @return Pointer to codes.
          * @throws std::runtime_error if the partition does not exist.
          */
-        const uint8_t* get_codes(size_t list_no) const override;
+        const uint8_t* get_codes(size_t list_no) const;
 
         /**
          * @brief Get the pointer to the vector IDs for a partition.
@@ -83,7 +85,7 @@ namespace faiss {
          * @return Pointer to IDs.
          * @throws std::runtime_error if the partition does not exist.
          */
-        const idx_t* get_ids(size_t list_no) const override;
+        const idx_t* get_ids(size_t list_no) const;
 
         void build_map();
 
@@ -95,7 +97,7 @@ namespace faiss {
          * @param list_no Partition number.
          * @param codes Unused.
          */
-        void release_codes(size_t list_no, const uint8_t *codes) const override;
+        void release_codes(size_t list_no, const uint8_t *codes) const;
 
         /**
          * @brief Release the IDs pointer.
@@ -105,7 +107,7 @@ namespace faiss {
          * @param list_no Partition number.
          * @param ids Unused.
          */
-        void release_ids(size_t list_no, const idx_t *ids) const override;
+        void release_ids(size_t list_no, const idx_t *ids) const;
 
         /**
          * @brief Remove an entry with the given ID from a specified partition.
@@ -131,7 +133,12 @@ namespace faiss {
          * @param vectors_to_remove A ptr to the vectors to remove
          * @param num_vectors The vectors to remove
          */
-        void remove_vectors(int64_t* vectors_to_remove, size_t num_vectors);
+        void remove_vectors(int64_t* vectors_to_remove, size_t num_vectors, bool update_delta = false);
+
+        /**
+         * @brief Returns the underlying partition
+         */
+        shared_ptr<IndexPartition> get_partition(size_t list_no);
 
         /**
          * @brief Append new entries (codes and IDs) to a partition.
@@ -147,7 +154,8 @@ namespace faiss {
             size_t list_no,
             size_t n_entry,
             const idx_t *ids,
-            const uint8_t *codes) override;
+            const uint8_t *codes,
+            bool update_delta = false);
 
         /**
          * @brief Update existing entries in a partition.
@@ -166,7 +174,13 @@ namespace faiss {
             size_t offset,
             size_t n_entry,
             const idx_t *ids,
-            const uint8_t *codes) override;
+            const uint8_t *codes);
+        
+        /**
+         * @brief Updates the vector with the provided id to the specified value
+         * 
+         */
+        void write_vector_by_id(idx_t id, float* vector_values);
 
         /**
          * @brief Batch update: move vectors from one partition to new partitions.
@@ -241,7 +255,7 @@ namespace faiss {
          *
          * Clears all partitions and resets counters.
          */
-        void reset() override;
+        void reset();
 
         /**
          * @brief Resize the inverted lists.
@@ -251,7 +265,7 @@ namespace faiss {
          * @param nlist New number of partitions.
          * @param code_size New code size.
          */
-        void resize(size_t nlist, size_t code_size) override;
+        void resize(size_t nlist, size_t code_size);
 
         /**
          * @brief Set NUMA configuration for the inverted lists.
@@ -335,6 +349,7 @@ namespace faiss {
         inline void map_add(IndexPartition* p, int64_t off, IdT id) noexcept {
              id_to_location_[id] = {p, off};
         }
+
         template<typename IdT>
         inline void map_erase(IdT id) noexcept {
              id_to_location_.erase(id);

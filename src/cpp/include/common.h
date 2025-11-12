@@ -104,6 +104,8 @@ constexpr bool DEFAULT_ENABLE_SPLIT_REJECTION = true;  ///< Default flag to enab
 constexpr bool DEFAULT_ENABLE_DELETE_REJECTION = true; ///< Default flag to enable rejection of deletions.
 constexpr float DEFAULT_DELETE_THRESHOLD_NS = 100.0f;   ///< Default threshold in nanoseconds for deletion decisions.
 constexpr float DEFAULT_SPLIT_THRESHOLD_NS = 100.0f;    ///< Default threshold in nanoseconds for split decisions.
+constexpr float DEFAULT_PARTITION_REDUCTION_THRESHOLD = 0.3;
+constexpr float DEFAULT_CHURN_RECLUSTER_THRESHOLD = 0.4;
 
 const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_N = {1, 2, 4, 16, 64, 256, 1024, 4096, 16384, 65536};   ///< Default range of n values for latency estimator.
 const vector<int> DEFAULT_LATENCY_ESTIMATOR_RANGE_K = {1, 4, 16, 64, 256};                                ///< Default range of k values for latency estimator.
@@ -121,6 +123,9 @@ struct MaintenancePolicyParams {
     float alpha = DEFAULT_ALPHA;
     bool enable_split_rejection = DEFAULT_ENABLE_SPLIT_REJECTION;
     bool enable_delete_rejection = DEFAULT_ENABLE_DELETE_REJECTION;
+    int split_knn_iterations = DEFAULT_NITER;
+    float partition_reduction_threshold = DEFAULT_PARTITION_REDUCTION_THRESHOLD;
+    float churn_recluster_threshold = DEFAULT_CHURN_RECLUSTER_THRESHOLD;
 
     float delete_threshold_ns = DEFAULT_DELETE_THRESHOLD_NS;
     float split_threshold_ns = DEFAULT_SPLIT_THRESHOLD_NS;
@@ -272,6 +277,11 @@ struct SearchTimingInfo {
     double worker_enqueue_time_ns = 0; ///< Average worker enqueue time in nanoseconds.
     double worker_job_time_ns = 0; ///< Average worker job time in nanoseconds.
     double worker_scan_time_ns = 0; ///< Average worker scan time in nanoseconds.
+
+    int64_t total_worker_jobs = 0; ///< The number of worker jobs
+    double worker_partition_size_bytes = 0; ///< Average partition size scanned by worker (in bytes)
+    double worker_scan_throughput = 0; ///< Average worker scan throughput (bytes/ns = GB/s).
+    double worker_partition_size = 0; ///< Average worker partition size
 };
 
 /**
@@ -280,9 +290,12 @@ struct SearchTimingInfo {
 struct MaintenanceTimingInfo {
     int64_t n_splits; ///< Number of splits.
     int64_t n_deletes; ///< Number of merges.
+    int64_t n_recluster; ///< Number of reclusters
+
     int64_t delete_time_us; ///< Time spent on deletions in microseconds.
     int64_t split_time_us; ///< Time spent on splits in microseconds.
     int64_t refinement_time_us; ///< Time spent on refinement in microseconds.
+    int64_t recluster_time_us; ///< Time spent on reclustering
     int64_t total_time_us; ///< Total time spent in microseconds.
 };
 

@@ -28,9 +28,15 @@ public:
     int64_t buffer_size_ = 0;   ///< Allocated capacity (in number of vectors)
     int64_t num_vectors_ = 0;   ///< Current number of stored vectors
     int64_t code_size_ = 0;     ///< Size of each code in bytes (must be set before adding vectors)
+    int64_t partition_id_ = -1;
 
     uint8_t* codes_ = nullptr;  ///< Pointer to the encoded vectors (raw memory block)
     idx_t* ids_ = nullptr;      ///< Pointer to the vector IDs
+
+    int64_t last_snapshot_size_ = 0; ///< The size since the last snapshot
+    int64_t churn_count_ = 0; ///< Counter for the churn on this index
+    int64_t delta_count_ = 0; ///< Counter of the delta that has happened since the last snapshot
+    uint8_t* delta_vec_ = nullptr; ///< Vector keeping track of the delta for this index
 
     std::unordered_map<idx_t, int64_t> id_to_index_; ///< Map of vector ID to index
 
@@ -74,6 +80,10 @@ public:
     /// Destructor. Frees all allocated memory.
     ~IndexPartition();
 
+    void allocate_delta_buffer();
+
+    void reset_delta();
+
     /**
      * @brief Set the code size.
      *
@@ -92,7 +102,7 @@ public:
      * @param new_ids Pointer to the new vector IDs.
      * @param new_codes Pointer to the new encoded vectors.
      */
-    void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes);
+    void append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes, bool update_delta = false);
 
     /**
      * @brief Update existing entries in place.
@@ -113,7 +123,7 @@ public:
      *
      * @param index Index of the vector to remove.
      */
-    int64_t remove(int64_t index);
+    int64_t remove(int64_t index, bool update_delta = false);
 
     /**
      * @brief Resize the partition.
@@ -173,6 +183,7 @@ public:
 #endif
 
 private:
+
     /**
      * @brief Move data from another partition.
      *
