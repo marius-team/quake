@@ -255,6 +255,10 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Enable split rejection. default = ") + std::to_string(DEFAULT_ENABLE_SPLIT_REJECTION)).c_str())
         .def_readwrite("enable_delete_rejection", &MaintenancePolicyParams::enable_delete_rejection,
              (std::string("Enable delete rejection. default = ") + std::to_string(DEFAULT_ENABLE_DELETE_REJECTION)).c_str())
+        .def_readwrite("split_knn_iterations", &MaintenancePolicyParams::split_knn_iterations,
+             (std::string("Number of clustering iterations to perform during a clustering. default = ") + std::to_string(DEFAULT_NITER)).c_str())
+        .def_readwrite("partition_reduction_threshold", &MaintenancePolicyParams::partition_reduction_threshold,
+             (std::string("Threshold for deleting a partition based on the number of vectors it has lost. default = ") + std::to_string(DEFAULT_PARTITION_REDUCTION_THRESHOLD)).c_str())   
         .def_readwrite("delete_threshold_ns", &MaintenancePolicyParams::delete_threshold_ns,
              (std::string("Delete threshold (ns). default = ") + std::to_string(DEFAULT_DELETE_THRESHOLD_NS)).c_str())
         .def_readwrite("split_threshold_ns", &MaintenancePolicyParams::split_threshold_ns,

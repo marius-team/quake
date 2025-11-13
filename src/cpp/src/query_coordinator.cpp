@@ -64,9 +64,9 @@ QueryCoordinator::~QueryCoordinator() {
     shutdown_workers();
     
     // Free up numa node local buffers
-    for (int node = 0; node < get_num_numa_nodes(); ++node) {
-        auto &nr = numa_resources_[node];
-        if(nr.local_query_buffer) quake_free(nr.local_query_buffer, nr.buffer_size);
+    for (int idx = 0; idx < numa_resources_.size(); idx++) {
+        auto &nr = numa_resources_[idx];
+        if(nr.local_query_buffer != nullptr) quake_free(nr.local_query_buffer, nr.buffer_size);
     }
 
     // Free up global merger buffers
@@ -103,7 +103,7 @@ void QueryCoordinator::allocate_core_resources(int core_idx,
     auto& numa_res = numa_resources_[numa_node];
     size_t bytes = size_t(num_queries) * d * sizeof(float);
     if (numa_res.buffer_size != bytes) {
-        quake_free(numa_res.local_query_buffer, numa_res.buffer_size);
+        if(numa_res.local_query_buffer != nullptr) quake_free(numa_res.local_query_buffer, numa_res.buffer_size);
         numa_res.local_query_buffer = static_cast<float*>(quake_alloc(bytes, numa_node));
         numa_res.buffer_size = bytes;
     }

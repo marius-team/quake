@@ -125,8 +125,6 @@ struct MaintenancePolicyParams {
     bool enable_delete_rejection = DEFAULT_ENABLE_DELETE_REJECTION;
     int split_knn_iterations = DEFAULT_NITER;
     float partition_reduction_threshold = DEFAULT_PARTITION_REDUCTION_THRESHOLD;
-    float churn_recluster_threshold = DEFAULT_CHURN_RECLUSTER_THRESHOLD;
-
     float delete_threshold_ns = DEFAULT_DELETE_THRESHOLD_NS;
     float split_threshold_ns = DEFAULT_SPLIT_THRESHOLD_NS;
 

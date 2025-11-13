@@ -1,0 +1,2 @@
+step_num,step_type,latency_ms,recall_mean,recall_std_dev,gt_scan_mean,gt_scan_dev,mainteance_ms,index_mem_gb,num_partitions,num_vectors
+2,search,2471.7,-1.0,-1.0,-1.0,-1.0,7.64,0.0184873,1024,38806

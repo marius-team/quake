@@ -86,16 +86,11 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
         float* new_centroids_buffer = reinterpret_cast<float*>(quake_alloc(partition_manager_->d() * sizeof(float), 0));
         int avg_partition_size = partition_manager_->ntotal() / total_partitions;
 
-        int64_t delta_sum = 0; int64_t delta_count = 0;         
         for (const auto &partition_id: all_partition_ids) {
             // Update the centroid for this vector if we have a delta
             bool choose_partition = false;
             float delete_factor = partition_manager_->get_delete_factor(partition_id);
-            int64_t delta_val = partition_manager_->update_centroid(partition_id, new_centroids_buffer);
-            if(delta_val != 0) { 
-                delta_sum += delta_val;
-                delta_count += 1;
-            } 
+            partition_manager_->update_centroid(partition_id, new_centroids_buffer);
 
             // Get hit count and hit rate for the partition.
             int hit_count = aggregated_hits[partition_id];
@@ -184,19 +179,9 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
                 partitions_to_delete.push_back(partition_id);
                 continue;
             } 
-            
-            float churn_factor = partition_manager_->get_churn_factor(partition_id);
-            bool perform_in_place_recalculation = partition_size > params_->min_partition_size;
-            perform_in_place_recalculation = churn_factor != -1.0 && churn_factor > params_->churn_recluster_threshold;
-            if(perform_in_place_recalculation) { // We have a large partition with high churn then mark it for reclustering
-                partitions_to_recluster.push_back(partition_id);
-            }
         } 
 
         quake_free(new_centroids_buffer, partition_manager_->d() * sizeof(float));
-        if(delta_count != 0) { 
-            std::cout << "Average non zero delta count of " << (1.0 * delta_sum)/delta_count << std::endl;
-        }
     }
 
 
@@ -242,12 +227,6 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     int64_t refinement_time_us = static_cast<int64_t>(duration_cast<microseconds>(end_total - end_split).count());
 
     // Step 6: Recluster any partitions
-    auto recluster_start = steady_clock::now();
-    if(!partitions_to_recluster.empty()) { 
-
-    }
-
-    auto recluster_end = steady_clock::now();
 
     // STEP 7: Clean up any empty partitions
     vector<int64_t> empty_ids = {};
@@ -266,11 +245,9 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     timing_info->split_time_us = duration_cast<microseconds>(end_split - start_split).count();
     timing_info->refinement_time_us = refinement_time_us;
     timing_info->total_time_us = duration_cast<microseconds>(end_total - start_total).count();
-    timing_info->recluster_time_us = duration_cast<microseconds>(recluster_end - recluster_start).count();
 
     timing_info->n_splits      = static_cast<int64_t>(partitions_to_split.size());
     timing_info->n_deletes     = static_cast<int64_t>(partitions_to_delete.size());
-    timing_info->n_recluster = static_cast<int64_t>(partitions_to_recluster.size());
 
     return timing_info;
 }

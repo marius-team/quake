@@ -373,7 +373,6 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
     mainteance_policy->partition_reduction_threshold = 0.45;
     mainteance_policy->refinement_radius = 0;
     mainteance_policy->refinement_iterations = 5;
-    mainteance_policy->churn_recluster_threshold = 0.75;
     mainteance_policy->min_partition_size = 1024;
     mainteance_policy->enable_split_rejection = true;
     mainteance_policy->enable_delete_rejection = true;
@@ -533,8 +532,8 @@ std::pair<float, float> check_gt_partitions_scanned(std::shared_ptr<QuakeIndex> 
     return std::make_pair(mean, standard_dev);
 }
 
-constexpr bool CHECK_QUERY_RECALL = true;
-constexpr bool CHECK_GT_PARITIONS_SCANNED = true;
+constexpr bool CHECK_QUERY_RECALL = false;
+constexpr bool CHECK_GT_PARITIONS_SCANNED = false;
 constexpr float RECALL_TARGET = -1.0; // Use this to enable/disable APS
 void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step, std::ofstream& result_writer, float partition_search_fraction) { 
     // Load the search query
@@ -577,7 +576,7 @@ void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step, std::o
     }
 }
 
-constexpr size_t INSERT_CHUNK_SIZE = 128;
+constexpr size_t INSERT_CHUNK_SIZE = 5000;
 void perform_insert(std::shared_ptr<QuakeIndex> index, Step& insert_step, std::ofstream& result_writer) { 
     // Load the arguments
     Tensor insert_vectors = load_tensor(insert_step.vectors_path).to(torch::kFloat32);
@@ -645,12 +644,12 @@ float log_memory_stats(std::shared_ptr<QuakeIndex> index, int level, std::ofstre
     return total_memory_gb;
 }
 
-constexpr float SCAN_PERCENTAGE_RANGE[2] = {0.12, 0.12};
+constexpr float SCAN_PERCENTAGE_RANGE[2] = {0.1, 0.1};
 constexpr size_t MIN_OPERATIONS_BEFORE_MAINTEANCE = 0;
 constexpr size_t NUM_OPERATIONS_BETWEEN_MAINTEANCE = 1;
-constexpr size_t NUM_TEST_OPERATIONS = 0;
+constexpr size_t NUM_TEST_OPERATIONS = 1;
 
-#define RESULT_WRITE_PATH "../scripts/big_ann_perf_numbers/scan_0.12_no_aps_refinment_wma_delete.csv"
+#define RESULT_WRITE_PATH "../scripts/big_ann_perf_numbers/crash_debug_scan_0.12_no_aps_refinment_wma_delete.csv"
 
 int main() { 
     // Configure global params
