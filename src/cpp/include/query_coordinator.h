@@ -46,6 +46,10 @@ struct ScanJob {
  */
 class QueryCoordinator {
 public:
+    // Static field for all query coordinators
+    static int batch_scan_partition_chunk_size_;
+    static int batch_scan_query_chunk_size_;
+
     // Public member variables (for internal use)
     shared_ptr<PartitionManager> partition_manager_; ///< Manager for partition assignments.
     shared_ptr<MaintenancePolicy> maintenance_policy_; ///< Policy for index maintenance.
@@ -86,10 +90,25 @@ public:
         int64_t bytes_scan_total = 0; ///< Total partition bytes scanned for throughput calculation. 
         int64_t partition_size = 0; 
         int64_t num_scan_jobs = 0;
+        float per_job_scan_throughput = 0;
+
+        float per_job_ipc = 0;
+        float measured_ipc_count = 0;
+        float per_job_cache_miss_rate = 0;
+        float measured_cache_count = 0;
+
+        int64_t batch_scan_total_time_ns = 0;
+        int64_t faiss_norms_x_time_ns = 0;
+        int64_t faiss_norms_y_time_ns = 0;
+        int64_t sgemm_time_ns = 0;
+        int64_t ip_to_l2_time_ns = 0;
+        int64_t top_k_buffer_add_ns = 0;
     };
 
     struct NUMAResources {
         float* local_query_buffer = nullptr;
+        void* metric_tracker_ptr; 
+
         size_t buffer_size = 0;
         moodycamel::BlockingConcurrentQueue<int64_t> job_queue;
     };

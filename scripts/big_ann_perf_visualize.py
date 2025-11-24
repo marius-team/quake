@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 import matplotlib.cm as cm
+import matplotlib.ticker as mticker
+from matplotlib.ticker import ScalarFormatter, LogLocator, FormatStrFormatter
 
 SECONDS_TO_MS = 10.0 ** 3
 MIN_TO_SECONDS = 60
@@ -16,6 +18,7 @@ def visualize_perf(src_dataset, config_details):
     # Load CSV
     df = pd.read_csv(os.path.join(SRC_DIR, src_dataset))
     df = df.head(NUM_OPERATIONS_TO_VISUALIZE)
+    df = df.fillna(0)
 
     # Filter rows for step_type == "search"
     search_df = df[df['step_type'] == 'search']
@@ -50,7 +53,7 @@ def visualize_perf(src_dataset, config_details):
     axs[0, 0].plot(x, recall_mean, color='green')
     axs[0, 0].set_ylabel('Recall@10')
     axs[0, 0].set_title('Recall Mean')
-    print("Average Recall across the run is", np.mean(recall_mean), "for", src_dataset)
+    print("Average Recall for run", src_dataset, "is", np.mean(recall_mean))
 
     axs[0, 1].plot(x, latency_search, color='purple')
     axs[0, 1].set_ylabel('Latency (ms)')
@@ -103,11 +106,11 @@ def visualize_perf(src_dataset, config_details):
     axs[3, 0].set_ylabel('Partition Scan Percentage')
     axs[3, 0].set_title('Rank of GT partitions as Search Candidates')
 
-    # Hide unused subplot (3,1)
-    axs[3, 1].axis('off')
-    for i in range (4):
-        for j in range(2):
-            axs[i, j].tick_params(labelbottom=True)
+    # Plot Scan Throughput
+    axs[3, 1].plot(search_df['step_num'].values, search_df['worker_scan_throughput'].values, color='gray')
+    axs[3, 1].set_xlabel('Step Num')
+    axs[3, 1].set_ylabel('Scan Throughput (GB/s)')
+    axs[3, 1].set_title('Worker Scan Throughput')
 
     # Overall title including total latency sum in minutes
     fig.suptitle(f'{config_details}\nTotal Latency: {total_all_min:.2f} minutes', fontsize=16)
@@ -146,10 +149,133 @@ def visualize_percentage_variation(src_dataset):
     plt.tight_layout()
     plt.savefig(os.path.join(DST_DIR, src_dataset.replace("csv", "png")), dpi=300)
 
+def visualize_vary_worker(src_dataset):
+    # Read CSV
+    df = pd.read_csv(os.path.join(SRC_DIR, src_dataset))
+    search_df = df[df['step_type'] == 'search']
+
+    # List of metrics to plot
+    metrics = [
+        ("search_latency_ms", "Batch Search Latency (seconds)"),
+        ("worker_partition_size", "Avg Scan Partition Size"), 
+        ("worker_scan_throughput", "Partition Scan Throughput (GB/s)"), 
+        ("recall_mean", "Query Recall")
+    ]
+
+    # Get unique worker counts for consistent colors
+    worker_counts = sorted(search_df['num_search_workers'].unique())
+    colors = plt.get_cmap('tab10').colors  # or use any other color map
+
+    fig, axs = plt.subplots(2, 2, sharex=True, figsize=(12, 10))
+    axs = axs.flatten()
+
+    for idx, (metric, metric_label) in enumerate(metrics):
+        scale_factor = 1.0
+        if metric == "search_latency_ms":
+            scale_factor = 1000.0
+
+        ax = axs[idx]
+        for i, worker in enumerate(worker_counts):
+            data = search_df[search_df['num_search_workers'] == worker].sort_values('step_num')
+            ax.plot(data['step_num'].values, data[metric].values/scale_factor, label=f'Num Search Workers: {worker}', color=colors[i % len(colors)])
+        
+        ax.set_xlabel('Step Num')
+        ax.set_ylabel(metric_label)
+        ax.set_title(metric_label)
+        ax.legend()
+
+        if metric == "search_latency_ms":
+            ax.set_yscale('log')
+            minor_locator = mticker.LogLocator(subs=np.arange(2, 10))
+            ax.yaxis.set_minor_locator(minor_locator)
+            minor_formatter = mticker.FormatStrFormatter("%.1f")
+            ax.yaxis.set_minor_formatter(minor_formatter)
+
+            formatter = ScalarFormatter()
+            formatter.set_scientific(False)
+            ax.yaxis.set_major_formatter(formatter)
+
+    fig.suptitle(f'Vary Search Workers Experiemnt (Scan Percentage = 15%, Batch Size = 500)', fontsize=16)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(DST_DIR, src_dataset.replace("csv", "png")), dpi=300)
+
+def visualize_vary_batch_size(src_dataset):
+    # Read CSV
+    df = pd.read_csv(os.path.join(SRC_DIR, src_dataset))
+    search_df = df[df['step_type'] == 'search']
+    search_df = search_df[search_df["step_num"] > 5]
+
+    metric_names = [
+        ('search_latency_ms', 'Search Latency (ms)'),
+        ('worker_partition_size', 'Partition Size'),
+        ('worker_scan_throughput', 'Worker Scan Throughput'),
+        ('worker_scan_time_ms', 'Worker Scan Time (ms)'),
+        ('worker_result_time_ms', 'Worker Result Write Time (ms)')
+    ]
+    colors = plt.get_cmap('tab10').colors  # or use any other color map
+
+    batch_sizes = list(search_df['batch_size'].unique())
+    fig, axes = plt.subplots(2, 3, figsize=(16, 12), sharex=True)
+    axes = axes.flatten()
+
+    for i, (col, title) in enumerate(metric_names):
+
+        ax = axes[i]
+        for j, batch in enumerate(batch_sizes):
+            batch_data = search_df[search_df['batch_size'] == batch]
+            ax.plot(batch_data['step_num'].values, batch_data[col].values, label=f'Batch Size {batch}', color=colors[j % len(colors)])
+        ax.set_title(title)
+
+        ax.set_xlabel('Step Num')
+        ax.legend()
+
+    fig.tight_layout()
+    plt.savefig(os.path.join(DST_DIR, src_dataset.replace("csv", "png")), dpi=300)
+
+def visualize_hardware_metrics(src_dataset):
+    # Read CSV
+    df = pd.read_csv(os.path.join(SRC_DIR, src_dataset))
+    search_df = df[df['step_type'] == 'search']
+    fig, axs = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
+
+    # 1) worker_partition_size versus step_num
+    axs[0, 0].plot(search_df["step_num"].values, search_df["worker_partition_size"].values)
+    axs[0, 0].set_title("Partition Size vs Step")
+    axs[0, 0].set_ylabel("Worker Partition Size")
+
+    # 2) worker_scan_throughput versus step_num
+    axs[0, 1].plot(search_df["step_num"].values, search_df["worker_scan_throughput"].values, color="orange")
+    axs[0, 1].set_title("Scan Throughput vs Step")
+    axs[0, 1].set_ylabel("Scan Throughput")
+
+    # 3) measured_ipc versus step_num
+    axs[1, 0].plot(search_df["step_num"].values, search_df["measured_ipc"].values, color="green")
+    axs[1, 0].set_title("Measured IPC vs Step")
+    axs[1, 0].set_xlabel("Step Num")
+    axs[1, 0].set_ylabel("Measured IPC")
+
+    # 4) cache_miss_rate versus step_num
+    axs[1, 1].plot(search_df["step_num"].values, search_df["cache_miss_rate"].values, color="red")
+    axs[1, 1].set_title("Cache Miss Rate vs Step")
+    axs[1, 1].set_xlabel("Step Num")
+    axs[1, 1].set_ylabel("Cache Miss Rate")
+
+    fig.suptitle(f'Batch Query Search with Hardware Counters (# of Workers = 8, Batch Size = 256)', fontsize=16)
+
+    fig.tight_layout()
+    plt.savefig(os.path.join(DST_DIR, src_dataset.replace("csv", "png")), dpi=300)
+
 if __name__ == "__main__":
+    '''
+    # visualize_vary_worker("perf_debug_scan_0.15_vary_num_search_workers.csv")
+    # visualize_vary_batch_size("perf_debug_scan_0.15_vary_batch_size.csv")
+    visualize_hardware_metrics("perf_debug_scan_0.15_counters.csv")
+    '''
+
     configs_to_visualize = [
-        ("scan_0.1_no_aps_refinment_wma_delete.csv", "Scan Percentage = 10%, Mainteance with No Refinment and Search with No APS"),
-        ("scan_0.12_no_aps_refinment_wma_delete.csv", "Scan Percentage = 12%, Mainteance with No Refinment and Search with No APS")
+        ("test_perf_debug_scan_0.14_worker_batch_tuning.csv", "Scan Percentage = 14%, Query Batch Size = 256, Partition Chunk Size = 256"),
+        ("perf_debug_scan_0.14_worker_batch_tuning_lower.csv", "Scan Percentage = 14%, Query Batch Size = 256, Partition Chunk Size = 128")
     ]
 
     for dataset, config_details in configs_to_visualize:

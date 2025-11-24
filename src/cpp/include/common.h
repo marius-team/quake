@@ -91,7 +91,8 @@ constexpr float DEFAULT_RECOMPUTE_THRESHOLD = 0.001f;    ///< Default threshold 
 constexpr int DEFAULT_APS_FLUSH_PERIOD_US = 5;         ///< Default period (in microseconds) for flushing the APS buffer.
 constexpr int MAX_SUBBATCH = 128;
 constexpr int MIN_BATCH_SCAN_SIZE = 4; ///< Minimum batch size for scanning partitions.
-constexpr int BLAS_DB_BS = 1024 * 16;
+constexpr int BLAS_DB_BS = 256;
+constexpr int DEFAULT_BLAS_Q_BS = 256;
 
 // Default constants for maintenance policy parameters
 constexpr const char* DEFAULT_MAINTENANCE_POLICY = "query_cost"; ///< Default maintenance policy type.
@@ -279,7 +280,18 @@ struct SearchTimingInfo {
     int64_t total_worker_jobs = 0; ///< The number of worker jobs
     double worker_partition_size_bytes = 0; ///< Average partition size scanned by worker (in bytes)
     double worker_scan_throughput = 0; ///< Average worker scan throughput (bytes/ns = GB/s).
+    double local_scan_throughput = 0; ///< Scan throughput per job rather than averaged across all workers
     double worker_partition_size = 0; ///< Average worker partition size
+
+    double worker_batch_scan_ipc = 0;
+    double worker_batch_scan_miss_rate = 0;
+
+    double single_scan_job_time_ns = 0;
+    double faiss_norms_x_time_ns = 0;
+    double faiss_norms_y_time_ns = 0;
+    double sgemm_time_ns = 0;
+    double ip_to_l2_time_ns = 0;
+    double top_k_buffer_add_ns = 0;
 };
 
 /**

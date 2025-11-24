@@ -58,6 +58,10 @@ PYBIND11_MODULE(_bindings, m) {
         .def_readwrite_static("delete_resize_threshold", &IndexPartition::delete_resize_threshold_)
         .def_readwrite_static("capacity_resize_threshold", &IndexPartition::capacity_resize_threshold_);
 
+     class_<QueryCoordinator>(m, "QueryCoordinator")
+        .def_readwrite_static("partition_chunk_size", &QueryCoordinator::batch_scan_partition_chunk_size_)
+        .def_readwrite_static("query_chunk_size", &QueryCoordinator::batch_scan_query_chunk_size_);
+
     /*********** QuakeIndex Binding ***********/
     class_<QuakeIndex, shared_ptr<QuakeIndex>>(m, "QuakeIndex")
         .def(init<int>(), arg("current_level") = 0,

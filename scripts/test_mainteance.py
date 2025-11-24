@@ -67,5 +67,6 @@ def mainteance_test():
 if __name__ == "__main__":
     quake.IndexPartition.delete_resize_threshold = 0.8
     quake.IndexPartition.capacity_resize_threshold = 1.2
+    quake.QueryCoordinator.partition_chunk_size = 256
     
-    mainteance_test()
+    # mainteance_test()

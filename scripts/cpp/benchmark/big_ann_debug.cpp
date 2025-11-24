@@ -195,12 +195,21 @@ void print_search_metrics(std::shared_ptr<SearchTimingInfo> timing_info, int lev
     std::cout << "\t[Worker] Job Time ms - " << timing_info->worker_job_time_ns/MS_TO_NS << std::endl;
     std::cout << "\t[Worker] Wait Time ms - " << timing_info->worker_wait_time_ns/MS_TO_NS << std::endl;
     std::cout << "\t[Worker] Process Preamable Time ms - " << timing_info->worker_process_preamble_time_ns/MS_TO_NS << std::endl;
-    std::cout << "\t[Worker] Scan Time ms - " << timing_info->worker_scan_time_ns/MS_TO_NS << std::endl;
+    std::cout << "\t[Worker] Total Scan Time ms - " << timing_info->worker_scan_time_ns/MS_TO_NS << std::endl;
     std::cout << "\t[Worker] Partition Size - " << timing_info->worker_partition_size << std::endl;
     std::cout << "\t[Worker] Partition Scan Bytes - " << timing_info->worker_partition_size_bytes << std::endl;
-    std::cout << "\t[Worker] Partition Scan Through (GB/s) - " << timing_info->worker_scan_throughput << std::endl;
+    std::cout << "\t[Worker] Global Partition Scan Through (GB/s) - " << timing_info->worker_scan_throughput << std::endl;
+    std::cout << "\t[Worker] Local Partition Scan Through (GB/s) - " << timing_info->local_scan_throughput << std::endl;
     std::cout << "\t[Worker] Result Enque Time ms - " << timing_info->worker_enqueue_time_ns/MS_TO_NS << std::endl;
     std::cout << "\t[Worker] Process Time ms - " << timing_info->worker_process_time_ns/MS_TO_NS << std::endl;
+    std::cout << "\t[Worker] Worker Batch Scan IPC - " << timing_info->worker_batch_scan_ipc << std::endl;
+    std::cout << "\t[Worker] Worker Batch Scan Miss Rate - " << timing_info->worker_batch_scan_miss_rate << std::endl;
+    std::cout << "\t[Worker] Single Scan Time us - " << timing_info->single_scan_job_time_ns/MS_TO_US << std::endl;
+    std::cout << "\t[Worker] Worker Batch Scan Norms X us - " << timing_info->faiss_norms_x_time_ns/MS_TO_US << std::endl;
+    std::cout << "\t[Worker] Worker Batch Scan Norms Y us - " << timing_info->faiss_norms_y_time_ns/MS_TO_US << std::endl;
+    std::cout << "\t[Worker] Sgemm Matrix Multiply us - " << timing_info->sgemm_time_ns/MS_TO_US << std::endl;
+    std::cout << "\t[Worker] IP TO L2 us - " << timing_info->ip_to_l2_time_ns/MS_TO_US << std::endl;
+    std::cout << "\t[Worker] Top K Buffer Add us - " << timing_info->top_k_buffer_add_ns/MS_TO_US << std::endl;
 }
 
 std::pair<Tensor, Tensor> load_ground_truth_data(uint32_t step_num) { 
@@ -337,7 +346,7 @@ std::pair<float, float> calculate_recall(std::shared_ptr<QuakeIndex> index, Tens
     return std::make_pair(mean, standard_dev);
 }
 
-std::shared_ptr<QuakeIndex> build_index(Step& build_step) { 
+std::shared_ptr<QuakeIndex> build_index(Step& build_step, int num_search_workers) { 
     // Verify step
     if(build_step.step_number != 1 || build_step.type != "insert") { 
         std::cerr << "Build Index called with step num " << build_step.step_number << " and type " << build_step.type << std::endl;
@@ -349,16 +358,18 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
 
     std::shared_ptr<IndexBuildParams> build_params = std::make_shared<IndexBuildParams>();
     build_params->dimension = 100;
-    build_params->nlist = 1024;
-    build_params->num_workers = 8;
+    build_params->nlist = 1000;
+    build_params->num_workers = num_search_workers;
     build_params->metric = "l2";
     build_params->niter = 25;
+    build_params->use_numa = false;
 
     build_params->parent_params = std::make_shared<IndexBuildParams>();
     build_params->parent_params->dimension = 100;
     build_params->parent_params->nlist = 1;
     build_params->parent_params->metric = "l2";
     build_params->parent_params->num_workers = 0;
+    build_params->parent_params->use_numa = false;
 
     Tensor build_vectors = load_tensor(build_step.vectors_path).to(torch::kFloat32);
     Tensor build_ids = load_tensor(build_step.ids_path).to(torch::kInt64);
@@ -367,13 +378,13 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step) {
     // Also initialize with the default mainteance policy
     std::shared_ptr<MaintenancePolicyParams> mainteance_policy = std::make_shared<MaintenancePolicyParams>();
     mainteance_policy->window_size = 5000;
-    mainteance_policy->split_threshold_ns = 2100;
-    mainteance_policy->split_knn_iterations = 10;
-    mainteance_policy->delete_threshold_ns = 2750;
-    mainteance_policy->partition_reduction_threshold = 0.45;
+    mainteance_policy->split_threshold_ns = 3250;
+    mainteance_policy->split_knn_iterations = 6;
+    mainteance_policy->delete_threshold_ns = 2000;
+    mainteance_policy->partition_reduction_threshold = 0.22;
     mainteance_policy->refinement_radius = 0;
     mainteance_policy->refinement_iterations = 5;
-    mainteance_policy->min_partition_size = 1024;
+    mainteance_policy->min_partition_size = 1250;
     mainteance_policy->enable_split_rejection = true;
     mainteance_policy->enable_delete_rejection = true;
     index->initialize_maintenance_policy(mainteance_policy);
@@ -532,7 +543,8 @@ std::pair<float, float> check_gt_partitions_scanned(std::shared_ptr<QuakeIndex> 
     return std::make_pair(mean, standard_dev);
 }
 
-constexpr bool CHECK_QUERY_RECALL = false;
+static int CURR_BATCH_SIZE = 256;
+constexpr bool CHECK_QUERY_RECALL = true;
 constexpr bool CHECK_GT_PARITIONS_SCANNED = false;
 constexpr float RECALL_TARGET = -1.0; // Use this to enable/disable APS
 void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step, std::ofstream& result_writer, float partition_search_fraction) { 
@@ -546,7 +558,7 @@ void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step, std::o
     search_params->recall_target = RECALL_TARGET;
     search_params->initial_search_fraction = partition_search_fraction;
     search_params->batched_scan = true;
-    search_params->batch_size = 500;
+    search_params->batch_size = CURR_BATCH_SIZE;
     search_params->track_hits = true;
 
     // Run the search
@@ -557,7 +569,11 @@ void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step, std::o
     std::cout << std::endl;
     
     // Calculate the recall
-    result_writer << search_step.step_number << ",search," << search_result->timing_info->total_time_ns/MS_TO_NS << ","; 
+    auto timing_info = search_result->timing_info;
+    result_writer << search_step.step_number << ",search," << timing_info->total_time_ns/MS_TO_NS << ","; 
+    result_writer << timing_info->worker_partition_size << "," << timing_info->worker_scan_time_ns/MS_TO_NS << ",";
+    result_writer << timing_info->local_scan_throughput << "," << timing_info->worker_enqueue_time_ns/MS_TO_NS << ",";
+    result_writer << timing_info->worker_batch_scan_ipc << "," << timing_info->worker_batch_scan_miss_rate << ",";
     if constexpr(CHECK_QUERY_RECALL) { 
         std::pair<float, float> recall_result = calculate_recall(index, search_queries, search_result, search_step.step_number);
         std::cout << "\nSearch Recall: Mean - " << recall_result.first << ", Std Dev - " << recall_result.second << std::endl;  
@@ -576,7 +592,7 @@ void perform_search(std::shared_ptr<QuakeIndex> index, Step& search_step, std::o
     }
 }
 
-constexpr size_t INSERT_CHUNK_SIZE = 5000;
+constexpr size_t INSERT_CHUNK_SIZE = 10000;
 void perform_insert(std::shared_ptr<QuakeIndex> index, Step& insert_step, std::ofstream& result_writer) { 
     // Load the arguments
     Tensor insert_vectors = load_tensor(insert_step.vectors_path).to(torch::kFloat32);
@@ -595,10 +611,15 @@ void perform_insert(std::shared_ptr<QuakeIndex> index, Step& insert_step, std::o
     }
     std::cout << "Finished insertion in " << num_chunks << " chunks in " << total_time_us << " us" << std::endl;
 
-    result_writer << insert_step.step_number << ",insert," << total_time_us/MS_TO_US << ",-1.0,-1.0,-1.0,-1.0,";
+    result_writer << insert_step.step_number << ",insert," << total_time_us/MS_TO_US << ",";
+    result_writer << "-1.0" << "," << "-1.0" << ",";
+    result_writer << "-1.0" << "," << "-1.0" << ",";
+    result_writer << "-1.0" << "," << "-1.0" << ",";
+    result_writer << "-1.0,-1.0,";
+    result_writer << "-1.0,-1.0,";
 }
 
-constexpr size_t DELETE_CHUNK_SIZE = 5000;
+constexpr size_t DELETE_CHUNK_SIZE = 10000;
 void perform_delete(std::shared_ptr<QuakeIndex> index, Step& delete_step, std::ofstream& result_writer) { 
     Tensor delete_ids = load_tensor(delete_step.ids_path).to(torch::kInt64);
 
@@ -615,7 +636,12 @@ void perform_delete(std::shared_ptr<QuakeIndex> index, Step& delete_step, std::o
     }
     std::cout << "Finished delete in " << num_chunks << " chunks in " << total_time_us << " us" << std::endl;
 
-    result_writer << delete_step.step_number << ",delete," << total_time_us/MS_TO_US << ",-1.0,-1.0,-1.0,-1.0,";
+    result_writer << delete_step.step_number << ",delete," << total_time_us/MS_TO_US << ",";
+    result_writer << "-1.0" << "," << "-1.0" << ",";
+    result_writer << "-1.0" << "," << "-1.0" << ",";
+    result_writer << "-1.0" << "," << "-1.0" << ",";
+    result_writer << "-1.0,-1.0,";
+    result_writer << "-1.0,-1.0,";
 }
 
 constexpr float BYTES_TO_GB = 1000.0 * 1000.0 * 1000.0;
@@ -644,12 +670,12 @@ float log_memory_stats(std::shared_ptr<QuakeIndex> index, int level, std::ofstre
     return total_memory_gb;
 }
 
-constexpr float SCAN_PERCENTAGE_RANGE[2] = {0.1, 0.1};
+constexpr float SCAN_PERCENTAGE_RANGE[2] = {0.135, 0.135};
 constexpr size_t MIN_OPERATIONS_BEFORE_MAINTEANCE = 0;
 constexpr size_t NUM_OPERATIONS_BETWEEN_MAINTEANCE = 1;
-constexpr size_t NUM_TEST_OPERATIONS = 1;
+constexpr size_t NUM_TEST_OPERATIONS = 25;
 
-#define RESULT_WRITE_PATH "../scripts/big_ann_perf_numbers/crash_debug_scan_0.12_no_aps_refinment_wma_delete.csv"
+#define RESULT_WRITE_PATH "../scripts/big_ann_perf_numbers/perf_debug_scan_0.14_worker_batch_tuning_breakdown.csv"
 
 int main() { 
     // Configure global params
@@ -663,13 +689,15 @@ int main() {
 
     // Create the output csv file
     std::ofstream result_writer(RESULT_WRITE_PATH);
-    result_writer << "step_num,step_type,latency_ms,recall_mean,recall_std_dev,gt_scan_mean,gt_scan_dev,mainteance_ms,index_mem_gb,num_partitions,num_vectors" << std::endl;
+    result_writer << "step_num,step_type,latency_ms,worker_partition_size,worker_scan_time_ms,worker_scan_throughput,worker_result_time_ms,measured_ipc,cache_miss_rate,recall_mean,recall_std_dev,gt_scan_mean,gt_scan_dev,mainteance_ms,index_mem_gb,num_partitions,num_vectors" << std::endl;
+
+    int num_default_workers = 8;
 
     auto build_start_time = std::chrono::high_resolution_clock::now();
-    std::shared_ptr<QuakeIndex> index = build_index(steps_arr[0]); 
+    std::shared_ptr<QuakeIndex> index = build_index(steps_arr[0], num_default_workers); 
     auto build_end_time = std::chrono::high_resolution_clock::now();
     int64_t build_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(build_end_time - build_start_time).count();
-    std::cout << "Initialized Quake Index in " << build_time_ns/MS_TO_NS << " ms" << std::endl;
+    std::cout << "Initialized Quake Index with batch size in " << build_time_ns/MS_TO_NS << " ms" << std::endl;
 
     // Now perform the streaming operations against the index
     size_t num_test_operations = NUM_TEST_OPERATIONS; 
@@ -710,9 +738,7 @@ int main() {
 
         curr_scan_percentage -= scan_percentage_step;
     }
-    
 
     result_writer.close();
-
     return 0;
 }
