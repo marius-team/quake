@@ -1,4 +1,2 @@
 step_num,step_type,latency_ms,worker_partition_size,worker_scan_time_ms,worker_scan_throughput,worker_result_time_ms,measured_ipc,cache_miss_rate,recall_mean,recall_std_dev,gt_scan_mean,gt_scan_dev,mainteance_ms,index_mem_gb,num_partitions,num_vectors
-2,search,3214.8,37.4251,355.023,0.511887,631.637,-nan,-nan,0.844,0.1346,-1.0,-1.0,6.69,0.0184881,1000,38806
-3,insert,25.581,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,29.285,0.022655,996,49334
-4,search,2469.78,65.1954,182.909,0.967299,190.989,-nan,-nan,0.8558,0.133903,-1.0,-1.0,28.326,0.0226416,992,49334
+2,search,3056.05,37.3917,337.096,0.511741,602.905,-nan,-nan,0.83796,0.13696,-1.0,-1.0,22.208,0.0184881,1000,38806

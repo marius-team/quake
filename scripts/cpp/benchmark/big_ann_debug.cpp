@@ -20,13 +20,21 @@
 #include <numeric>
 #include <iterator>
 #include <utility>
+#include <random>
 #include <chrono>
 
 #include <torch/script.h>    // For c10::IValue
 #include <torch/serialize.h> // For torch::load
+
 #include "quake_index.h"  // Quake API header
+#include "partition_manager.h"
+#include "dynamic_inverted_list.h"
+#include "index_partition.h"
+#include "parallel.h"
 
 using torch::Tensor;
+using std::vector;
+using std::shared_ptr;
 
 #define DATASET_PATH "/home/devesh/big-ann-benchmark/big-ann-benchmarks/data/MSTuring-30M-clustered/"
 #define DIRECTORY_PATH DATASET_PATH "index_arguments/"
@@ -384,7 +392,7 @@ std::shared_ptr<QuakeIndex> build_index(Step& build_step, int num_search_workers
     mainteance_policy->partition_reduction_threshold = 0.22;
     mainteance_policy->refinement_radius = 0;
     mainteance_policy->refinement_iterations = 5;
-    mainteance_policy->min_partition_size = 1250;
+    mainteance_policy->min_partition_size = 1500;
     mainteance_policy->enable_split_rejection = true;
     mainteance_policy->enable_delete_rejection = true;
     index->initialize_maintenance_policy(mainteance_policy);
@@ -670,12 +678,140 @@ float log_memory_stats(std::shared_ptr<QuakeIndex> index, int level, std::ofstre
     return total_memory_gb;
 }
 
-constexpr float SCAN_PERCENTAGE_RANGE[2] = {0.135, 0.135};
+// Code to calculate the Sillehoute Score for the matrix
+struct PartitionView {
+    int64_t id;
+    std::vector<const float*> vectors;
+};
+
+std::pair<float, float> calculate_silhouette_scores(shared_ptr<QuakeIndex> index, int clustering_num_samples = 0, int num_score_calculate_workers = 4) {
+    if (!index || !index->partition_manager_ || !index->partition_manager_->partition_store_) {
+        throw std::runtime_error("Invalid QuakeIndex: PartitionManager or Store is null.");
+    }
+
+    auto pm = index->partition_manager_;
+    auto store = pm->partition_store_;
+    int d = pm->d();
+
+    // 1. Organize vectors by partition for efficient access
+    std::vector<PartitionView> partitions;
+    int64_t total_vectors = 0;
+
+    for (const auto& entry : store->partitions_) {
+        int64_t pid = entry.first;
+        shared_ptr<IndexPartition> part = entry.second;
+        if (part->num_vectors_ == 0) continue;
+
+        PartitionView view;
+        view.id = pid;
+        view.vectors.reserve(part->num_vectors_);
+
+        const uint8_t* codes = part->codes_;
+        size_t code_size = part->code_size_;
+
+        for (int64_t i = 0; i < part->num_vectors_; ++i) {
+            view.vectors.push_back(reinterpret_cast<const float*>(codes + i * code_size));
+        }
+        partitions.push_back(view);
+        total_vectors += part->num_vectors_;
+    }
+
+    // 2. Flatten for parallel iteration (tuples of: partition_idx, vector_idx_in_partition)
+    struct Task {
+        size_t p_idx; // Index in `partitions` vector
+        size_t v_idx; // Index inside that partition
+    };
+
+    std::vector<Task> tasks;
+    tasks.reserve(total_vectors);
+
+    for (size_t p = 0; p < partitions.size(); ++p) {
+        for (size_t v = 0; v < partitions[p].vectors.size(); ++v) {
+            tasks.push_back({p, v});
+        }
+    }
+
+    // Apply sampling if requested
+    if (clustering_num_samples > 0) {
+        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+        std::default_random_engine generator(seed);
+        std::shuffle(tasks.begin(), tasks.end(), generator);
+
+        tasks.resize(clustering_num_samples);
+    }
+
+    std::vector<float> scores(tasks.size());
+
+    // 3. Compute scores in parallel
+    parallel_for(size_t(0), tasks.size(), [&](size_t t) {
+        const auto& task = tasks[t];
+        const auto& current_partition = partitions[task.p_idx];
+        const float* current_vec = current_partition.vectors[task.v_idx];
+
+        // --- Calculate a(i): Mean dist to same cluster ---
+        double sum_dist_a = 0.0;
+        size_t count_a = 0;
+
+        for (size_t other_v = 0; other_v < current_partition.vectors.size(); ++other_v) {
+            if (task.v_idx == other_v) continue; 
+            
+            // Use Faiss optimized L2 squared distance
+            float dist_sq = faiss::fvec_L2sqr(current_vec, current_partition.vectors[other_v], d);
+            sum_dist_a += std::sqrt(dist_sq); 
+            count_a++;
+        }
+
+        float a_i = (count_a > 0) ? (sum_dist_a / count_a) : 0.0f;
+
+        // Silhouette is 0 for singleton clusters
+        if (current_partition.vectors.size() <= 1) {
+            scores[t] = 0.0f;
+            return; 
+        }
+
+        // --- Calculate b(i): Min mean dist to other clusters ---
+        float b_i = std::numeric_limits<float>::max();
+
+        for (size_t p = 0; p < partitions.size(); ++p) {
+            if (p == task.p_idx) continue; 
+
+            const auto& other_partition = partitions[p];
+            if (other_partition.vectors.empty()) continue;
+
+            double sum_dist_b = 0.0;
+            
+            for (const float* other_vec : other_partition.vectors) {
+                float dist_sq = faiss::fvec_L2sqr(current_vec, other_vec, d);
+                sum_dist_b += std::sqrt(dist_sq);
+            }
+
+            float mean_dist_b = sum_dist_b / other_partition.vectors.size();
+            if (mean_dist_b < b_i) {
+                b_i = mean_dist_b;
+            }
+        }
+
+        // Use a_i and b_i to figure out the score
+        if (b_i == std::numeric_limits<float>::max()) {
+            scores[t] = 0.0f;
+        } else {
+            scores[t] = (b_i - a_i) / std::max(a_i, b_i);
+        }
+
+    }, num_score_calculate_workers); // End parallel_for
+
+    // Calculate the mean and std dev of scan fraction
+    float mean = std::accumulate(scores.begin(), scores.end(), 0.0) / scores.size();
+    float standard_dev = calculateStandardDeviation(scores, mean);
+    return std::make_pair(mean, standard_dev);
+}
+
+constexpr float SCAN_PERCENTAGE_RANGE[2] = {0.13, 0.13};
 constexpr size_t MIN_OPERATIONS_BEFORE_MAINTEANCE = 0;
 constexpr size_t NUM_OPERATIONS_BETWEEN_MAINTEANCE = 1;
-constexpr size_t NUM_TEST_OPERATIONS = 25;
+constexpr size_t NUM_TEST_OPERATIONS = 0;
 
-#define RESULT_WRITE_PATH "../scripts/big_ann_perf_numbers/perf_debug_scan_0.14_worker_batch_tuning_breakdown.csv"
+#define RESULT_WRITE_PATH "../scripts/big_ann_perf_numbers/perf_debug_scan_0.13_worker_batch_clustering_score.csv"
 
 int main() { 
     // Configure global params
@@ -689,9 +825,11 @@ int main() {
 
     // Create the output csv file
     std::ofstream result_writer(RESULT_WRITE_PATH);
-    result_writer << "step_num,step_type,latency_ms,worker_partition_size,worker_scan_time_ms,worker_scan_throughput,worker_result_time_ms,measured_ipc,cache_miss_rate,recall_mean,recall_std_dev,gt_scan_mean,gt_scan_dev,mainteance_ms,index_mem_gb,num_partitions,num_vectors" << std::endl;
+    result_writer << "step_num,step_type,latency_ms,worker_partition_size,worker_scan_time_ms,worker_scan_throughput,worker_result_time_ms,measured_ipc,cache_miss_rate,recall_mean,recall_std_dev,gt_scan_mean,gt_scan_dev,mainteance_ms,index_mem_gb,num_partitions,num_vectors,silleheoute_mean,silleheoute_std_dev" << std::endl;
 
     int num_default_workers = 8;
+    float clustering_num_samples = 8192;
+    int num_score_calculate_workers = 32;
 
     auto build_start_time = std::chrono::high_resolution_clock::now();
     std::shared_ptr<QuakeIndex> index = build_index(steps_arr[0], num_default_workers); 
@@ -733,7 +871,13 @@ int main() {
 
         std::cout << std::endl;
         float index_memory_gb = log_memory_stats(index, 0, result_writer);
-        result_writer << index_memory_gb << "," << index->nlist() << "," << index->ntotal() << std::endl;
+        result_writer << index_memory_gb << "," << index->nlist() << "," << index->ntotal() << ",";
+
+        // Get the silleheoute score
+        std::pair<float, float> silleheouet_score = calculate_silhouette_scores(index, clustering_num_samples, num_score_calculate_workers);
+        std::cout << "Silleheoute Score: Mean - " << silleheouet_score.first << ", Std Dev - " << silleheouet_score.second << std::endl;
+        result_writer << silleheouet_score.first << "," << silleheouet_score.second << "," << std::endl;
+        
         std::cout << "------ FINISH: Step " << curr_step.step_number << " of type " << curr_step.type << " ------\n" << std::endl;
 
         curr_scan_percentage -= scan_percentage_step;

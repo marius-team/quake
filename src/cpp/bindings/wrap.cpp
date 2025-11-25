@@ -382,6 +382,10 @@ PYBIND11_MODULE(_bindings, m) {
                  "Average worker job time in nanoseconds.")
         .def_readwrite("worker_scan_time_ns", &SearchTimingInfo::worker_scan_time_ns,
                  "Average worker scan time in nanoseconds.")
+         .def_readwrite("local_scan_throughput", &SearchTimingInfo::local_scan_throughput,
+                 "Average batch scan throughput")
+        .def_readwrite("worker_partition_size", &SearchTimingInfo::worker_partition_size,
+                 "Average worker partition size")
          .def("__repr__", [](const SearchTimingInfo &s) {
              std::ostringstream oss;
              oss << "{";
