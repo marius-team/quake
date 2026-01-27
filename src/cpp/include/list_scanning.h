@@ -8,6 +8,9 @@
 #define LIST_SCANNING_H
 
 #include <common.h>
+#include <immintrin.h>
+#include <chrono>
+
 #include "faiss/utils/Heap.h"
 #include "faiss/utils/distances.h"
 #include "sorting/pdqsort.h"
@@ -183,7 +186,7 @@ public:
     inline void add(T dist, I idx) {
         vals_[head_] = dist;
         ids_[head_] = idx;
-        if (++head_ == capacity_) flush();
+        if (__builtin_expect(++head_ == capacity_, 0)) flush();
     }
 
     void batch_add(T *distances, I *indices, int num_values) {
@@ -522,7 +525,6 @@ inline void ip_blas(
     }
 }
 
-
 inline void l2_blas(
         const float*   __restrict x,
         const float*   __restrict y,
@@ -535,8 +537,8 @@ inline void l2_blas(
         vector<shared_ptr<TopkBuffer>> &topk_buffers,
         float*        __restrict    ip_block,     // nx * bs_y
         float*        __restrict    norms_x,      // bs_x
-        float*        __restrict    norms_y,
-        vector<std::atomic<float>*>   pivot)      // db_blas_bs
+        float*        __restrict    norms_y,     // db_blas_bs
+        vector<std::atomic<float>*>   pivot)      
 {
     if (nx == 0 || ny == 0) return;
 
@@ -590,47 +592,40 @@ inline void l2_blas(
             // }
 
             /* IP → L2² */
-            if (k > 1) {
-                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
-                    float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
-                    const float current_norm_x = norms_x[qi];
-                    for (size_t pj = 0; pj < db_chunk; ++pj) {
-                        *line_ptr = current_norm_x + norms_y[pj] - 2.f * (*line_ptr);
-                        line_ptr++; // Move to the next element in the column
-                    }
+            int num_flushes = 0;
+            int num_top_k_add_all = 0;
+            int buffer_not_added = 0;
+            
+            float* line_ptr = ip_block;
+            for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                const float current_norm_x = norms_x[qi];
+                
+                #pragma unroll
+                for (size_t pj = 0; pj < db_chunk; ++pj) {
+                    *line_ptr = current_norm_x + norms_y[pj] - 2.f * (*line_ptr);
+                    line_ptr++; 
+                }
+            }
 
-                    // collect distances closer than pivot
-                    if (pivot.size() > 0) {
-                        float curr_pivot = pivot[qi]->load(std::memory_order_relaxed);
-                        curr_pivot = curr_pivot * curr_pivot; // Convert to squared distance
-                        line_ptr = ip_block + qi * db_chunk; // Reset line_ptr to the start of the current column
-                        for (size_t pj = 0; pj < db_chunk; ++pj) {
-                            if (*line_ptr < curr_pivot) {
-                                topk_buffers[qi]->add(std::sqrt(*line_ptr), list_ids_ptr[j0 + pj]);
-                            }
-                            line_ptr++; // Move to the next element in the column
+            line_ptr = ip_block;
+            if (__builtin_expect(pivot.size() > 0, 1)) {
+                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                    const float curr_pivot = pivot[qi]->load(std::memory_order_relaxed);
+                    const float curr_pivot_sq = curr_pivot * curr_pivot; // Compare squared distances
+
+                    #pragma unroll
+                    for (size_t pj = 0; pj < db_chunk; ++pj) {
+                        // Check if distance is within the pivot radius
+                        if (__builtin_expect(*line_ptr < curr_pivot_sq, 0)) {
+                            topk_buffers[qi]->add(std::sqrt(*line_ptr), list_ids_ptr[j0 + pj]);
                         }
-                    } else {
-                        topk_buffers[qi]->batch_add(ip_block + qi * db_chunk, list_ids_ptr + j0, db_chunk);
+                        line_ptr++; 
                     }
                 }
-            } else if (k == 1) {
+            } else { 
                 for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
-                    float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
-                    const float current_norm_x = norms_x[qi];
-
-                    float best_dist = std::numeric_limits<float>::infinity();
-                    int64_t best_id = -1;
-
-                    for (size_t pj = 0; pj < db_chunk; ++pj) {
-                        *line_ptr = current_norm_x + norms_y[pj] - 2.f * (*line_ptr);
-                        if (*line_ptr < best_dist) {
-                            best_dist = *line_ptr;
-                            best_id = list_ids_ptr[j0 + pj];
-                        }
-                        line_ptr++; // Move to the next element in the column
-                    }
-                    topk_buffers[qi]->add(sqrt(best_dist), best_id);
+                    topk_buffers[qi]->batch_add(line_ptr, list_ids_ptr + j0, db_chunk);
+                    line_ptr += db_chunk;
                 }
             }
         }
@@ -653,6 +648,7 @@ inline void batched_scan_list(const float *query_vecs,
                               int            blas_q_bs     /* = 128 */,
                               std::vector<std::atomic<float>*> pivots /* = {} */)
 {
+
     if (list_size == 0 || num_queries == 0 || list_vecs == nullptr) {
         return;
     }
@@ -695,6 +691,7 @@ inline void batched_scan_list(const float *query_vecs,
                 for (int i = 0; i < q_blk; ++i) {
                     const float *xptr = q_ptr + size_t(i) * dim;
                     float sumsq = 0.f;
+
                     for (int d = 0; d < dim; ++d) {
                         sumsq += xptr[d] * xptr[d];
                     }
@@ -737,6 +734,7 @@ inline void batched_scan_list(const float *query_vecs,
                                                  : TLS_ip.data());
 
             // If L2 and caller gave no norms_y_buf, ensure TLS_ny fits blk
+            
             float *blk_norm_y = nullptr;
             if (need_norm) {
                 if (norms_y_buf != nullptr) {

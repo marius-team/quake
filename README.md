@@ -129,6 +129,14 @@ Quake’s Python API provides a set of core operations. The following sections d
 
 ---
 
+
+### Devesh Notes
+Running Big ANN debug script:
+```
+cmake -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DQUAKE_USE_NUMA=OFF -DQUAKE_USE_ASAN=OFF -DQUAKE_USE_AVX512=ON -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DQUAKE_SET_ABI_MODE=ON ..
+make big_ann_debug -j$(nproc) && ./big_ann_debug &> batch_query_debug.out
+```
+
 ## Further Documentation
 
 For detailed instructions and advanced usage, please see the documentation: http://marius-project.org/quake/

@@ -241,7 +241,7 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
     for (auto &p : partitions) {
         max_nq = std::max(max_nq, (size_t)p->num_vectors_);
     }
-    max_nq = max_nq * 5; // double the max_nq to ensure enough space for batched_scan_list, as assignments may change.
+    max_nq = max_nq * 10; // Ensure we allocate enough capacity
 
     // Determine number of clusters and dimension.
     int n_clusters = centroids.size(0);

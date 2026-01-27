@@ -211,6 +211,7 @@ void parallel_for(IndexType start, IndexType end, Function func, int num_threads
                 }
             }));
         }
+
         for (auto &f : futures) {
             f.get();
         }

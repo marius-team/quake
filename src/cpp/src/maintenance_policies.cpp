@@ -30,6 +30,7 @@ MaintenancePolicy::MaintenancePolicy(
         params_->window_size, partition_manager_->ntotal());
 }
 
+constexpr bool LOG_WMA = true;
 shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     // only consider split/deletion once the window is full
 
@@ -40,6 +41,7 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
 
     vector<int64_t> partitions_to_delete;
     vector<int64_t> partitions_to_split;
+    vector<int64_t> partitions_to_recluster;
 
     Tensor all_partition_ids_tens = partition_manager_->get_partition_ids();
     vector<int64_t> all_partition_ids = vector<int64_t>(all_partition_ids_tens.data_ptr<int64_t>(),
@@ -47,6 +49,7 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
                                                         all_partition_ids_tens.size(0));
 
     if (params_->max_partition_size != -1) {
+        if constexpr(debug_) std::cout << "Mainteance bounding partition sizes to [" << params_->min_partition_size << "," << params_->max_partition_size << "]" << std::endl;
         for (const auto &partition_id: all_partition_ids) {
             int partition_size = partition_manager_->get_partition_size(partition_id);
 
@@ -58,6 +61,8 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
         }
 
     } else {
+        if constexpr(debug_) std::cout << "Using the cost model to determine delete/split" << std::endl;
+
         int64_t num_queries = hit_count_tracker_->get_num_queries_recorded();
         if (hit_count_tracker_->get_num_queries_recorded() < params_->window_size) {
             std::cout << "Window not full yet. " << num_queries << " queries recorded and " << params_->window_size
@@ -77,9 +82,16 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
         // STEP 2: Use cost estimation to decide which partitions to delete or split.
         int total_partitions = partition_manager_->nlist();
         float current_scan_fraction = hit_count_tracker_->get_current_scan_fraction();
-
+        
+        float* new_centroids_buffer = reinterpret_cast<float*>(quake_alloc(partition_manager_->d() * sizeof(float), 0));
         int avg_partition_size = partition_manager_->ntotal() / total_partitions;
+
         for (const auto &partition_id: all_partition_ids) {
+            // Update the centroid for this vector if we have a delta
+            bool choose_partition = false;
+            float delete_factor = partition_manager_->get_delete_factor(partition_id);
+            partition_manager_->update_centroid(partition_id, new_centroids_buffer);
+
             // Get hit count and hit rate for the partition.
             int hit_count = aggregated_hits[partition_id];
             float hit_rate = static_cast<float>(hit_count) / static_cast<float>(params_->window_size);
@@ -88,8 +100,10 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
             // Deletion decision.
             float delete_delta = cost_estimator_->compute_delete_delta(
                 partition_size, hit_rate, total_partitions, current_scan_fraction, avg_partition_size);
+            bool consider_partition_for_delete = delete_delta < -params_->delete_threshold_ns;
+            // if constexpr(debug_) std::cout << "For partition " << partition_id << " of size " << partition_size << " got delete delta " << delete_delta << " leading to delete decision of " << consider_partition_for_delete << std::endl;
 
-            if (delete_delta < -params_->delete_threshold_ns) {
+            if (consider_partition_for_delete) {
 
                 if (params_->enable_delete_rejection && partition_size > params_->min_partition_size) {
                     // check the assignments of the partitions to be deleted.
@@ -133,22 +147,43 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
                                                                                   hit_rates);
 
                     if (delta < -params_->delete_threshold_ns) {
+                        choose_partition = true;
                         partitions_to_delete.push_back(partition_id);
                     }
                 } else {
                     partitions_to_delete.push_back(partition_id);
+                    choose_partition = true;
                 }
             } else {
+                bool partition_large_enough = partition_size > params_->min_partition_size;
                 if (partition_size > params_->min_partition_size) {
                     float split_delta = cost_estimator_->compute_split_delta(
                         partition_size, hit_rate, total_partitions);
-                    if (split_delta < -params_->split_threshold_ns) {
+                    bool should_split = split_delta < -params_->split_threshold_ns;
+                    if constexpr(debug_) std::cout << "For partition " << partition_id << " of size " << partition_size << " got split delta " << split_delta << " leading to split decision of " << should_split << std::endl;
+                    if (should_split) {
                         partitions_to_split.push_back(partition_id);
+                        choose_partition = true;
                     }
                 }
             }
-        }
+
+            // If it was not chosen then consider it for some tracking based optimizations
+            if(choose_partition) { 
+                continue;
+            }
+
+            // If a large chunk of the partition was deleted then mark it for deletion
+            bool perform_delete = delete_factor != -1.0 && delete_factor > params_->partition_reduction_threshold;
+            if(perform_delete) { 
+                partitions_to_delete.push_back(partition_id);
+                continue;
+            } 
+        } 
+
+        quake_free(new_centroids_buffer, partition_manager_->d() * sizeof(float));
     }
+
 
     // Convert partition ID vectors to Torch tensors.
     Tensor partitions_to_delete_tens = torch::from_blob(
@@ -161,32 +196,39 @@ shared_ptr<MaintenanceTimingInfo> MaintenancePolicy::perform_maintenance() {
     // STEP 3: Process deletions.
     auto start_delete = steady_clock::now();
     if (partitions_to_delete_tens.numel() > 0) {
-        partition_manager_->delete_partitions(partitions_to_delete_tens);
+        partition_manager_->delete_partitions(partitions_to_delete_tens, true);
     }
     auto end_delete = steady_clock::now();
 
     // STEP 4: Process splits.
     auto start_split = steady_clock::now();
     shared_ptr<Clustering> split_partitions;
+    torch::Tensor refine_partitions;
     if (partitions_to_split_tens.numel() > 0) {
         // split the partitions into two
-        split_partitions = partition_manager_->split_partitions(partitions_to_split_tens);
+        split_partitions = partition_manager_->split_partitions(partitions_to_split_tens, params_->split_knn_iterations);
 
         // remove old partitions
         partition_manager_->delete_partitions(partitions_to_split_tens, false);
 
         // add new partitions
         partition_manager_->add_partitions(split_partitions);
+        refine_partitions = split_partitions->partition_ids;
+    } else { 
+        refine_partitions = torch::empty({0}, torch::kInt64);
     }
     auto end_split = steady_clock::now();
+
     // STEP 5: Perform local refinement on newly split partitions.
-    if (split_partitions && split_partitions->partition_ids.numel() > 0) {
-        local_refinement(split_partitions->partition_ids);
+    if (refine_partitions.numel() > 0) {
+        local_refinement(refine_partitions);
     }
     auto end_total = steady_clock::now();
     int64_t refinement_time_us = static_cast<int64_t>(duration_cast<microseconds>(end_total - end_split).count());
 
-    // STEP 6: Clean up any empty partitions
+    // Step 6: Recluster any partitions
+
+    // STEP 7: Clean up any empty partitions
     vector<int64_t> empty_ids = {};
     for (auto pair : partition_manager_->partition_store_->partitions_) {
         if (pair.second->num_vectors_ <= 0) {

@@ -1,0 +1,1 @@
+step_num,step_type,latency_ms,recall_mean,recall_std_dev,gt_scan_mean,gt_scan_dev,mainteance_ms,index_mem_gb,num_partitions,num_vectors

@@ -6,6 +6,10 @@
 
 #include <index_partition.h>
 
+// Initialize the static defaults
+float IndexPartition::delete_resize_threshold_ = 0.8;
+float IndexPartition::capacity_resize_threshold_ = 1.1;
+
 IndexPartition::IndexPartition(int64_t num_vectors,
                                uint8_t* codes,
                                idx_t* ids,
@@ -17,6 +21,11 @@ IndexPartition::IndexPartition(int64_t num_vectors,
     ids_ = nullptr;
     numa_node_ = -1;
     core_id_ = -1;
+    last_snapshot_size_ = 0;
+    delta_count_ = 0;
+
+    reset_delta();
+
     ensure_capacity(num_vectors);
     append(num_vectors, ids, codes);
 }
@@ -39,6 +48,20 @@ IndexPartition::~IndexPartition() {
     clear();
 }
 
+void IndexPartition::allocate_delta_buffer() { 
+    if(delta_vec_ == nullptr) { 
+        delta_vec_ = allocate_memory<uint8_t>(code_size_, numa_node_);
+    }
+}
+
+void IndexPartition::reset_delta() { 
+    allocate_delta_buffer();
+
+    last_snapshot_size_ = num_vectors_;
+    delta_count_ = 0;
+    std::memset(delta_vec_, 0, code_size_ * sizeof(uint8_t));
+}
+
 void IndexPartition::set_code_size(int64_t code_size) {
     if (code_size <= 0) {
         throw std::runtime_error("Invalid code_size");
@@ -49,8 +72,27 @@ void IndexPartition::set_code_size(int64_t code_size) {
     code_size_ = code_size;
 }
 
-void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes) {
+void IndexPartition::append(int64_t n_entry, const idx_t* new_ids, const uint8_t* new_codes, bool update_delta) {
     if (n_entry <= 0) return;
+
+    // Record the delta of the new vectors
+    if(update_delta) { 
+        const int dimension = code_size_ / sizeof(float);
+        float* delta_values = reinterpret_cast<float*>(delta_vec_);
+        const float* new_values = reinterpret_cast<const float*>(new_codes);
+
+        for (int64_t i = 0; i < n_entry; i++) {
+            const float* inserted_vector = new_values + (i * dimension);
+
+            #pragma unroll
+            for (int j = 0; j < dimension; j++) {
+                delta_values[j] += inserted_vector[j];
+            }
+        }
+        delta_count_ += n_entry;
+    }
+
+    // Now add them to the index
     ensure_capacity(num_vectors_ + n_entry);
     const size_t code_bytes = static_cast<size_t>(code_size_);
     std::memcpy(codes_ + num_vectors_ * code_bytes, new_codes, n_entry * code_bytes);
@@ -76,11 +118,27 @@ void IndexPartition::update(int64_t offset, int64_t n_entry, const idx_t* new_id
     std::memcpy(ids_ + offset, new_ids, n_entry * sizeof(idx_t));
 }
 
-int64_t IndexPartition::remove(int64_t idx)
+int64_t IndexPartition::remove(int64_t idx, bool update_delta)
 {
     if (idx < 0 || idx >= num_vectors_) {
         throw std::runtime_error("Index out of range in remove");
     }
+
+    // Update the delta to not include the removed vector
+    if(update_delta) { 
+        const int dimension = code_size_ / sizeof(float);
+        float* delta_values = reinterpret_cast<float*>(delta_vec_);
+        float* vector_to_delete = reinterpret_cast<float*>(codes_) + (idx * dimension);
+
+        #pragma unroll
+        for (int j = 0; j < dimension; j++) {
+            delta_values[j] -= vector_to_delete[j];
+        }
+        delta_count_ -= 1;
+        churn_count_ += 1;
+    }
+
+    // Now remove this vector
     const int64_t last = num_vectors_ - 1;
     if (idx != last) {                 // swap last -> idx
         std::memcpy(codes_ + idx * code_size_,
@@ -89,6 +147,7 @@ int64_t IndexPartition::remove(int64_t idx)
         ids_[idx] = ids_[last];
     }
     --num_vectors_;
+    
     return (idx == last) ? -1 : idx;   // <‑‑ the new occupant of slot idx
 }
 
@@ -115,6 +174,13 @@ void IndexPartition::clear() {
     code_size_ = 0;
     codes_ = nullptr;
     ids_ = nullptr;
+}
+
+void IndexPartition::check_buffer_size() { 
+    float curr_occupancy = (1.0 * num_vectors_)/buffer_size_;
+    if(curr_occupancy <= IndexPartition::delete_resize_threshold_) { 
+        resize(num_vectors_ * IndexPartition::capacity_resize_threshold_);
+    }
 }
 
 int64_t IndexPartition::find_id(idx_t id) const {
@@ -237,13 +303,9 @@ void IndexPartition::reallocate_memory(int64_t new_capacity) {
 }
 
 void IndexPartition::ensure_capacity(int64_t required) {
-    if (required > buffer_size_) {
-        int64_t new_capacity = std::max<int64_t>(1024, buffer_size_);
-        while (new_capacity < required) {
-            new_capacity *= 2;
-        }
-        reallocate_memory(new_capacity);
-    }
+    if(buffer_size_ <= required) { 
+        reallocate_memory(required * IndexPartition::capacity_resize_threshold_);
+    }   
 }
 
 template <typename T>

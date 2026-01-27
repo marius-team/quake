@@ -99,6 +99,8 @@ void PartitionManager::init_partitions(
                     resident_ids_.insert(id_val);
                 }
             }
+
+            std::shared_ptr<IndexPartition> partition = partition_store_->get_partition(partition_ids_accessor[i]);
             partition_store_->add_entries(
                 partition_ids_accessor[i],
                 count,
@@ -109,6 +111,10 @@ void PartitionManager::init_partitions(
                 std::cout << "[PartitionManager] init_partitions: Added " << count
                           << " entries to partition " << partition_ids_accessor[i] << std::endl;
             }
+
+            // Also reset the index delta
+            partition->reset_delta();
+            if (debug_) std::cout << "[PartitionManager] init_partitions: Reset delta finished" << std::endl;
         }
     }
 
@@ -126,7 +132,8 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
     const Tensor &vectors,
     const Tensor &vector_ids,
     const Tensor &assignments,
-    bool check_uniques
+    bool check_uniques,
+    bool record_delta
 ) {
 
     auto timing_info = std::make_shared<ModifyTimingInfo>();
@@ -251,7 +258,9 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
         int64_t pid = partition_ids_for_each[i];
 
         if (pid < 0 || pid >= curr_partition_id_) {
-            throw runtime_error("[PartitionManager] add: Invalid partition ID.");
+            std::string error_msg = "[PartitionManager] add: Invalid partition ID of " + std::to_string(pid) + "/" + std::to_string(curr_partition_id_);
+            error_msg = error_msg + " for vector " + std::to_string(i) + "/" + std::to_string(n);
+            throw runtime_error(error_msg);
         }
 
         if (debug_) {
@@ -263,15 +272,17 @@ shared_ptr<ModifyTimingInfo> PartitionManager::add(
             pid,
             /*n_entry=*/1,
             id_ptr + i,
-            code_ptr + i * code_size_bytes
+            code_ptr + i * code_size_bytes,
+            record_delta
         );
     }
+
     auto e3 = std::chrono::high_resolution_clock::now();
     timing_info->modify_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e3 - s3).count();
     return timing_info;
 }
 
-shared_ptr<ModifyTimingInfo> PartitionManager::remove(const Tensor &ids) {
+shared_ptr<ModifyTimingInfo> PartitionManager::remove(const Tensor &ids, bool record_delta) {
 
     shared_ptr<ModifyTimingInfo> timing_info = std::make_shared<ModifyTimingInfo>();
     auto s1 = std::chrono::high_resolution_clock::now();
@@ -309,17 +320,8 @@ shared_ptr<ModifyTimingInfo> PartitionManager::remove(const Tensor &ids) {
     auto e1 = std::chrono::high_resolution_clock::now();
     timing_info->input_validation_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e1 - s1).count();
 
-    auto s2 = std::chrono::high_resolution_clock::now();
-    std::set<faiss::idx_t> to_remove;
-    auto ptr = ids.data_ptr<int64_t>();
-    for (int64_t i = 0; i < ids.size(0); i++) {
-        to_remove.insert(static_cast<faiss::idx_t>(ptr[i]));
-    }
-    auto e2 = std::chrono::high_resolution_clock::now();
-    timing_info->find_partition_time_us = std::chrono::duration_cast<std::chrono::microseconds>(e2 - s2).count();
-
     auto s3 = std::chrono::high_resolution_clock::now();
-    partition_store_->remove_vectors(to_remove);
+    partition_store_->remove_vectors(ids.data_ptr<int64_t>(), ids.size(0), record_delta);
     if (debug_) {
         std::cout << "[PartitionManager] remove: Completed removal." << std::endl;
     }
@@ -400,7 +402,7 @@ shared_ptr<Clustering> PartitionManager::select_partitions(const Tensor &select_
     return clustering;
 }
 
-shared_ptr<Clustering> PartitionManager::split_partitions(const Tensor &partition_ids) {
+shared_ptr<Clustering> PartitionManager::split_partitions(const Tensor &partition_ids, int knn_iteration) {
     if (debug_) {
         std::cout << "[PartitionManager] split_partitions: Splitting " << partition_ids.size(0)
                   << " partitions." << std::endl;
@@ -420,8 +422,10 @@ shared_ptr<Clustering> PartitionManager::split_partitions(const Tensor &partitio
     shared_ptr<Clustering> clustering = select_partitions(partition_ids, true);
 
     shared_ptr<IndexBuildParams> build_params = make_shared<IndexBuildParams>();
+    build_params->niter = knn_iteration;
     build_params->nlist = num_splits;
     build_params->metric = metric_type_to_str(parent_->metric_);
+
     for (int64_t i = 0; i < partition_ids.size(0); ++i) {
         // Ensure enough vectors to split
         assert(clustering->cluster_size(i) >= 4 && "Partition must have at least 8 vectors to split.");
@@ -454,6 +458,72 @@ shared_ptr<Clustering> PartitionManager::split_partitions(const Tensor &partitio
         std::cout << "[PartitionManager] split_partitions: Completed splitting." << std::endl;
     }
     return split_clustering;
+}
+
+float PartitionManager::get_churn_factor(int64_t partition_id) { 
+    // Get the partition details
+    std::shared_ptr<IndexPartition> curr_partition = partition_store_->get_partition(partition_id);  
+    int64_t num_changes = curr_partition->churn_count_;
+    int64_t previous_size = std::max(curr_partition->last_snapshot_size_, curr_partition->num_vectors_);
+    if(num_changes <= 0 || previous_size == 0) { // Deal with the case that there has been no deletes
+        return -1.0;
+    }
+    
+    return (1.0 * num_changes)/previous_size;
+}
+
+float PartitionManager::get_delete_factor(int64_t partition_id) { 
+    // Get the partition details
+    std::shared_ptr<IndexPartition> curr_partition = partition_store_->get_partition(partition_id);  
+    int64_t num_deletes = -1 * curr_partition->delta_count_;
+    int64_t previous_size = curr_partition->last_snapshot_size_;
+    if(num_deletes <= 0 || previous_size == 0) { // Deal with the case that there has been no deletes
+        return -1.0;
+    }
+
+    return (1.0 * num_deletes)/previous_size;
+}
+
+int64_t PartitionManager::update_centroid(int64_t partition_id, float* centroid_buffer) { 
+    // Load the specified partition 
+    const int dimension = partition_store_->d_;
+    std::shared_ptr<IndexPartition> curr_partition = partition_store_->get_partition(partition_id);    
+    int64_t delta_size = curr_partition->delta_count_;
+    if(delta_size == 0 || curr_partition->num_vectors_ == 0) { 
+        curr_partition->reset_delta();
+        return delta_size;
+    }
+    
+    // Get the centroid for this partition
+    std::shared_ptr<faiss::DynamicInvertedLists> centroid_store = parent_->partition_manager_->partition_store_;
+    bool found_centroid = centroid_store->get_vector_for_id(partition_id, centroid_buffer);
+    if(!found_centroid) {
+        std::string err_msg = std::string("Failed to load centroid for partition ") + std::to_string(partition_id);
+        throw std::runtime_error(err_msg);
+    }
+
+    // Get the variables needed
+    int64_t old_size = curr_partition->last_snapshot_size_;
+    int64_t curr_size = curr_partition->num_vectors_;
+    if(old_size + delta_size != curr_size) { 
+        std::string err_msg = std::string("Invalid sizes for partition ") + std::to_string(partition_id);
+        throw std::runtime_error(err_msg);
+    }
+
+    // Update the centroid based on the delta
+    float* delta_vec = reinterpret_cast<float*>(curr_partition->delta_vec_);
+    #pragma unroll
+    for(int i = 0; i < dimension; i++) { 
+        float old_val = centroid_buffer[i];
+        centroid_buffer[i] = (old_size * centroid_buffer[i] + delta_vec[i])/curr_size;
+    }
+
+    // Write back the new centroid
+    centroid_store->write_vector_by_id(partition_id, centroid_buffer);
+
+    // Reset the delta as we have process this delta
+    curr_partition->reset_delta();
+    return delta_size;
 }
 
 void PartitionManager::refine_partitions(Tensor partition_ids, int iterations) {
@@ -491,7 +561,9 @@ void PartitionManager::refine_partitions(Tensor partition_ids, int iterations) {
 
     // replace partitions
     for (int i = 0; i < partition_ids.size(0); i++) {
+        index_partitions[i]->partition_id_ = pids[i];
         partition_store_->partitions_[pids[i]] = index_partitions[i];
+        index_partitions[i]->reset_delta();
     }
 
     partition_store_->build_map();
@@ -527,6 +599,7 @@ void PartitionManager::add_partitions(shared_ptr<Clustering> partitions) {
             partitions->vector_ids[i].data_ptr<int64_t>(),
             as_uint8_ptr(partitions->vectors[i])
         );
+        partition_store_->get_partition(list_no)->reset_delta();
         if (debug_) {
             std::cout << "[PartitionManager] add_partitions: Added partition " << list_no
                       << " with " << partitions->vectors[i].size(0) << " vectors." << std::endl;
@@ -563,7 +636,7 @@ void PartitionManager::delete_partitions(const Tensor &partition_ids, bool reass
                 if (vectors.size(0) == 0) {
                     continue;
                 }
-                add(vectors, ids, Tensor(), false);
+                add(vectors, ids, Tensor(), false, true);
             }
         }
     } else {

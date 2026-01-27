@@ -21,7 +21,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Compiler flags
-set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_DEBUG "-O3 -g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 if(NOT DEFINED QUAKE_SET_ABI_MODE)
     set(QUAKE_SET_ABI_MODE ON)
@@ -95,7 +95,7 @@ add_compile_options(-march=native)
 
 # Switch ABI mode
 if(QUAKE_SET_ABI_MODE)
-    add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+    add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
 endif()
 
 
@@ -166,17 +166,23 @@ endif()
 
 target_link_libraries(${PROJECT_NAME} PUBLIC ${LINK_LIBS})
 
-IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
+IF(QUAKE_USE_TSAN)
     message("Using thread sanitizer")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
     set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=thread")
-ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_TSAN)
+ENDIF(QUAKE_USE_TSAN)
 
-IF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
+IF(QUAKE_USE_ASAN)
     message("Using address sanitizer")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize-recover=address")
     set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=address")
-ENDIF(CMAKE_BUILD_TYPE MATCHES Debug AND QUAKE_USE_ASAN)
+ENDIF(QUAKE_USE_ASAN)
+
+IF(QUAKE_USE_LSAN)
+    message("Using leak sanitizer")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=leak")
+    set(CMAKE_MODULE_LINKER_FLAGS "{$CMAKE_MODULE_LINKER_FLAGS} -fsanitize=leak")
+ENDIF(QUAKE_USE_LSAN)
 
 # ---------------------------------------------------------------
 # Python Bindings
@@ -192,7 +198,7 @@ add_dependencies(bindings _bindings)
 # ---------------------------------------------------------------
 # Benchmarks
 # ---------------------------------------------------------------
-file(GLOB BENCHMARK_SOURCES "src/cpp/test/benchmark/*.cpp")
+file(GLOB BENCHMARK_SOURCES "scripts/cpp/benchmark/*.cpp")
 
 foreach(SOURCE ${BENCHMARK_SOURCES})
     get_filename_component(EXECUTABLE_NAME ${SOURCE} NAME_WE)

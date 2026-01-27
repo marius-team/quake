@@ -53,6 +53,15 @@ PYBIND11_MODULE(_bindings, m) {
         and maintain your index.
     )pbdoc";
 
+    /*********** Index Partition Bindings ***********/
+    class_<IndexPartition>(m, "IndexPartition")
+        .def_readwrite_static("delete_resize_threshold", &IndexPartition::delete_resize_threshold_)
+        .def_readwrite_static("capacity_resize_threshold", &IndexPartition::capacity_resize_threshold_);
+
+     class_<QueryCoordinator>(m, "QueryCoordinator")
+        .def_readwrite_static("partition_chunk_size", &QueryCoordinator::batch_scan_partition_chunk_size_)
+        .def_readwrite_static("query_chunk_size", &QueryCoordinator::batch_scan_query_chunk_size_);
+
     /*********** QuakeIndex Binding ***********/
     class_<QuakeIndex, shared_ptr<QuakeIndex>>(m, "QuakeIndex")
         .def(init<int>(), arg("current_level") = 0,
@@ -250,6 +259,10 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Enable split rejection. default = ") + std::to_string(DEFAULT_ENABLE_SPLIT_REJECTION)).c_str())
         .def_readwrite("enable_delete_rejection", &MaintenancePolicyParams::enable_delete_rejection,
              (std::string("Enable delete rejection. default = ") + std::to_string(DEFAULT_ENABLE_DELETE_REJECTION)).c_str())
+        .def_readwrite("split_knn_iterations", &MaintenancePolicyParams::split_knn_iterations,
+             (std::string("Number of clustering iterations to perform during a clustering. default = ") + std::to_string(DEFAULT_NITER)).c_str())
+        .def_readwrite("partition_reduction_threshold", &MaintenancePolicyParams::partition_reduction_threshold,
+             (std::string("Threshold for deleting a partition based on the number of vectors it has lost. default = ") + std::to_string(DEFAULT_PARTITION_REDUCTION_THRESHOLD)).c_str())   
         .def_readwrite("delete_threshold_ns", &MaintenancePolicyParams::delete_threshold_ns,
              (std::string("Delete threshold (ns). default = ") + std::to_string(DEFAULT_DELETE_THRESHOLD_NS)).c_str())
         .def_readwrite("split_threshold_ns", &MaintenancePolicyParams::split_threshold_ns,
@@ -369,6 +382,10 @@ PYBIND11_MODULE(_bindings, m) {
                  "Average worker job time in nanoseconds.")
         .def_readwrite("worker_scan_time_ns", &SearchTimingInfo::worker_scan_time_ns,
                  "Average worker scan time in nanoseconds.")
+         .def_readwrite("local_scan_throughput", &SearchTimingInfo::local_scan_throughput,
+                 "Average batch scan throughput")
+        .def_readwrite("worker_partition_size", &SearchTimingInfo::worker_partition_size,
+                 "Average worker partition size")
          .def("__repr__", [](const SearchTimingInfo &s) {
              std::ostringstream oss;
              oss << "{";
