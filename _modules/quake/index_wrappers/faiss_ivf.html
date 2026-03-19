@@ -352,6 +352,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">search_result</span><span class="o">.</span><span class="n">ids</span> <span class="o">=</span> <span class="n">to_torch</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
         <span class="n">search_result</span><span class="o">.</span><span class="n">distances</span> <span class="o">=</span> <span class="n">to_torch</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
         <span class="n">search_result</span><span class="o">.</span><span class="n">timing_info</span> <span class="o">=</span> <span class="n">timing_info</span>
+        <span class="n">search_result</span><span class="o">.</span><span class="n">timing_info</span><span class="o">.</span><span class="n">parent_info</span> <span class="o">=</span> <span class="n">SearchTimingInfo</span><span class="p">()</span>
 
         <span class="k">return</span> <span class="n">search_result</span></div>
 
@@ -384,7 +385,7 @@ window.addEventListener("load", () => mermaid.run());
 
 <div class="viewcode-block" id="FaissIVF.load">
 <a class="viewcode-back" href="../../../api.html#quake.index_wrappers.faiss_ivf.FaissIVF.load">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Load the index from a file.</span>
 
@@ -418,7 +419,7 @@ window.addEventListener("load", () => mermaid.run());
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Jason Mohoney.</p>
+    <p>&#169; Copyright 2026, Jason Mohoney.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

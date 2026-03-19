@@ -90,8 +90,9 @@ window.addEventListener("load", () => mermaid.run());
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">quake.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">download_url</span><span class="p">,</span> <span class="n">extract_file</span><span class="p">,</span> <span class="n">fvecs_to_tensor</span><span class="p">,</span> <span class="n">ivecs_to_tensor</span><span class="p">,</span> <span class="n">to_path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">quake.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">download_url</span><span class="p">,</span> <span class="n">extract_file</span><span class="p">,</span> <span class="n">fvecs_to_tensor</span><span class="p">,</span> <span class="n">ivecs_to_tensor</span><span class="p">,</span> <span class="n">to_path</span><span class="p">,</span> <span class="n">knn</span>
 
 <span class="n">DEFAULT_DOWNLOAD_DIR</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;data/&quot;</span><span class="p">)</span>
 
@@ -195,6 +196,405 @@ window.addEventListener("load", () => mermaid.run());
 </div>
 
 
+<div class="viewcode-block" id="UniformDataset">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.UniformDataset">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UniformDataset</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_vectors</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">download_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_DOWNLOAD_DIR</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_vectors</span> <span class="o">=</span> <span class="n">num_vectors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">=</span> <span class="n">to_path</span><span class="p">(</span><span class="n">download_dir</span><span class="p">)</span>
+
+<div class="viewcode-block" id="UniformDataset.is_downloaded">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.UniformDataset.is_downloaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_downloaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="c1"># check if files exist</span>
+        <span class="n">vecs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;vectors.pt&quot;</span>
+        <span class="n">queries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;queries.pt&quot;</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;ground_truth.pt&quot;</span>
+
+        <span class="k">return</span> <span class="n">vecs</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">queries</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">gt</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="UniformDataset.download">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.UniformDataset.download">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+
+        <span class="n">vecs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_vectors</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">queries</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="n">knn</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">vecs</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">100</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># vecs = torch.randn(self.num_vectors, self.dim)</span>
+        <span class="c1"># queries = torch.randn(1000, self.dim)</span>
+        <span class="c1"># gt = knn(queries, vecs, k=100)[0]</span>
+
+
+        <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;vectors.npy&quot;</span><span class="p">,</span> <span class="n">vecs</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;queries.npy&quot;</span><span class="p">,</span> <span class="n">queries</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;ground_truth.npy&quot;</span><span class="p">,</span> <span class="n">gt</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="UniformDataset.load_vectors">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.UniformDataset.load_vectors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="c1"># return torch.randn(self.num_vectors, self.dim)</span>
+        <span class="c1"># Load the vectors from disk</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;vectors.npy&quot;</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="UniformDataset.load_queries">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.UniformDataset.load_queries">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="c1"># return torch.randn(self.num_vectors, self.dim)</span>
+        <span class="c1"># Load the queries from disk</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;queries.npy&quot;</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="UniformDataset.load_ground_truth">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.UniformDataset.load_ground_truth">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_ground_truth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="c1"># return torch.randint(0, self.num_vectors, (self.num_vectors, 100))</span>
+        <span class="c1"># Load the ground truth from disk</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;ground_truth.npy&quot;</span><span class="p">))</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="MSTuring10m">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring10m">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MSTuring10m</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">download_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_DOWNLOAD_DIR</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">=</span> <span class="n">to_path</span><span class="p">(</span><span class="n">download_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;MSTuringANNS10M&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">downloaded</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metric</span> <span class="o">=</span> <span class="s2">&quot;l2&quot;</span>
+
+<div class="viewcode-block" id="MSTuring10m.is_downloaded">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring10m.is_downloaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_downloaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;base1b.fbin.crop_nb_10000000&quot;</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;query100K.fbin&quot;</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;msturing-gt-10M&quot;</span>
+        <span class="n">downloaded</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">query</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">gt</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">downloaded</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;MSTuring dataset is not available. Please download it manually using big-ann-benchmarks.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">downloaded</span></div>
+
+
+<div class="viewcode-block" id="MSTuring10m.download">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring10m.download">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="MSTuring10m.load_vectors">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring10m.load_vectors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;base1b.fbin.crop_nb_10000000&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="c1"># return to_torch(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="MSTuring10m.load_queries">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring10m.load_queries">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;query100K.fbin&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="c1"># return to_torch(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="MSTuring10m.load_ground_truth">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring10m.load_ground_truth">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_ground_truth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;msturing-gt-10M&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span> <span class="o">==</span> <span class="mi">8</span> <span class="o">+</span> <span class="n">n</span> <span class="o">*</span> <span class="n">d</span> <span class="o">*</span> <span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">n</span> <span class="o">*</span> <span class="n">d</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+        <span class="c1"># D = np.fromfile(f, dtype=&quot;float32&quot;, count=n * d).reshape(n, d)</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span></div>
+</div>
+
+
+<div class="viewcode-block" id="MSTuring100m">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring100m">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MSTuring100m</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">download_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_DOWNLOAD_DIR</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">=</span> <span class="n">to_path</span><span class="p">(</span><span class="n">download_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;MSTuringANNS100M&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">downloaded</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metric</span> <span class="o">=</span> <span class="s2">&quot;l2&quot;</span>
+
+<div class="viewcode-block" id="MSTuring100m.is_downloaded">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring100m.is_downloaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_downloaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;base1b.fbin.crop_nb_100000000&quot;</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;query100K.fbin&quot;</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;msturing-gt-100M&quot;</span>
+        <span class="n">downloaded</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">query</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">gt</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">downloaded</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;MSTuring dataset is not available. Please download it manually using big-ann-benchmarks.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">downloaded</span></div>
+
+
+<div class="viewcode-block" id="MSTuring100m.download">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring100m.download">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="MSTuring100m.load_vectors">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring100m.load_vectors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;base1b.fbin.crop_nb_100000000&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="c1"># return to_torch(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="MSTuring100m.load_queries">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring100m.load_queries">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;query100K.fbin&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="c1"># return to_torch(np.fromfile(fname, dtype=np.float32, offset=8).reshape((n, d)))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="MSTuring100m.load_ground_truth">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.MSTuring100m.load_ground_truth">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_ground_truth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;msturing-gt-100M&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span> <span class="o">==</span> <span class="mi">8</span> <span class="o">+</span> <span class="n">n</span> <span class="o">*</span> <span class="n">d</span> <span class="o">*</span> <span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">n</span> <span class="o">*</span> <span class="n">d</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+        <span class="c1"># D = np.fromfile(f, dtype=&quot;float32&quot;, count=n * d).reshape(n, d)</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span></div>
+</div>
+
+
+<div class="viewcode-block" id="Sift10m">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Sift10m">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Sift10m</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">download_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_DOWNLOAD_DIR</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">=</span> <span class="n">to_path</span><span class="p">(</span><span class="n">download_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;sift10m&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">downloaded</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metric</span> <span class="o">=</span> <span class="s2">&quot;l2&quot;</span>
+
+<div class="viewcode-block" id="Sift10m.is_downloaded">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Sift10m.is_downloaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_downloaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;base.1B.u8bin.crop_nb_10000000&quot;</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;query.public.10K.u8bin&quot;</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;bigann-10M&quot;</span>
+        <span class="k">return</span> <span class="n">base</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">query</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">gt</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="Sift10m.download">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Sift10m.download">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="Sift10m.load_vectors">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Sift10m.load_vectors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;base.1B.u8bin.crop_nb_10000000&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="c1"># return to_torch(np.fromfile(fname, dtype=np.uint8, offset=8).reshape((n, d)))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Sift10m.load_queries">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Sift10m.load_queries">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;query.public.10K.u8bin&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="c1"># return to_torch(np.fromfile(fname, dtype=np.uint8, offset=8).reshape((n, d)))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Sift10m.load_ground_truth">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Sift10m.load_ground_truth">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_ground_truth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;bigann-10M&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span> <span class="o">==</span> <span class="mi">8</span> <span class="o">+</span> <span class="n">n</span> <span class="o">*</span> <span class="n">d</span> <span class="o">*</span> <span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">n</span> <span class="o">*</span> <span class="n">d</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+        <span class="c1"># D = np.fromfile(f, dtype=&quot;float32&quot;, count=n * d).reshape(n, d)</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span></div>
+</div>
+
+
+<div class="viewcode-block" id="Wiki13M">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Wiki13M">[docs]</a>
+<span class="k">class</span><span class="w">  </span><span class="nc">Wiki13M</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">download_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_DOWNLOAD_DIR</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">=</span> <span class="n">to_path</span><span class="p">(</span><span class="n">download_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;wiki13m&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">downloaded</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metric</span> <span class="o">=</span> <span class="s2">&quot;ip&quot;</span>
+
+<div class="viewcode-block" id="Wiki13M.is_downloaded">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Wiki13M.is_downloaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_downloaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wiki.npy&quot;</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wiki_queries.npy&quot;</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wiki_gt.npy&quot;</span>
+        <span class="k">return</span> <span class="n">base</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">query</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">gt</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="Wiki13M.download">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Wiki13M.download">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="Wiki13M.load_vectors">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Wiki13M.load_vectors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wiki.npy&quot;</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">fname</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Wiki13M.load_queries">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Wiki13M.load_queries">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wiki_queries.npy&quot;</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">fname</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Wiki13M.load_ground_truth">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.Wiki13M.load_ground_truth">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_ground_truth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wiki_gt.npy&quot;</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">fname</span><span class="p">))</span><span class="o">.</span><span class="n">long</span><span class="p">()</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="WikiCohere1M">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.WikiCohere1M">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">WikiCohere1M</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">download_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_DOWNLOAD_DIR</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">=</span> <span class="n">to_path</span><span class="p">(</span><span class="n">download_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;wikipedia_cohere&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">downloaded</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metric</span> <span class="o">=</span> <span class="s2">&quot;ip&quot;</span>
+
+<div class="viewcode-block" id="WikiCohere1M.is_downloaded">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.WikiCohere1M.is_downloaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_downloaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wikipedia_base.bin.crop_nb_1000000&quot;</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wikipedia_query.bin&quot;</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot; wikipedia-1M&quot;</span>
+        <span class="k">return</span> <span class="n">base</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">query</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">gt</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="WikiCohere1M.download">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.WikiCohere1M.download">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="WikiCohere1M.load_vectors">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.WikiCohere1M.load_vectors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wikipedia_base.bin.crop_nb_1000000&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="WikiCohere1M.load_queries">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.WikiCohere1M.load_queries">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wikipedia_query.bin&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="WikiCohere1M.load_ground_truth">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.WikiCohere1M.load_ground_truth">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_ground_truth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;wikipedia-1M&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span> <span class="o">==</span> <span class="mi">8</span> <span class="o">+</span> <span class="n">n</span> <span class="o">*</span> <span class="n">d</span> <span class="o">*</span> <span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">n</span> <span class="o">*</span> <span class="n">d</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span></div>
+</div>
+
+
+<div class="viewcode-block" id="T2I1M">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.T2I1M">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">T2I1M</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">download_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_DOWNLOAD_DIR</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">=</span> <span class="n">to_path</span><span class="p">(</span><span class="n">download_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">/</span> <span class="s2">&quot;text2image1B&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">downloaded</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metric</span> <span class="o">=</span> <span class="s2">&quot;ip&quot;</span>
+
+<div class="viewcode-block" id="T2I1M.is_downloaded">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.T2I1M.is_downloaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_downloaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;base.1B.fbin.crop_nb_1000000&quot;</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;query.heldout.30K.fbin&quot;</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;gt100-heldout.30K.fbin&quot;</span>
+        <span class="k">return</span> <span class="n">base</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">query</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">gt</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="T2I1M.download">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.T2I1M.download">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="T2I1M.load_vectors">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.T2I1M.load_vectors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;base.1B.fbin.crop_nb_1000000&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="T2I1M.load_queries">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.T2I1M.load_queries">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;query.heldout.30K.fbin&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="T2I1M.load_ground_truth">
+<a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.T2I1M.load_ground_truth">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_ground_truth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;gt100-heldout.30K.fbin&quot;</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;uint32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span> <span class="o">==</span> <span class="mi">8</span> <span class="o">+</span> <span class="n">n</span> <span class="o">*</span> <span class="n">d</span> <span class="o">*</span> <span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">n</span> <span class="o">*</span> <span class="n">d</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span></div>
+</div>
+
+
+
+
 
 <div class="viewcode-block" id="load_dataset">
 <a class="viewcode-back" href="../../../api.html#quake.datasets.ann_datasets.load_dataset">[docs]</a>
@@ -203,8 +603,22 @@ window.addEventListener("load", () => mermaid.run());
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]:</span>
     <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;sift1m&quot;</span><span class="p">:</span>
         <span class="n">dataset</span> <span class="o">=</span> <span class="n">Sift1m</span><span class="p">(</span><span class="n">download_dir</span><span class="o">=</span><span class="n">download_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;uniform&quot;</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">UniformDataset</span><span class="p">(</span><span class="n">num_vectors</span><span class="o">=</span><span class="mi">100000</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">download_dir</span><span class="o">=</span><span class="n">download_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;msturing10m&quot;</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">MSTuring10m</span><span class="p">(</span><span class="n">download_dir</span><span class="o">=</span><span class="n">download_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;msturing100m&quot;</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">MSTuring100m</span><span class="p">(</span><span class="n">download_dir</span><span class="o">=</span><span class="n">download_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;sift10m&quot;</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">Sift10m</span><span class="p">(</span><span class="n">download_dir</span><span class="o">=</span><span class="n">download_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;wiki13m&quot;</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">Wiki13M</span><span class="p">(</span><span class="n">download_dir</span><span class="o">=</span><span class="n">download_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;t2i1m&quot;</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">T2I1M</span><span class="p">(</span><span class="n">download_dir</span><span class="o">=</span><span class="n">download_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;wikicohere1m&quot;</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">WikiCohere1M</span><span class="p">(</span><span class="n">download_dir</span><span class="o">=</span><span class="n">download_dir</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Unimplemented dataset&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Unimplemented dataset + &quot;</span> <span class="o">+</span> <span class="n">name</span><span class="p">)</span>
 
     <span class="n">dataset</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite_download</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">dataset</span><span class="o">.</span><span class="n">load</span><span class="p">()</span></div>
@@ -218,7 +632,7 @@ window.addEventListener("load", () => mermaid.run());
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Jason Mohoney.</p>
+    <p>&#169; Copyright 2026, Jason Mohoney.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

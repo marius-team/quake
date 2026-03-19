@@ -89,7 +89,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="kn">import</span><span class="w"> </span><span class="nn">faiss</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">quake</span><span class="w"> </span><span class="kn">import</span> <span class="n">SearchTimingInfo</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">quake</span><span class="w"> </span><span class="kn">import</span> <span class="n">SearchTimingInfo</span><span class="p">,</span> <span class="n">SearchResult</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">quake.index_wrappers.faiss_ivf</span><span class="w"> </span><span class="kn">import</span> <span class="n">metric_str_to_faiss</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">quake.index_wrappers.wrapper</span><span class="w"> </span><span class="kn">import</span> <span class="n">IndexWrapper</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">quake.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">to_numpy</span><span class="p">,</span> <span class="n">to_torch</span>
@@ -183,11 +183,15 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
         <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
 
-        <span class="n">timing_info</span><span class="o">.</span><span class="n">total_time_us</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1e6</span><span class="p">)</span>
-        <span class="n">distances</span> <span class="o">=</span> <span class="n">to_torch</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
-        <span class="n">indices</span> <span class="o">=</span> <span class="n">to_torch</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="n">timing_info</span><span class="o">.</span><span class="n">total_time_ns</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1e9</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">indices</span><span class="p">,</span> <span class="n">distances</span><span class="p">,</span> <span class="n">timing_info</span></div>
+        <span class="n">search_result</span> <span class="o">=</span> <span class="n">SearchResult</span><span class="p">()</span>
+        <span class="n">search_result</span><span class="o">.</span><span class="n">ids</span> <span class="o">=</span> <span class="n">to_torch</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="n">search_result</span><span class="o">.</span><span class="n">distances</span> <span class="o">=</span> <span class="n">to_torch</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
+        <span class="n">search_result</span><span class="o">.</span><span class="n">timing_info</span> <span class="o">=</span> <span class="n">timing_info</span>
+
+        <span class="k">return</span> <span class="n">search_result</span></div>
+
 
 
 <div class="viewcode-block" id="FaissHNSW.save">
@@ -243,6 +247,18 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># throw a runtime error</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Faiss HNSW does not support removal of vectors.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FaissHNSW.index_state">
+<a class="viewcode-back" href="../../../api.html#quake.index_wrappers.faiss_hnsw.FaissHNSW.index_state">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">index_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="FaissHNSW.maintenance">
+<a class="viewcode-back" href="../../../api.html#quake.index_wrappers.faiss_hnsw.FaissHNSW.maintenance">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">maintenance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span></div>
 </div>
 
 </pre></div>
@@ -254,7 +270,7 @@ window.addEventListener("load", () => mermaid.run());
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Jason Mohoney.</p>
+    <p>&#169; Copyright 2026, Jason Mohoney.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

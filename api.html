@@ -53,6 +53,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#quake-index-and-configuration">Quake Index and Configuration</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#quake.QuakeIndex"><code class="docutils literal notranslate"><span class="pre">QuakeIndex</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#quake.QuakeIndex.add"><code class="docutils literal notranslate"><span class="pre">QuakeIndex.add()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.QuakeIndex.add_level"><code class="docutils literal notranslate"><span class="pre">QuakeIndex.add_level()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.QuakeIndex.build"><code class="docutils literal notranslate"><span class="pre">QuakeIndex.build()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.QuakeIndex.current_level"><code class="docutils literal notranslate"><span class="pre">QuakeIndex.current_level</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.QuakeIndex.get"><code class="docutils literal notranslate"><span class="pre">QuakeIndex.get()</span></code></a></li>
@@ -70,21 +71,38 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.SearchParams"><code class="docutils literal notranslate"><span class="pre">SearchParams</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.aps_flush_period_us"><code class="docutils literal notranslate"><span class="pre">SearchParams.aps_flush_period_us</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.auncel_a"><code class="docutils literal notranslate"><span class="pre">SearchParams.auncel_a</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.auncel_b"><code class="docutils literal notranslate"><span class="pre">SearchParams.auncel_b</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.batch_size"><code class="docutils literal notranslate"><span class="pre">SearchParams.batch_size</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.batched_scan"><code class="docutils literal notranslate"><span class="pre">SearchParams.batched_scan</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.initial_search_fraction"><code class="docutils literal notranslate"><span class="pre">SearchParams.initial_search_fraction</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.k"><code class="docutils literal notranslate"><span class="pre">SearchParams.k</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.k_factor"><code class="docutils literal notranslate"><span class="pre">SearchParams.k_factor</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.nprobe"><code class="docutils literal notranslate"><span class="pre">SearchParams.nprobe</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.num_threads"><code class="docutils literal notranslate"><span class="pre">SearchParams.num_threads</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.parent_params"><code class="docutils literal notranslate"><span class="pre">SearchParams.parent_params</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.recall_target"><code class="docutils literal notranslate"><span class="pre">SearchParams.recall_target</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.recompute_threshold"><code class="docutils literal notranslate"><span class="pre">SearchParams.recompute_threshold</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.sample_prefix"><code class="docutils literal notranslate"><span class="pre">SearchParams.sample_prefix</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.sample_stride"><code class="docutils literal notranslate"><span class="pre">SearchParams.sample_stride</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.spann_eps"><code class="docutils literal notranslate"><span class="pre">SearchParams.spann_eps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.track_hits"><code class="docutils literal notranslate"><span class="pre">SearchParams.track_hits</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.use_auncel"><code class="docutils literal notranslate"><span class="pre">SearchParams.use_auncel</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.use_precomputed"><code class="docutils literal notranslate"><span class="pre">SearchParams.use_precomputed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchParams.use_spann"><code class="docutils literal notranslate"><span class="pre">SearchParams.use_spann</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.IndexBuildParams"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.gpu_batch_size"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.gpu_batch_size</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.gpu_sample_size"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.gpu_sample_size</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.metric"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.metric</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.niter"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.niter</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.nlist"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.nlist</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.num_merge_workers"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.num_merge_workers</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.num_workers"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.num_workers</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.parent_params"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.parent_params</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.use_gpu"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.use_gpu</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.IndexBuildParams.use_numa"><code class="docutils literal notranslate"><span class="pre">IndexBuildParams.use_numa</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.MaintenancePolicyParams"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams</span></code></a><ul>
@@ -93,9 +111,12 @@
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.enable_delete_rejection"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.enable_delete_rejection</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.enable_split_rejection"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.enable_split_rejection</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.maintenance_policy"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.maintenance_policy</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.max_partition_size"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.max_partition_size</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.min_partition_size"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.min_partition_size</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.partition_reduction_threshold"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.partition_reduction_threshold</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.refinement_iterations"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.refinement_iterations</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.refinement_radius"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.refinement_radius</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.split_knn_iterations"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.split_knn_iterations</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.split_threshold_ns"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.split_threshold_ns</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenancePolicyParams.window_size"><code class="docutils literal notranslate"><span class="pre">MaintenancePolicyParams.window_size</span></code></a></li>
 </ul>
@@ -107,27 +128,37 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.MaintenanceTimingInfo"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.delete_refine_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.delete_refine_time_us</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.delete_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.delete_time_us</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.n_deletes"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.n_deletes</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.n_splits"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.n_splits</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.split_refine_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.split_refine_time_us</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.refinement_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.refinement_time_us</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.split_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.split_time_us</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.MaintenanceTimingInfo.total_time_us"><code class="docutils literal notranslate"><span class="pre">MaintenanceTimingInfo.total_time_us</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.SearchTimingInfo"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.aps_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.aps_time_ns</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.boundary_distance_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.boundary_distance_time_ns</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.buffer_init_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.buffer_init_time_ns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.copy_query_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.copy_query_time_ns</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.job_enqueue_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.job_enqueue_time_ns</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.job_wait_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.job_wait_time_ns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.local_scan_throughput"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.local_scan_throughput</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.n_clusters"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.n_clusters</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.n_queries"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.n_queries</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.parent_info"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.parent_info</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.partitions_scanned"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.partitions_scanned</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.result_aggregate_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.result_aggregate_time_ns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.scan_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.scan_time_ns</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.search_params"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.search_params</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.total_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.total_time_ns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.worker_enqueue_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.worker_enqueue_time_ns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.worker_job_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.worker_job_time_ns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.worker_partition_size"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.worker_partition_size</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.worker_process_preamble_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.worker_process_preamble_time_ns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.worker_process_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.worker_process_time_ns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.worker_scan_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.worker_scan_time_ns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.SearchTimingInfo.worker_wait_time_ns"><code class="docutils literal notranslate"><span class="pre">SearchTimingInfo.worker_wait_time_ns</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.BuildTimingInfo"><code class="docutils literal notranslate"><span class="pre">BuildTimingInfo</span></code></a><ul>
@@ -163,6 +194,30 @@
 <li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Dataset.url"><code class="docutils literal notranslate"><span class="pre">Dataset.url</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring100m"><code class="docutils literal notranslate"><span class="pre">MSTuring100m</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring100m.download"><code class="docutils literal notranslate"><span class="pre">MSTuring100m.download()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring100m.is_downloaded"><code class="docutils literal notranslate"><span class="pre">MSTuring100m.is_downloaded()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring100m.load_ground_truth"><code class="docutils literal notranslate"><span class="pre">MSTuring100m.load_ground_truth()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring100m.load_queries"><code class="docutils literal notranslate"><span class="pre">MSTuring100m.load_queries()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring100m.load_vectors"><code class="docutils literal notranslate"><span class="pre">MSTuring100m.load_vectors()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring10m"><code class="docutils literal notranslate"><span class="pre">MSTuring10m</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring10m.download"><code class="docutils literal notranslate"><span class="pre">MSTuring10m.download()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring10m.is_downloaded"><code class="docutils literal notranslate"><span class="pre">MSTuring10m.is_downloaded()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring10m.load_ground_truth"><code class="docutils literal notranslate"><span class="pre">MSTuring10m.load_ground_truth()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring10m.load_queries"><code class="docutils literal notranslate"><span class="pre">MSTuring10m.load_queries()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.MSTuring10m.load_vectors"><code class="docutils literal notranslate"><span class="pre">MSTuring10m.load_vectors()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift10m"><code class="docutils literal notranslate"><span class="pre">Sift10m</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift10m.download"><code class="docutils literal notranslate"><span class="pre">Sift10m.download()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift10m.is_downloaded"><code class="docutils literal notranslate"><span class="pre">Sift10m.is_downloaded()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift10m.load_ground_truth"><code class="docutils literal notranslate"><span class="pre">Sift10m.load_ground_truth()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift10m.load_queries"><code class="docutils literal notranslate"><span class="pre">Sift10m.load_queries()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift10m.load_vectors"><code class="docutils literal notranslate"><span class="pre">Sift10m.load_vectors()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift1m"><code class="docutils literal notranslate"><span class="pre">Sift1m</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift1m.download"><code class="docutils literal notranslate"><span class="pre">Sift1m.download()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift1m.is_downloaded"><code class="docutils literal notranslate"><span class="pre">Sift1m.is_downloaded()</span></code></a></li>
@@ -170,6 +225,38 @@
 <li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift1m.load_queries"><code class="docutils literal notranslate"><span class="pre">Sift1m.load_queries()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift1m.load_vectors"><code class="docutils literal notranslate"><span class="pre">Sift1m.load_vectors()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Sift1m.url"><code class="docutils literal notranslate"><span class="pre">Sift1m.url</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.T2I1M"><code class="docutils literal notranslate"><span class="pre">T2I1M</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.T2I1M.download"><code class="docutils literal notranslate"><span class="pre">T2I1M.download()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.T2I1M.is_downloaded"><code class="docutils literal notranslate"><span class="pre">T2I1M.is_downloaded()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.T2I1M.load_ground_truth"><code class="docutils literal notranslate"><span class="pre">T2I1M.load_ground_truth()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.T2I1M.load_queries"><code class="docutils literal notranslate"><span class="pre">T2I1M.load_queries()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.T2I1M.load_vectors"><code class="docutils literal notranslate"><span class="pre">T2I1M.load_vectors()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.UniformDataset"><code class="docutils literal notranslate"><span class="pre">UniformDataset</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.UniformDataset.download"><code class="docutils literal notranslate"><span class="pre">UniformDataset.download()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.UniformDataset.is_downloaded"><code class="docutils literal notranslate"><span class="pre">UniformDataset.is_downloaded()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.UniformDataset.load_ground_truth"><code class="docutils literal notranslate"><span class="pre">UniformDataset.load_ground_truth()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.UniformDataset.load_queries"><code class="docutils literal notranslate"><span class="pre">UniformDataset.load_queries()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.UniformDataset.load_vectors"><code class="docutils literal notranslate"><span class="pre">UniformDataset.load_vectors()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.Wiki13M"><code class="docutils literal notranslate"><span class="pre">Wiki13M</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Wiki13M.download"><code class="docutils literal notranslate"><span class="pre">Wiki13M.download()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Wiki13M.is_downloaded"><code class="docutils literal notranslate"><span class="pre">Wiki13M.is_downloaded()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Wiki13M.load_ground_truth"><code class="docutils literal notranslate"><span class="pre">Wiki13M.load_ground_truth()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Wiki13M.load_queries"><code class="docutils literal notranslate"><span class="pre">Wiki13M.load_queries()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.Wiki13M.load_vectors"><code class="docutils literal notranslate"><span class="pre">Wiki13M.load_vectors()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.WikiCohere1M"><code class="docutils literal notranslate"><span class="pre">WikiCohere1M</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.WikiCohere1M.download"><code class="docutils literal notranslate"><span class="pre">WikiCohere1M.download()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.WikiCohere1M.is_downloaded"><code class="docutils literal notranslate"><span class="pre">WikiCohere1M.is_downloaded()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.WikiCohere1M.load_ground_truth"><code class="docutils literal notranslate"><span class="pre">WikiCohere1M.load_ground_truth()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.WikiCohere1M.load_queries"><code class="docutils literal notranslate"><span class="pre">WikiCohere1M.load_queries()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.datasets.ann_datasets.WikiCohere1M.load_vectors"><code class="docutils literal notranslate"><span class="pre">WikiCohere1M.load_vectors()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#quake.datasets.ann_datasets.load_dataset"><code class="docutils literal notranslate"><span class="pre">load_dataset()</span></code></a></li>
@@ -225,7 +312,9 @@
 <li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.centroids"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.centroids()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.d"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.d()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.index"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.index</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.index_state"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.index_state()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.load"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.load()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.maintenance"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.maintenance()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.n_total"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.n_total()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.remove"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.remove()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.save"><code class="docutils literal notranslate"><span class="pre">FaissHNSW.save()</span></code></a></li>
@@ -285,6 +374,17 @@
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="quake.QuakeIndex.add_level">
+<span class="sig-name descname"><span class="pre">add_level</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#quake.QuakeIndex" title="quake._bindings.QuakeIndex"><span class="pre">quake._bindings.QuakeIndex</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#quake.IndexBuildParams" title="quake.IndexBuildParams"><span class="pre">IndexBuildParams</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#quake.QuakeIndex.add_level" title="Link to this definition"></a></dt>
+<dd><p>Add a new level to the index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>build_params</strong> (<a class="reference internal" href="#quake.IndexBuildParams" title="quake.IndexBuildParams"><em>IndexBuildParams</em></a>) – Parameters for building the new level.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="quake.QuakeIndex.build">
 <span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#quake.QuakeIndex" title="quake._bindings.QuakeIndex"><span class="pre">quake._bindings.QuakeIndex</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#quake.IndexBuildParams" title="quake.IndexBuildParams"><span class="pre">IndexBuildParams</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#quake.BuildTimingInfo" title="quake.BuildTimingInfo"><span class="pre">BuildTimingInfo</span></a></span></span><a class="headerlink" href="#quake.QuakeIndex.build" title="Link to this definition"></a></dt>
 <dd><p>Build the index from a tensor of vectors and a corresponding tensor of IDs.</p>
@@ -338,7 +438,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="quake.QuakeIndex.load">
-<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#quake.QuakeIndex" title="quake._bindings.QuakeIndex"><span class="pre">quake._bindings.QuakeIndex</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#quake.QuakeIndex.load" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#quake.QuakeIndex" title="quake._bindings.QuakeIndex"><span class="pre">quake._bindings.QuakeIndex</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#quake.IndexBuildParams" title="quake.IndexBuildParams"><span class="pre">IndexBuildParams</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#quake.QuakeIndex.load" title="Link to this definition"></a></dt>
 <dd><p>Load an index from a specified path.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -422,7 +522,25 @@ Returns timing information for the maintenance operation.</p>
 <dd><dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchParams.aps_flush_period_us">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">aps_flush_period_us</span></span><a class="headerlink" href="#quake.SearchParams.aps_flush_period_us" title="Link to this definition"></a></dt>
-<dd><p>APS flush period in microseconds. default = 100</p>
+<dd><p>APS flush period in microseconds. default = 5</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.auncel_a">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">auncel_a</span></span><a class="headerlink" href="#quake.SearchParams.auncel_a" title="Link to this definition"></a></dt>
+<dd><p>Auncel parameter a for recall estimation.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.auncel_b">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">auncel_b</span></span><a class="headerlink" href="#quake.SearchParams.auncel_b" title="Link to this definition"></a></dt>
+<dd><p>Auncel parameter b for recall estimation.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.batch_size">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">batch_size</span></span><a class="headerlink" href="#quake.SearchParams.batch_size" title="Link to this definition"></a></dt>
+<dd><p>Batch size for batched scan. default = 128</p>
 </dd></dl>
 
 <dl class="py property">
@@ -434,13 +552,19 @@ Returns timing information for the maintenance operation.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchParams.initial_search_fraction">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">initial_search_fraction</span></span><a class="headerlink" href="#quake.SearchParams.initial_search_fraction" title="Link to this definition"></a></dt>
-<dd><p>Initial fraction of partitions to search. default = 0.020000</p>
+<dd><p>Initial fraction of partitions to search. default = 0.100000</p>
 </dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchParams.k">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">k</span></span><a class="headerlink" href="#quake.SearchParams.k" title="Link to this definition"></a></dt>
 <dd><p>Number of neighbors to return. default = 1</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.k_factor">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">k_factor</span></span><a class="headerlink" href="#quake.SearchParams.k_factor" title="Link to this definition"></a></dt>
+<dd><p>Factor to adjust the number of neighbors to return.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -456,6 +580,12 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.parent_params">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">parent_params</span></span><a class="headerlink" href="#quake.SearchParams.parent_params" title="Link to this definition"></a></dt>
+<dd><p>Search parameters for the parent index, if any.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchParams.recall_target">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">recall_target</span></span><a class="headerlink" href="#quake.SearchParams.recall_target" title="Link to this definition"></a></dt>
 <dd><p>Recall target. default = -1.000000</p>
@@ -468,9 +598,45 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.sample_prefix">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">sample_prefix</span></span><a class="headerlink" href="#quake.SearchParams.sample_prefix" title="Link to this definition"></a></dt>
+<dd><p>Prefix length for APS sampling.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.sample_stride">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">sample_stride</span></span><a class="headerlink" href="#quake.SearchParams.sample_stride" title="Link to this definition"></a></dt>
+<dd><p>Stride length for APS sampling.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.spann_eps">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">spann_eps</span></span><a class="headerlink" href="#quake.SearchParams.spann_eps" title="Link to this definition"></a></dt>
+<dd><p>SPANN parameter epsilon for search.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.track_hits">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">track_hits</span></span><a class="headerlink" href="#quake.SearchParams.track_hits" title="Link to this definition"></a></dt>
+<dd><p>Flag to track hits for maintenance policy.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.use_auncel">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">use_auncel</span></span><a class="headerlink" href="#quake.SearchParams.use_auncel" title="Link to this definition"></a></dt>
+<dd><p>Flag to use Auncel recall estimation for search.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchParams.use_precomputed">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">use_precomputed</span></span><a class="headerlink" href="#quake.SearchParams.use_precomputed" title="Link to this definition"></a></dt>
 <dd><p>Flag to use precomputed inc beta fn for APS. default = 1</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchParams.use_spann">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">use_spann</span></span><a class="headerlink" href="#quake.SearchParams.use_spann" title="Link to this definition"></a></dt>
+<dd><p>Flag to use SPANN for search.</p>
 </dd></dl>
 
 </dd></dl>
@@ -479,6 +645,18 @@ Returns timing information for the maintenance operation.</p>
 <dt class="sig sig-object py" id="quake.IndexBuildParams">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.</span></span><span class="sig-name descname"><span class="pre">IndexBuildParams</span></span><a class="headerlink" href="#quake.IndexBuildParams" title="Link to this definition"></a></dt>
 <dd><dl class="py property">
+<dt class="sig sig-object py" id="quake.IndexBuildParams.gpu_batch_size">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">gpu_batch_size</span></span><a class="headerlink" href="#quake.IndexBuildParams.gpu_batch_size" title="Link to this definition"></a></dt>
+<dd><p>Batch size for GPU index building. default = 100000</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.IndexBuildParams.gpu_sample_size">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">gpu_sample_size</span></span><a class="headerlink" href="#quake.IndexBuildParams.gpu_sample_size" title="Link to this definition"></a></dt>
+<dd><p>Sample size for GPU index building. default = 1000000</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="quake.IndexBuildParams.metric">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">metric</span></span><a class="headerlink" href="#quake.IndexBuildParams.metric" title="Link to this definition"></a></dt>
 <dd><p>Distance metric. default = l2</p>
@@ -497,9 +675,33 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="quake.IndexBuildParams.num_merge_workers">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">num_merge_workers</span></span><a class="headerlink" href="#quake.IndexBuildParams.num_merge_workers" title="Link to this definition"></a></dt>
+<dd><p>Number of workers for merging. default = 1</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="quake.IndexBuildParams.num_workers">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">num_workers</span></span><a class="headerlink" href="#quake.IndexBuildParams.num_workers" title="Link to this definition"></a></dt>
 <dd><p>Number of workers. default = 0</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.IndexBuildParams.parent_params">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">parent_params</span></span><a class="headerlink" href="#quake.IndexBuildParams.parent_params" title="Link to this definition"></a></dt>
+<dd><p>Parameters for the parent index, if any.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.IndexBuildParams.use_gpu">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">use_gpu</span></span><a class="headerlink" href="#quake.IndexBuildParams.use_gpu" title="Link to this definition"></a></dt>
+<dd><p>Flag to use GPU for index building. default = 0</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.IndexBuildParams.use_numa">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">use_numa</span></span><a class="headerlink" href="#quake.IndexBuildParams.use_numa" title="Link to this definition"></a></dt>
+<dd><p>Flag to use NUMA for index building. default = 0</p>
 </dd></dl>
 
 </dd></dl>
@@ -516,7 +718,7 @@ Returns timing information for the maintenance operation.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenancePolicyParams.delete_threshold_ns">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">delete_threshold_ns</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.delete_threshold_ns" title="Link to this definition"></a></dt>
-<dd><p>Delete threshold (ns). default = 10.000000</p>
+<dd><p>Delete threshold (ns). default = 100.000000</p>
 </dd></dl>
 
 <dl class="py property">
@@ -538,9 +740,21 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="quake.MaintenancePolicyParams.max_partition_size">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">max_partition_size</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.max_partition_size" title="Link to this definition"></a></dt>
+<dd><p>Maximum allowed partition size. default = -1</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenancePolicyParams.min_partition_size">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">min_partition_size</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.min_partition_size" title="Link to this definition"></a></dt>
 <dd><p>Minimum allowed partition size. default = 32</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.MaintenancePolicyParams.partition_reduction_threshold">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">partition_reduction_threshold</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.partition_reduction_threshold" title="Link to this definition"></a></dt>
+<dd><p>Threshold for deleting a partition based on the number of vectors it has lost. default = 0.300000</p>
 </dd></dl>
 
 <dl class="py property">
@@ -556,9 +770,15 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="quake.MaintenancePolicyParams.split_knn_iterations">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">split_knn_iterations</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.split_knn_iterations" title="Link to this definition"></a></dt>
+<dd><p>Number of clustering iterations to perform during a clustering. default = 5</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenancePolicyParams.split_threshold_ns">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">split_threshold_ns</span></span><a class="headerlink" href="#quake.MaintenancePolicyParams.split_threshold_ns" title="Link to this definition"></a></dt>
-<dd><p>Split threshold (ns). default = 10.000000</p>
+<dd><p>Split threshold (ns). default = 100.000000</p>
 </dd></dl>
 
 <dl class="py property">
@@ -596,12 +816,6 @@ Returns timing information for the maintenance operation.</p>
 <dt class="sig sig-object py" id="quake.MaintenanceTimingInfo">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.</span></span><span class="sig-name descname"><span class="pre">MaintenanceTimingInfo</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo" title="Link to this definition"></a></dt>
 <dd><dl class="py property">
-<dt class="sig sig-object py" id="quake.MaintenanceTimingInfo.delete_refine_time_us">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">delete_refine_time_us</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo.delete_refine_time_us" title="Link to this definition"></a></dt>
-<dd><p>Time taken for refinement of delete operations in microseconds.</p>
-</dd></dl>
-
-<dl class="py property">
 <dt class="sig sig-object py" id="quake.MaintenanceTimingInfo.delete_time_us">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">delete_time_us</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo.delete_time_us" title="Link to this definition"></a></dt>
 <dd><p>Time taken for delete operations in microseconds.</p>
@@ -620,8 +834,8 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="quake.MaintenanceTimingInfo.split_refine_time_us">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">split_refine_time_us</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo.split_refine_time_us" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="quake.MaintenanceTimingInfo.refinement_time_us">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">refinement_time_us</span></span><a class="headerlink" href="#quake.MaintenanceTimingInfo.refinement_time_us" title="Link to this definition"></a></dt>
 <dd><p>Time taken for refinement of split operations in microseconds.</p>
 </dd></dl>
 
@@ -643,6 +857,12 @@ Returns timing information for the maintenance operation.</p>
 <dt class="sig sig-object py" id="quake.SearchTimingInfo">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.</span></span><span class="sig-name descname"><span class="pre">SearchTimingInfo</span></span><a class="headerlink" href="#quake.SearchTimingInfo" title="Link to this definition"></a></dt>
 <dd><dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.aps_time_ns">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">aps_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.aps_time_ns" title="Link to this definition"></a></dt>
+<dd><p>Time spent on APS in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchTimingInfo.boundary_distance_time_ns">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">boundary_distance_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.boundary_distance_time_ns" title="Link to this definition"></a></dt>
 <dd><p>Time spent on computing boundary distances in nanoseconds.</p>
@@ -655,6 +875,12 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.copy_query_time_ns">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">copy_query_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.copy_query_time_ns" title="Link to this definition"></a></dt>
+<dd><p>Time spent on copying query vectors to NUMA buffers in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchTimingInfo.job_enqueue_time_ns">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">job_enqueue_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.job_enqueue_time_ns" title="Link to this definition"></a></dt>
 <dd><p>Time spent on creating jobs in nanoseconds.</p>
@@ -664,6 +890,12 @@ Returns timing information for the maintenance operation.</p>
 <dt class="sig sig-object py" id="quake.SearchTimingInfo.job_wait_time_ns">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">job_wait_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.job_wait_time_ns" title="Link to this definition"></a></dt>
 <dd><p>Time spent waiting for jobs to complete in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.local_scan_throughput">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">local_scan_throughput</span></span><a class="headerlink" href="#quake.SearchTimingInfo.local_scan_throughput" title="Link to this definition"></a></dt>
+<dd><p>Average batch scan throughput</p>
 </dd></dl>
 
 <dl class="py property">
@@ -697,6 +929,12 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.scan_time_ns">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">scan_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.scan_time_ns" title="Link to this definition"></a></dt>
+<dd><p>Time spent on scanning in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="quake.SearchTimingInfo.search_params">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">search_params</span></span><a class="headerlink" href="#quake.SearchTimingInfo.search_params" title="Link to this definition"></a></dt>
 <dd><p>Parameters used for the search operation.</p>
@@ -706,6 +944,48 @@ Returns timing information for the maintenance operation.</p>
 <dt class="sig sig-object py" id="quake.SearchTimingInfo.total_time_ns">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">total_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.total_time_ns" title="Link to this definition"></a></dt>
 <dd><p>Total time taken for the search operation in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.worker_enqueue_time_ns">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">worker_enqueue_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.worker_enqueue_time_ns" title="Link to this definition"></a></dt>
+<dd><p>Average worker enqueue time in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.worker_job_time_ns">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">worker_job_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.worker_job_time_ns" title="Link to this definition"></a></dt>
+<dd><p>Average worker job time in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.worker_partition_size">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">worker_partition_size</span></span><a class="headerlink" href="#quake.SearchTimingInfo.worker_partition_size" title="Link to this definition"></a></dt>
+<dd><p>Average worker partition size</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.worker_process_preamble_time_ns">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">worker_process_preamble_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.worker_process_preamble_time_ns" title="Link to this definition"></a></dt>
+<dd><p>Average worker process preamble time in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.worker_process_time_ns">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">worker_process_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.worker_process_time_ns" title="Link to this definition"></a></dt>
+<dd><p>Average worker process time in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.worker_scan_time_ns">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">worker_scan_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.worker_scan_time_ns" title="Link to this definition"></a></dt>
+<dd><p>Average worker scan time in nanoseconds.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quake.SearchTimingInfo.worker_wait_time_ns">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">worker_wait_time_ns</span></span><a class="headerlink" href="#quake.SearchTimingInfo.worker_wait_time_ns" title="Link to this definition"></a></dt>
+<dd><p>Average worker wait time in nanoseconds.</p>
 </dd></dl>
 
 </dd></dl>
@@ -843,6 +1123,99 @@ Returns timing information for the maintenance operation.</p>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring100m">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.datasets.ann_datasets.</span></span><span class="sig-name descname"><span class="pre">MSTuring100m</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">download_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">PosixPath('data')</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring100m"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring100m" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#quake.datasets.ann_datasets.Dataset" title="quake.datasets.ann_datasets.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring100m.download">
+<span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring100m.download"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring100m.download" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring100m.is_downloaded">
+<span class="sig-name descname"><span class="pre">is_downloaded</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring100m.is_downloaded"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring100m.is_downloaded" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring100m.load_ground_truth">
+<span class="sig-name descname"><span class="pre">load_ground_truth</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring100m.load_ground_truth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring100m.load_ground_truth" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring100m.load_queries">
+<span class="sig-name descname"><span class="pre">load_queries</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring100m.load_queries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring100m.load_queries" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring100m.load_vectors">
+<span class="sig-name descname"><span class="pre">load_vectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring100m.load_vectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring100m.load_vectors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring10m">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.datasets.ann_datasets.</span></span><span class="sig-name descname"><span class="pre">MSTuring10m</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">download_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">PosixPath('data')</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring10m"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring10m" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#quake.datasets.ann_datasets.Dataset" title="quake.datasets.ann_datasets.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring10m.download">
+<span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring10m.download"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring10m.download" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring10m.is_downloaded">
+<span class="sig-name descname"><span class="pre">is_downloaded</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring10m.is_downloaded"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring10m.is_downloaded" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring10m.load_ground_truth">
+<span class="sig-name descname"><span class="pre">load_ground_truth</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring10m.load_ground_truth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring10m.load_ground_truth" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring10m.load_queries">
+<span class="sig-name descname"><span class="pre">load_queries</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring10m.load_queries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring10m.load_queries" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.MSTuring10m.load_vectors">
+<span class="sig-name descname"><span class="pre">load_vectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#MSTuring10m.load_vectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.MSTuring10m.load_vectors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Sift10m">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.datasets.ann_datasets.</span></span><span class="sig-name descname"><span class="pre">Sift10m</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">download_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">PosixPath('data')</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Sift10m"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Sift10m" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#quake.datasets.ann_datasets.Dataset" title="quake.datasets.ann_datasets.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Sift10m.download">
+<span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Sift10m.download"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Sift10m.download" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Sift10m.is_downloaded">
+<span class="sig-name descname"><span class="pre">is_downloaded</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Sift10m.is_downloaded"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Sift10m.is_downloaded" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Sift10m.load_ground_truth">
+<span class="sig-name descname"><span class="pre">load_ground_truth</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Sift10m.load_ground_truth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Sift10m.load_ground_truth" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Sift10m.load_queries">
+<span class="sig-name descname"><span class="pre">load_queries</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Sift10m.load_queries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Sift10m.load_queries" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Sift10m.load_vectors">
+<span class="sig-name descname"><span class="pre">load_vectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Sift10m.load_vectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Sift10m.load_vectors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="quake.datasets.ann_datasets.Sift1m">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.datasets.ann_datasets.</span></span><span class="sig-name descname"><span class="pre">Sift1m</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">download_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">PosixPath('data')</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Sift1m"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Sift1m" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#quake.datasets.ann_datasets.Dataset" title="quake.datasets.ann_datasets.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a></p>
@@ -874,6 +1247,130 @@ Returns timing information for the maintenance operation.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="quake.datasets.ann_datasets.Sift1m.url">
 <span class="sig-name descname"><span class="pre">url</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ftp://ftp.irisa.fr/local/texmex/corpus/sift.tar.gz'</span></em><a class="headerlink" href="#quake.datasets.ann_datasets.Sift1m.url" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.T2I1M">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.datasets.ann_datasets.</span></span><span class="sig-name descname"><span class="pre">T2I1M</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">download_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">PosixPath('data')</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#T2I1M"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.T2I1M" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#quake.datasets.ann_datasets.Dataset" title="quake.datasets.ann_datasets.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.T2I1M.download">
+<span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#T2I1M.download"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.T2I1M.download" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.T2I1M.is_downloaded">
+<span class="sig-name descname"><span class="pre">is_downloaded</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#T2I1M.is_downloaded"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.T2I1M.is_downloaded" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.T2I1M.load_ground_truth">
+<span class="sig-name descname"><span class="pre">load_ground_truth</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#T2I1M.load_ground_truth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.T2I1M.load_ground_truth" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.T2I1M.load_queries">
+<span class="sig-name descname"><span class="pre">load_queries</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#T2I1M.load_queries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.T2I1M.load_queries" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.T2I1M.load_vectors">
+<span class="sig-name descname"><span class="pre">load_vectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#T2I1M.load_vectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.T2I1M.load_vectors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.UniformDataset">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.datasets.ann_datasets.</span></span><span class="sig-name descname"><span class="pre">UniformDataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_vectors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">download_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">PosixPath('data')</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#UniformDataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.UniformDataset" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#quake.datasets.ann_datasets.Dataset" title="quake.datasets.ann_datasets.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.UniformDataset.download">
+<span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#UniformDataset.download"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.UniformDataset.download" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.UniformDataset.is_downloaded">
+<span class="sig-name descname"><span class="pre">is_downloaded</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#UniformDataset.is_downloaded"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.UniformDataset.is_downloaded" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.UniformDataset.load_ground_truth">
+<span class="sig-name descname"><span class="pre">load_ground_truth</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#UniformDataset.load_ground_truth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.UniformDataset.load_ground_truth" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.UniformDataset.load_queries">
+<span class="sig-name descname"><span class="pre">load_queries</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#UniformDataset.load_queries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.UniformDataset.load_queries" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.UniformDataset.load_vectors">
+<span class="sig-name descname"><span class="pre">load_vectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#UniformDataset.load_vectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.UniformDataset.load_vectors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Wiki13M">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.datasets.ann_datasets.</span></span><span class="sig-name descname"><span class="pre">Wiki13M</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">download_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">PosixPath('data')</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Wiki13M"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Wiki13M" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#quake.datasets.ann_datasets.Dataset" title="quake.datasets.ann_datasets.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Wiki13M.download">
+<span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Wiki13M.download"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Wiki13M.download" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Wiki13M.is_downloaded">
+<span class="sig-name descname"><span class="pre">is_downloaded</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Wiki13M.is_downloaded"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Wiki13M.is_downloaded" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Wiki13M.load_ground_truth">
+<span class="sig-name descname"><span class="pre">load_ground_truth</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Wiki13M.load_ground_truth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Wiki13M.load_ground_truth" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Wiki13M.load_queries">
+<span class="sig-name descname"><span class="pre">load_queries</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Wiki13M.load_queries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Wiki13M.load_queries" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.Wiki13M.load_vectors">
+<span class="sig-name descname"><span class="pre">load_vectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#Wiki13M.load_vectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.Wiki13M.load_vectors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.WikiCohere1M">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">quake.datasets.ann_datasets.</span></span><span class="sig-name descname"><span class="pre">WikiCohere1M</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">download_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">PosixPath('data')</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#WikiCohere1M"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.WikiCohere1M" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#quake.datasets.ann_datasets.Dataset" title="quake.datasets.ann_datasets.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.WikiCohere1M.download">
+<span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#WikiCohere1M.download"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.WikiCohere1M.download" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.WikiCohere1M.is_downloaded">
+<span class="sig-name descname"><span class="pre">is_downloaded</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#WikiCohere1M.is_downloaded"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.WikiCohere1M.is_downloaded" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.WikiCohere1M.load_ground_truth">
+<span class="sig-name descname"><span class="pre">load_ground_truth</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#WikiCohere1M.load_ground_truth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.WikiCohere1M.load_ground_truth" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.WikiCohere1M.load_queries">
+<span class="sig-name descname"><span class="pre">load_queries</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#WikiCohere1M.load_queries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.WikiCohere1M.load_queries" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.datasets.ann_datasets.WikiCohere1M.load_vectors">
+<span class="sig-name descname"><span class="pre">load_vectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/quake/datasets/ann_datasets.html#WikiCohere1M.load_vectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.datasets.ann_datasets.WikiCohere1M.load_vectors" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -911,7 +1408,7 @@ Returns timing information for the maintenance operation.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="quake.index_wrappers.quake.QuakeWrapper.build">
-<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vectors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'l2'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">code_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.build"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.build" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vectors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'l2'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_merge_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">code_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_numa</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gpu_batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gpu_sample_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.build"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.build" title="Link to this definition"></a></dt>
 <dd><p>Build the index with the given vectors and arguments.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -981,7 +1478,7 @@ Returns timing information for the maintenance operation.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="quake.index_wrappers.quake.QuakeWrapper.load">
-<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_numa</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verify_numa</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">same_core</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_centroid_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_adaptive_n_probe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.load" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_merge_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_numa</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parent</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.load" title="Link to this definition"></a></dt>
 <dd><p>Load the index from a file.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1043,7 +1540,7 @@ Returns timing information for the maintenance operation.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="quake.index_wrappers.quake.QuakeWrapper.search">
-<span class="sig-name descname"><span class="pre">search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprobe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batched_scan</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recall_target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_precomputed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_search_fraction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recompute_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aps_flush_period_us</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.search"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.search" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprobe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batched_scan</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recall_target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_precomputed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_search_fraction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recompute_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aps_flush_period_us</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_stride</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/quake/index_wrappers/quake.html#QuakeWrapper.search"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.quake.QuakeWrapper.search" title="Link to this definition"></a></dt>
 <dd><p>Find the k-nearest neighbors of the query vectors.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1159,7 +1656,7 @@ When nc is not 0, the index is an IVF or IVFPQ index.
 
 <dl class="py method">
 <dt class="sig sig-object py" id="quake.index_wrappers.faiss_ivf.FaissIVF.load">
-<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_ivf.html#FaissIVF.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_ivf.FaissIVF.load" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_ivf.html#FaissIVF.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_ivf.FaissIVF.load" title="Link to this definition"></a></dt>
 <dd><p>Load the index from a file.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1322,6 +1819,12 @@ HNSW does only support sequential adds.</p>
 <dd></dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.index_state">
+<span class="sig-name descname"><span class="pre">index_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.index_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.index_state" title="Link to this definition"></a></dt>
+<dd><p>Return the state of the index</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.load">
 <span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.load" title="Link to this definition"></a></dt>
 <dd><p>Load the index from a file.</p>
@@ -1330,6 +1833,12 @@ HNSW does only support sequential adds.</p>
 <dd class="field-odd"><p><strong>filename</strong> – The name of the file to load the index from.</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quake.index_wrappers.faiss_hnsw.FaissHNSW.maintenance">
+<span class="sig-name descname"><span class="pre">maintenance</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/quake/index_wrappers/faiss_hnsw.html#FaissHNSW.maintenance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quake.index_wrappers.faiss_hnsw.FaissHNSW.maintenance" title="Link to this definition"></a></dt>
+<dd><p>Perform any necessary maintenance operations on the index</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1394,7 +1903,7 @@ HNSW does only support sequential adds.</p>
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Jason Mohoney.</p>
+    <p>&#169; Copyright 2026, Jason Mohoney.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
