@@ -8,6 +8,7 @@
 
 #define STOP 1.0e-8
 #define TINY 1.0e-30
+#define CRP_CHECK(cond, msg)  ((void)0)
 
 using torch::Tensor;
 using std::vector;
@@ -52,64 +53,6 @@ inline void print_array(const float *array, int dimension) {
         std::cout << array[i] << " ";
     }
     std::cout << std::endl << std::endl;
-}
-
-inline vector<float> compute_boundary_distances(const Tensor &query, vector<float *> centroids, bool euclidean = true) {
-
-    auto start = std::chrono::high_resolution_clock::now();
-    int dimension = query.size(0);
-
-    std::vector<float> boundary_distances(centroids.size(), -1.0f);
-
-    const float *query_ptr = query.data_ptr<float>();
-    const float *nearest_centroid_ptr = centroids[0];
-
-    vector<float> line_vector(dimension);
-    vector<float> midpoint(dimension);
-    vector<float> residual(dimension);
-
-    auto end = std::chrono::high_resolution_clock::now();
-
-    // used for euclidean distance
-    if (euclidean) {
-        // Compute residual: r = q - c0.
-        faiss::fvec_sub(dimension, query_ptr, nearest_centroid_ptr, residual.data());
-
-        // For each centroid j (starting at index 1).
-        for (int j = 1; j < centroids.size(); j++) {
-            // Compute v = c_j - c0.
-            const float* c_j = centroids[j];
-            faiss::fvec_sub(dimension, c_j, nearest_centroid_ptr, line_vector.data());
-
-            // Compute squared norm: A2 = ||v||^2.
-            float A2 = faiss::fvec_inner_product(line_vector.data(), line_vector.data(), dimension);
-            float A = std::sqrt(A2);  // Guaranteed nonzero.
-
-            // Compute dot product: dot = <r, v>.
-            float dot_val = faiss::fvec_inner_product(residual.data(), line_vector.data(), dimension);
-
-            // Instead of computing dot_val/A and 0.5*A separately,
-            // we compute: d = |dot_val - 0.5 * A2| / A.
-            float d = std::fabs(dot_val - 0.5f * A2) / A;
-            boundary_distances[j] = d;
-        }
-    } else {
-        // for dot product distance
-        float residual_angle = faiss::fvec_inner_product(query_ptr, nearest_centroid_ptr, dimension);
-        for (int j = 1; j < centroids.size(); j++) {
-            // get angle of the bisector using dot product
-            subtract_arrays(centroids[j], nearest_centroid_ptr, line_vector.data(), dimension);
-            divide_array_by_constant(line_vector.data(), 2.0f, midpoint.data(), dimension);
-            add_arrays(nearest_centroid_ptr, midpoint.data(), midpoint.data(), dimension);
-            float norm = faiss::fvec_inner_product(midpoint.data(), midpoint.data(), dimension);
-            norm = std::sqrt(norm);
-            divide_array_by_constant(midpoint.data(), norm, midpoint.data(), dimension);
-            float boundary_angle = faiss::fvec_inner_product(query_ptr, midpoint.data(), dimension);
-            boundary_distances[j] = std::acos(boundary_angle);
-        }
-    }
-
-    return boundary_distances;
 }
 
 inline double incomplete_beta(double a, double b, double x) {
@@ -218,256 +161,332 @@ inline double log_hypersphere_volume(double radius, int dimension) {
     return log_volume;
 }
 
-inline double hypersphere_surface_area(double radius, int d) {
-    return 2 * std::pow(M_PI, d / 2.0) * std::pow(radius, d - 1) / std::tgamma(d / 2.0);
-}
 
-inline double compute_partial_cap_volume(double radius, double theta_min, double theta_max, int d) {
-    // Compute the volume of a hyperspherical cap between angles theta_min and theta_max
-    if (theta_min < 0 || theta_max > M_PI) {
-        throw std::invalid_argument("Theta values out of bounds.");
+inline std::vector<float>
+compute_boundary_distances(const Tensor&               query,
+                           std::vector<float*>&        centroids,
+                           bool                        euclidean)
+{
+    const int   dim = query.size(0);
+    const float* q  = query.data_ptr<float>();
+
+    const float* c0 = centroids[0];
+    std::vector<float> dist(centroids.size(), 0.0f);
+
+    std::vector<float> v(dim);          // c_j - c0
+    std::vector<float> m(dim);          // midpoint for IP
+
+    for (std::size_t j = 1; j < centroids.size(); ++j) {
+        const float* cj = centroids[j];
+
+        if (centroids[j] == nullptr) {
+            if (euclidean) {
+                dist[j] = std::numeric_limits<float>::infinity();
+            } else {
+                dist[j] = M_PI_2;  // max distance on unit sphere
+            }
+            continue;
+        }
+
+        if (euclidean) {
+            /* plane distance d = |q·v − b| / ||v|| ,  b = ½(||cj||²−||c0||²) */
+            faiss::fvec_sub(dim, cj, c0, v.data());
+            float v_norm = std::sqrt(faiss::fvec_inner_product(v.data(), v.data(), dim));
+            float b = 0.5f * (faiss::fvec_inner_product(cj, cj, dim) -
+                              faiss::fvec_inner_product(c0, c0, dim));
+            float dot_qv = faiss::fvec_inner_product(q, v.data(), dim);
+            dist[j] = std::fabs(dot_qv - b) / (v_norm + 1e-12f);
+        } else {
+            faiss::fvec_sub(dim, cj, c0, v.data());           // v = cj - c0
+            float v_norm = std::sqrt(faiss::fvec_inner_product(v.data(), v.data(), dim));
+            divide_array_by_constant(v.data(), v_norm, v.data(), dim);   // v̂
+            float s = std::fabs(faiss::fvec_inner_product(q, v.data(), dim));
+            s = std::clamp(s, 0.0f, 1.0f);
+            dist[j] = std::asin(s);                      // 0–π/2
+        }
     }
-
-    double cap_volume = 0.0;
-
-    // Using the regularized incomplete beta function
-    double sin2_theta_min = std::sin(theta_min) * std::sin(theta_min);
-    double sin2_theta_max = std::sin(theta_max) * std::sin(theta_max);
-
-    double I_min = incomplete_beta((d - 1.0) / 2.0, 0.5, sin2_theta_min);
-    double I_max = incomplete_beta((d - 1.0) / 2.0, 0.5, sin2_theta_max);
-
-    double surface_area = hypersphere_surface_area(radius, d);
-    cap_volume = surface_area * (I_max - I_min);
-
-    return cap_volume;
+    return dist;   // dist[0] = 0 by construction
 }
 
+inline double hyperspherical_cap_volume(double radius, double boundary_distance, int d, bool use_precomputed = true, bool euclidean = true) {
 
-inline double log_hyperspherical_cap_volume(double radius, double boundary_distance, int d, bool ratio = true,
-                                            bool use_precomputed = true, bool euclidean = true) {
-    double h = radius - boundary_distance;
-
-    // Ensure h is within valid range
-    h = std::max(0.0, std::min(2 * radius, h));
 
     if (euclidean) {
-        double x = std::sqrt((2 * radius * h - h * h) / (radius * radius));
-        // use precomputed incomplete beta function
-        double inc_beta;
-        if (use_precomputed) {
-            inc_beta = incomplete_beta_lookup(x, d);
-        } else {
-            inc_beta = incomplete_beta((d + 1.0) / 2.0, 0.5, x);
-        }
 
-        if (inc_beta <= 0.0 || std::isnan(inc_beta) || std::isinf(inc_beta)) {
-            std::cerr << "Invalid incomplete beta value: " << inc_beta << std::endl;
-            return -std::numeric_limits<double>::infinity();
-        }
+        // Ensure boundary distance is non-negative double
+        boundary_distance = std::max(0.0, boundary_distance);
 
-        double log_inc_beta = std::log(inc_beta);
-        double log_cap_volume;
-        if (!ratio) {
-            double log_sphere_volume = log_hypersphere_volume(radius, d);
-            log_cap_volume = std::log(0.5) + log_inc_beta + log_sphere_volume;
-        } else {
-            log_cap_volume = std::log(0.5) + log_inc_beta;
-        }
+        // If boundary is outside or on the query radius, the cap volume is 0
+        if (boundary_distance >= radius) return 0.0;
 
-        return log_cap_volume;
+        // Calculate x for incomplete beta function
+        double x = sqrt(1.0 - (boundary_distance / radius) * (boundary_distance / radius));
+        x = std::clamp(x, 0.0, 1.0); // Clamp x to [0, 1]
+
+        // Incomplete Beta parameters
+        double a = 0.5 * (d + 1.0);
+        double b = 0.5;
+        double I = use_precomputed
+            ? incomplete_beta_lookup(x, d)
+            : incomplete_beta(a, b, x);
+
+        return std::clamp(0.5 * I, 0.0, 0.5);
     } else {
-        // use intersection of spherical caps
-        if (ratio != true) {
-            throw std::invalid_argument("Ratio must be true for dot product distance");
-        }
+        // spherical / IP -----------------------------------------------------------------
+        double theta_q = radius;          // query cap angle (rad)
+        double delta   = boundary_distance;      // distance to bisector (rad)
 
-        // v_i = (1/2) * [ I( sin^2(phi/2); d/2, 1/2 ) - I( sin^2(theta_i/2); d/2, 1/2 ) ]
+        /* 1. trivial cases ------------------------------------------------------------ */
+        if (delta >= theta_q)                    return 0.0;                 // cap entirely in c0
+        if (theta_q >= M_PI_2 - delta)           return 1.0;                 // cap entirely in cj
 
-        double log_inc_beta = std::log(incomplete_beta((d - 1) / 2.0, 0.5, std::sin(radius / 2.0) * std::sin(radius / 2.0)));
-        double log_inc_beta_boundary = std::log(incomplete_beta((d - 1) / 2.0, 0.5, std::sin(boundary_distance / 2.0) * std::sin(boundary_distance / 2.0)));
-        double log_cap_volume = std::log(0.5) + log_inc_beta - log_inc_beta_boundary;
-        return log_cap_volume;
-        // compute volume of the intersection of two spherical caps (from the paper: concise formulas for the volume of hyperspherical caps)
+        /* 2. general case: Lee & Kim (2014) cases 9–10 -------------------------------- */
+        double t = std::tan(delta) / std::tan(theta_q);   // 0 ≤ t < 1
+        t = std::clamp(t, 0.0, 1.0);                      // numerical safety
+
+        double alpha = std::acos(t);                      // 0 < α < π/2
+        double x     = std::sin(alpha) * std::sin(alpha); // 0 < x < 1
+
+        double a = 0.5 * (d - 1);
+        double b = 0.5;
+
+        double Ix = incomplete_beta(a, b, x);             // regularised
+        return 0.5 * Ix;                                  // leakage fraction
 
 
+        // double log_inc_beta = std::log(incomplete_beta((d - 1) / 2.0, 0.5, std::sin(radius / 2.0) * std::sin(radius / 2.0)));
+        // double log_inc_beta_boundary = std::log(incomplete_beta((d - 1) / 2.0, 0.5, std::sin((radius - boundary_distance) / 2.0) * std::sin(radius - boundary_distance) / 2.0));
+        // double log_cap_volume = std::log(0.5) + log_inc_beta - log_inc_beta_boundary;
+        // return std::exp(log_cap_volume);
     }
 }
 
-inline vector<float> compute_intersection_volume(const Tensor &boundary_distances, float query_radius, int dimension,
-                                                 bool use_precomputed = true) {
-    auto boundary_distances_ptr = boundary_distances.data_ptr<float>();
-    int num_partitions = boundary_distances.size(0);
-    std::vector<float> partition_volumes(num_partitions, 0.0f);
+inline std::vector<float>
+compute_recall_profile(const std::vector<float>& boundary_distances,
+                       float query_radius,
+                       int   dimension,
+                       std::vector<int64_t> partition_sizes = {}, // Unused in these models
+                       bool  use_precomputed = true,
+                       bool  euclidean       = true) // Unused in these models
+{
+    const int m = static_cast<int>(boundary_distances.size());
+    const float eps = 1e-9f;
 
-    for (int j = 0; j < num_partitions; j++) {
-        float boundary_distance = boundary_distances_ptr[j];
-
-        if (boundary_distance >= query_radius) {
-            partition_volumes[j] = -1e8;
-            continue;
-        }
-
-        double volume_ratio = log_hyperspherical_cap_volume(query_radius, boundary_distance, dimension, false,
-                                                            use_precomputed);
-
-        partition_volumes[j] = volume_ratio;
+    if (!euclidean) {
+        query_radius = std::acos(query_radius); // Convert to angle in radians for spherical model
     }
 
-    return partition_volumes;
-}
-
-inline Tensor compute_variance_in_direction_of_query(Tensor query, Tensor centroids, Tensor variance) {
-    int dimension = query.size(0);
-    int num_partitions = centroids.size(0);
-    auto query_ptr = query.data_ptr<float>();
-    auto centroids_ptr = centroids.data_ptr<float>();
-    auto variance_ptr = variance.data_ptr<float>();
-
-    std::vector<float> variances(num_partitions, 0.0f);
-
-    for (int j = 0; j < num_partitions; j++) {
-        float *centroid = centroids_ptr + j * dimension;
-        float *variance = variance_ptr + j * dimension;
-
-        float *query_minus_centroid = new float[dimension];
-        subtract_arrays(query_ptr, centroid, query_minus_centroid, dimension);
-
-        float dot_product = faiss::fvec_inner_product(query_minus_centroid, query_minus_centroid, dimension);
-
-        variances[j] = dot_product;
-        delete[] query_minus_centroid;
+    // --- Edge Cases ---
+    if (m <= 1) {
+        if (m == 1) return {1.0f}; // Only the central partition exists
+        return {}; // No partitions defined
+    }
+    if (query_radius <= eps) {
+        std::vector<float> p(m, 0.0f);
+        p[0] = 1.0f; // Query point is exactly at origin, must be in partition 0
+        return p;
     }
 
-    return torch::tensor(variances).clone();
-}
-
-inline vector<float> compute_recall_profile(vector<float> boundary_distances, float query_radius, int dimension,
-                                     vector<int64_t> partition_sizes = {}, bool use_precomputed = true,
-                                     bool euclidean = true) {
-
-    // boundary_distances shape is (num_partitions,) and num_partitions must be greater than 1
-    if (boundary_distances.size() < 2) {
-        throw std::runtime_error("Boundary distances must have at least 2 partitions to create an estimate.");
+    // Compute raw cap volumes
+    std::vector<float> raw_vols(m, 0.0f);
+    for (int j = 1; j < m; ++j) {
+        raw_vols[j] = hyperspherical_cap_volume(query_radius, boundary_distances[j], dimension, use_precomputed, euclidean);
     }
 
-    int num_partitions = boundary_distances.size();
-    vector<float> partition_probabilities(num_partitions, 0.0f);
+    float P0 = 0.0f;                       // Root cell probability
+    std::vector<float> P_prime(m, 0.0f); // Intermediate neighbor probabilities (k>=1)
+    float P_prime_sum = 0.0f;              // Sum of P_prime[k] for k>=1
 
-    double total_volume = 0.0;
-    bool weigh_using_partition_sizes = partition_sizes.size() == num_partitions;
+    std::vector<float> norm_vols = raw_vols; // Copy raw vols
+    float S1_for_norm = 0.0f;
+    for (int j = 1; j < m; ++j) S1_for_norm += norm_vols[j];
 
-    for (int j = 1; j < num_partitions; j++) {
-        float boundary_distance = boundary_distances[j];
+    // S1_for_norm = 1.0;
 
-        if (boundary_distance >= query_radius) {
-            partition_probabilities[j] = 0.0;
-            continue;
-        }
-
-        double volume_ratio = std::exp(
-            log_hyperspherical_cap_volume(query_radius,
-                boundary_distance,
-                dimension,
-                true,
-                use_precomputed,
-                euclidean));
-        partition_probabilities[j] = (volume_ratio > 0.0) ? volume_ratio : 0.0;
+    if (S1_for_norm > eps) {
+        for (int j = 1; j < m; ++j) norm_vols[j] /= S1_for_norm;
+    } else {
+        for (int j = 1; j < m; ++j) norm_vols[j] = 0.0f;
     }
 
-    // TODO: Implement a better way to compute the probabilities for the first partition. This heuristic works well on tested datasets.
-    partition_probabilities[0] = 2.0 * partition_probabilities[1];
-    // partition_probabilities[0] = 1 - partition_probabilities[1];
+    P0 = 1.0f;
+    for (int j = 1; j < m; ++j) P0 *= (1.0f - norm_vols[j]); // Survival probability of the root cell
+    P0 = std::clamp(P0, 0.0f, 1.0f);
 
-    // if (weigh_using_partition_sizes) {
-    //     for (int j = 0; j < num_partitions; j++) {
-    //         partition_probabilities[j] *= partition_sizes[j];
+    for (int k = 1; k < m; ++k) {
+        P_prime[k] = norm_vols[k];
+        P_prime_sum += P_prime[k];
+    }
+    // Ensure P_prime is non-negative
+    for (int k = 1; k < m; ++k) P_prime[k] = std::max(0.0f, P_prime[k]);
+
+    // normalize probs
+    std::vector<float> probs(m, 0.0f);
+    probs[0] = P0;
+
+    // for (int k = 1; k < m; ++k) {
+    //     if (P_prime_sum > eps) {
+    //         probs[k] = norm_vols[k];
+    //     } else {
+    //         probs[k] = 0.0f; // If sum is negligible, set to zero
+    //     }
+    // }
+    //
+    // // normalize probabilities
+    // float S = 0.0f;
+    // for (int k = 0; k < m; ++k) S += probs[k];
+    // if (S > eps) {
+    //     for (int k = 0; k < m; ++k) {
+    //         probs[k] /= S;
+    //     }
+    // } else {
+    //     // If S is zero, all probabilities remain zero
+    //     for (int k = 0; k < m; ++k) {
+    //         probs[k] = 0.0f;
     //     }
     // }
 
-    // Ensure the probabilities sum to 1
-    double sum_probabilities = 0.0;
-    for (int j = 0; j < num_partitions; j++) {
-        sum_probabilities += partition_probabilities[j];
+    float target = 1.0f - P0;
+    // Ensure target probability for neighbors is valid [0, 1]
+    target = std::clamp(target, 0.0f, 1.0f);
+
+    if (target > eps && P_prime_sum > eps) {
+        float scale = target / P_prime_sum;
+        for (int k = 1; k < m; ++k) {
+            // Ensure final probability is non-negative
+            probs[k] = std::max(0.0f, P_prime[k] * scale);
+        }
+
+
+        // Strict renormalization to ensure sum is exactly 1
+        float current_sum_k = 0.0f;
+        for (int k = 1; k < m; ++k) current_sum_k += probs[k];
+
+        if (current_sum_k > eps) { // Avoid division by zero if sum is negligible
+            float final_scale = target / current_sum_k;
+            // Check if scale is finite (handles target=0 case correctly)
+            if (std::isfinite(final_scale)) {
+                for (int k = 1; k < m; ++k) {
+                    probs[k] *= final_scale;
+                    // Final clamp for safety
+                    probs[k] = std::max(0.0f, probs[k]);
+                }
+            } else if (target <= eps) {
+                // If target is zero, all neighbor probs should be zero
+                for (int k = 1; k < m; ++k) probs[k] = 0.0f;
+            }
+        } else if (target <= eps) {
+            // If target is zero and calculated sum is zero, ensure all are zero
+            for (int k = 1; k < m; ++k) probs[k] = 0.0f;
+        }
     }
-    if (sum_probabilities > 0.0f) {
-        for (int j = 0; j < num_partitions; j++) {
-            partition_probabilities[j] /= sum_probabilities;
+
+    // if the cluster_sizes are given, scale probs by the size of the cluster and renormalize. this is a rudimentary density estimation
+    if (partition_sizes.size() > 0) {
+        for (int k = 0; k < m; ++k) {
+            if (partition_sizes[k] > 0) {
+                probs[k] *= static_cast<float>(partition_sizes[k]);
+            }
+        }
+    }
+
+    // renormalize the probabilities to sum to 1
+    float S = 0.0f;
+    for (int k = 0; k < m; ++k) S += probs[k];
+    if (S > eps) {
+        for (int k = 0; k < m; ++k) {
+            probs[k] /= S;
         }
     } else {
-        for (int j = 0; j < num_partitions; j++) {
-            partition_probabilities[j] = 1.0 / num_partitions;
+        // If S is zero, all probabilities remain zero
+        for (int k = 0; k < m; ++k) {
+            probs[k] = 0.0f;
         }
     }
 
-    // Compute the recall profile
-    // Tensor recall_profile = torch::cumsum(probabilities_tensor, 0);
-
-    return partition_probabilities;
+    return probs;
 }
 
-inline float compute_intersection_volume_one(float boundary_distance, float query_radius, int dimension) {
-    if (boundary_distance >= query_radius) {
-        return -1e8;
+inline std::vector<float>
+compute_recall_profile_auncel(
+    const std::vector<float>& boundary_distances,
+    float                     query_radius,
+    int                       K_neighbors,
+    float                     a,
+    float                     b
+) {
+    const size_t L = boundary_distances.size();
+
+    // 1) Spherical-cap "angle" terms
+    std::vector<float> cap_terms(L, 0.0f);
+    if (query_radius > 1e-9f) {
+        for (size_t j = 0; j < L; ++j) {
+            float r = boundary_distances[j] / query_radius;
+            r = std::clamp(r, -1.0f, 1.0f);
+            cap_terms[j] = (r >= 1.0f ? 0.0f : std::acos(r));
+        }
     }
 
-    double volume_ratio = log_hyperspherical_cap_volume(query_radius, boundary_distance, dimension, true);
+    // 2) Calculate phi_values for each stage
+    std::vector<float> phi_values(L + 1);
+    float running_U_sum = std::accumulate(cap_terms.begin(), cap_terms.end(), 0.0f);
 
-    return volume_ratio;
-}
+    for (size_t i = 0; i <= L; ++i) {
+        float denominator = b - a * running_U_sum;
+        if (denominator <= 1e-9f) {
+            phi_values[i] = std::numeric_limits<float>::max();
+        } else {
+            phi_values[i] = 1.0f / denominator;
+        }
+        phi_values[i] = std::max(1.0f, phi_values[i]); // Ensure phi >= 1
 
-inline Tensor estimate_overlap(const Tensor &new_centroid, const Tensor &old_centroid, const Tensor &nbr_centroids) {
-    Tensor residual = new_centroid - old_centroid;
-    int dimension = new_centroid.size(0);
-
-    vector<float> old_boundary_distance(nbr_centroids.size(0), -1.0f);
-    vector<float> new_boundary_distance(nbr_centroids.size(0), -1.0f);
-
-    const float *residual_ptr = residual.data_ptr<float>();
-    const float *new_centroid_ptr = new_centroid.data_ptr<float>();
-    const float *old_centroid_ptr = old_centroid.data_ptr<float>();
-    const float *nbr_centroids_ptr = nbr_centroids.data_ptr<float>();
-
-    std::vector<float> line_vector(dimension);
-    std::vector<float> midpoint(dimension);
-    std::vector<float> projection(dimension);
-
-    // compute distance to old boundary
-    for (int j = 0; j < nbr_centroids.size(0); j++) {
-        subtract_arrays(nbr_centroids_ptr + (dimension * j), old_centroid_ptr, line_vector.data(), dimension);
-        divide_array_by_constant(line_vector.data(), 2.0f, midpoint.data(), dimension);
-        float norm = faiss::fvec_inner_product(midpoint.data(), midpoint.data(), dimension);
-        norm = std::sqrt(norm);
-        old_boundary_distance[j] = norm;
+        if (i < L) {
+            running_U_sum -= cap_terms[i];
+        }
     }
 
-    // compute distance to new boundary
-    for (int j = 0; j < nbr_centroids.size(0); j++) {
-        subtract_arrays(nbr_centroids_ptr + (dimension * j), new_centroid_ptr, line_vector.data(), dimension);
-        divide_array_by_constant(line_vector.data(), 2.0f, midpoint.data(), dimension);
-        float norm = faiss::fvec_inner_product(midpoint.data(), midpoint.data(), dimension);
-        norm = std::sqrt(norm);
-        new_boundary_distance[j] = norm;
+    // 3) Calculate cumulative recall based on phi_values
+    std::vector<float> cumulative_recalls(L + 1, 0.0f);
+    for (size_t i = 0; i <= L; ++i) {
+        float current_phi = phi_values[i];
+        float j_star = 0.0f;
+
+        if (K_neighbors > 0) {
+            if (current_phi == std::numeric_limits<float>::max()) {
+                j_star = 0.0f;
+            } else if (current_phi > 1e-9f) {
+                j_star = std::floor((float)K_neighbors / current_phi);
+                j_star = std::min(std::max(0.0f, j_star), (float)K_neighbors);
+            }
+        }
+
+        float error_i = 1.0f; // Default error if K_neighbors is 0 or no items found
+        if (K_neighbors > 0) {
+            error_i = 1.0f - j_star / (float)K_neighbors;
+        }
+        cumulative_recalls[i] = std::clamp(1.0f - error_i, 0.0f, 1.0f);
     }
 
-    Tensor overlap_ratio = torch::empty({nbr_centroids.size(0)}, torch::kFloat32);
-
-    // for each neighbor, compute the hyperspherical cap volume, where the radius of the sphere is the distance to new boundary
-    // and the old boundary distance gives the height of the cap
-    float mean_new_boundary_distance = 0.0f;
-    float mean_old_boundary_distance = 0.0f;
-    for (int j = 0; j < nbr_centroids.size(0); j++) {
-        mean_new_boundary_distance += new_boundary_distance[j];
-        mean_old_boundary_distance += old_boundary_distance[j];
-    }
-    mean_new_boundary_distance /= nbr_centroids.size(0);
-    mean_old_boundary_distance /= nbr_centroids.size(0);
-
-    for (int j = 0; j < nbr_centroids.size(0); j++) {
-        overlap_ratio[j] = abs(new_boundary_distance[j] - old_boundary_distance[j]) / mean_old_boundary_distance;
+    // 4) Calculate per-stage incremental recall
+    std::vector<float> recall_profile(L + 1, 0.0f);
+    if (!cumulative_recalls.empty()) {
+        recall_profile[0] = cumulative_recalls[0];
+        for (size_t i = 1; i <= L; ++i) {
+            recall_profile[i] = cumulative_recalls[i] - cumulative_recalls[i-1];
+            recall_profile[i] = std::max(0.0f, recall_profile[i]);
+        }
     }
 
-    return overlap_ratio;
+    // 5) Normalize the profile to sum to 1
+    float S = std::accumulate(recall_profile.begin(), recall_profile.end(), 0.0f);
+    if (S > 1e-9f) {
+        for (auto &v : recall_profile) {
+            v /= S;
+        }
+    }
+    // If S is 0 (e.g., K_neighbors=0 or zero predicted recall), profile remains all zeros.
+
+    return recall_profile;
 }
 
 #endif // CPP_UTILS_GEOMETRY_H

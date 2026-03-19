@@ -49,6 +49,8 @@ public:
      */
     shared_ptr<BuildTimingInfo> build(Tensor x, Tensor ids, shared_ptr<IndexBuildParams> build_params);
 
+    void add_level(shared_ptr<IndexBuildParams> params);
+
     /**
      * @brief Search for vectors in the index.
      * @param x Tensor of shape [num_queries, dimension].
@@ -120,7 +122,7 @@ public:
      * @param path Path to load the index.
      * @param n_workers Number of workers to use for query processing.
      */
-    void load(const std::string &path, int n_workers = 0);
+    void load(const std::string &path, shared_ptr<IndexBuildParams> params);
 
     /**
      * @brief Get the total number of vectors in the index.

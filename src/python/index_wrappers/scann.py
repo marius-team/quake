@@ -7,8 +7,9 @@ import scann
 import torch
 
 from quake.index_wrappers.wrapper import IndexWrapper
+from quake import SearchTimingInfo, SearchResult
 from quake.utils import to_numpy, to_torch
-
+import time
 
 class Scann(IndexWrapper):
     index: scann.scann_ops_pybind.ScannSearcher
@@ -129,6 +130,8 @@ class Scann(IndexWrapper):
         if not n_threads == 0:
             self.index.set_num_threads(n_threads)
 
+        start_time = time.time()
+
         query = to_numpy(query)
         indices, distances = self.index.search_batched(
             query,
@@ -137,8 +140,16 @@ class Scann(IndexWrapper):
             pre_reorder_num_neighbors=pre_reorder_num_neighbors,
         )
         indices = np.array(indices)
+        end_time = time.time()
+        timing_info = SearchTimingInfo()
+        timing_info.total_time_ns = int((end_time - start_time) * 1e9)
 
-        return to_torch(indices), to_torch(distances)
+        search_result = SearchResult()
+        search_result.ids = to_torch(indices)
+        search_result.distances = to_torch(distances)
+        search_result.timing_info = timing_info
+
+        return search_result
 
     def add(self, vectors: torch.Tensor, ids: Optional[torch.Tensor] = None):
         """
@@ -186,6 +197,12 @@ class Scann(IndexWrapper):
         :param filename: The name of the file to load the index from.
         """
         self.index = scann.scann_ops_pybind.load_searcher(str(filename))
+
+    def index_state(self) -> str:
+        return self.index.config()
+
+    def maintenance(self):
+        pass
 
     def centroids(self) -> torch.Tensor | None:
         return super().centroids()

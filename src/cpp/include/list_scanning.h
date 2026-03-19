@@ -8,8 +8,22 @@
 #define LIST_SCANNING_H
 
 #include <common.h>
+#include <immintrin.h>
+#include <chrono>
+
 #include "faiss/utils/Heap.h"
 #include "faiss/utils/distances.h"
+#include "sorting/pdqsort.h"
+#include "sorting/floyd_rivest_select.h"
+#include "sorting/heap_select.h"
+#include "parallel.h"
+#include "blas_dist.h"
+#include <faiss/impl/ResultHandler.h>
+
+using IP_Handler = faiss::HeapBlockResultHandler<faiss::CMin<float,int64_t>>;
+using L2_Handler = faiss::HeapBlockResultHandler<faiss::CMax<float,int64_t>>;
+using IP_Single   = IP_Handler::SingleResultHandler;
+using L2_Single   = L2_Handler::SingleResultHandler;
 
 inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     Tensor num_correct = torch::zeros(ids.size(0), torch::kInt64);
@@ -36,216 +50,307 @@ inline Tensor calculate_recall(Tensor ids, Tensor gt_ids) {
     return recall;
 }
 
-#define TOP_K_BUFFER_CAPACITY (8 * 1024)
+template<typename T>
+inline bool better(bool desc, T a, T b) noexcept
+{ return desc ? (a > b) : (a < b); }
 
-template<typename DistanceType = float, typename IdType = int>
+//======================================================================
+// 1. Fast specialised buffer for k == 1
+//======================================================================
+template<typename T, typename I>
 class TypedTopKBuffer {
 public:
-    int k_; // Number of top elements to keep
-    int curr_offset_ = 0; // Current offset in the buffer
-    std::vector<std::pair<DistanceType, IdType> > topk_; // Buffer to store top-k elements
-    bool is_descending_; // Flag to indicate sorting order
-    std::recursive_mutex buffer_mutex_;
-    std::atomic<bool> processing_query_;
-    std::atomic<int> jobs_left_;
-    std::atomic<int> partitions_scanned_;
+    T *vals_;    // size = capacity
+    I *ids_;
+    int capacity_, head_, k_;
+    bool is_desc_;
+    int *ord_;
+    bool owns_memory_ = true;
+    int node_;
+    TypedTopKBuffer(int k, bool desc, int cap, int node)
+            : capacity_(cap), head_(0), k_(k) {
+        node_ = node;
 
-    TypedTopKBuffer(int k, bool is_descending, int buffer_capacity = TOP_K_BUFFER_CAPACITY)
-        : k_(k), is_descending_(is_descending), topk_(buffer_capacity), processing_query_(true), partitions_scanned_(0) {
-        assert(k <= buffer_capacity); // Ensure k is smaller than or equal to buffer size
+        alloc();
 
-        for (int i = 0; i < topk_.size(); i++) {
-            if (is_descending_) {
-                topk_[i] = {-std::numeric_limits<DistanceType>::infinity(), -1};
-            } else {
-                topk_[i] = {std::numeric_limits<DistanceType>::max(), -1};
+        if (capacity_ < k_) {
+            string err_msg = "capacity= " + std::to_string(capacity_) +
+                             " must be greater than k= " + std::to_string(k_);
+            throw std::invalid_argument(err_msg);
+        }
+
+        if (desc) {
+            is_desc_ = true;
+            for (int i = 0; i < capacity_; i++) {
+                vals_[i] = -std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
+            }
+        } else {
+            is_desc_ = false;
+            for (int i = 0; i < capacity_; i++) {
+                vals_[i] = std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
             }
         }
     }
 
-    ~TypedTopKBuffer() = default;
+    // Create buffer but do not allocate memory (except for ord_)
+    TypedTopKBuffer(T *vals, I* ids, int cap, int k, bool desc, int node) {
+        capacity_ = cap;
+        head_ = 0;
+        k_ = k;
+        is_desc_ = desc;
+        vals_ = vals;
+        ids_ = ids;
+        ord_ = static_cast<int *>(quake_alloc(sizeof(int) * cap, node));
+        owns_memory_ = false;
+
+        if (capacity_ < k_) {
+            throw std::invalid_argument("capacity must be greater than k");
+        }
+
+        if (desc) {
+            for (int i = 0; i < capacity_; i++) {
+                vals_[i] = -std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
+            }
+        } else {
+            for (int i = 0; i < capacity_; i++) {
+                vals_[i] = std::numeric_limits<T>::infinity();
+                ids_[i] = -1;
+            }
+        }
+    }
+
+    ~TypedTopKBuffer() {
+        clear();
+    }
 
     void set_k(int new_k) {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        assert(new_k <= topk_.size());
+        if (new_k > capacity_) {
+            clear();
+            capacity_ = std::min(new_k * 100, 10000);
+            alloc();
+        }
         k_ = new_k;
         reset();
     }
 
-    void set_processing_query(bool new_value) {
-        processing_query_.store(new_value, std::memory_order_relaxed);
+    int k() const {
+        return k_;
     }
 
-    inline bool currently_processing_query() {
-        return processing_query_.load(std::memory_order_relaxed);
+    int capacity() const {
+        return capacity_;
     }
 
-    void set_jobs_left(int total_jobs) {
-        jobs_left_.store(total_jobs, std::memory_order_relaxed);
+    void alloc() {
+        vals_ = static_cast<T *>(quake_alloc(sizeof(T) * capacity_, node_));
+        ids_ = static_cast<I *>(quake_alloc(sizeof(I) * capacity_, node_));
+        ord_ = static_cast<int *>(quake_alloc(sizeof(int) * capacity_, node_));
     }
 
-    void record_skipped_jobs(int skipped_jobs) {
-        jobs_left_.fetch_sub(skipped_jobs, std::memory_order_relaxed);
-    }
+    void clear() {
+        if (owns_memory_) {
+            if (vals_) {
+                quake_free(vals_, sizeof(T) * capacity_);
+            }
 
-    void record_empty_job() {
-        jobs_left_.fetch_sub(1, std::memory_order_relaxed);
-    }
+            if (ids_) {
+                quake_free(ids_, sizeof(I) * capacity_);
+            }
+        }
 
-    inline bool finished_all_jobs() {
-        int curr_jobs_left = jobs_left_.load(std::memory_order_relaxed);
-        return jobs_left_.load(std::memory_order_relaxed) <= 0;
-    }
+        if (ord_) {
+            quake_free(ord_, sizeof(int) * capacity_);
+        }
 
-    inline int get_num_partitions_scanned() {
-        return partitions_scanned_.load(std::memory_order_relaxed);
+        vals_ = nullptr;
+        ids_ = nullptr;
+        ord_ = nullptr;
     }
 
     void reset() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        curr_offset_ = 0;
-        for (int i = 0; i < k_; i++) {
-            if (is_descending_) {
-                topk_[i] = { -std::numeric_limits<DistanceType>::infinity(), -1 };
-            } else {
-                topk_[i] = { std::numeric_limits<DistanceType>::max(), -1 };
-            }
-        }
-        partitions_scanned_.store(0, std::memory_order_relaxed);
+        head_ = 0;
+        // for (int i = 0; i < k_; i++) {
+        //     if (is_desc_) {
+        //         vals_[i] = -std::numeric_limits<T>::infinity();
+        //         ids_[i] = -1;
+        //     } else {
+        //         vals_[i] = std::numeric_limits<T>::infinity();
+        //         ids_[i] = -1;
+        //     }
+        // }
     }
 
-    void add(DistanceType distance, IdType index) {
-        if (curr_offset_ >= topk_.size()) {
-            flush(); // Flush the buffer if it is full
-        }
-        topk_[curr_offset_++] = {distance, index};
+    inline void add(T dist, I idx) {
+        vals_[head_] = dist;
+        ids_[head_] = idx;
+        if (__builtin_expect(++head_ == capacity_, 0)) flush();
     }
 
-    void batch_add(DistanceType *distances, const IdType *indices, int num_values) {
-        if (num_values == 0) {
-            jobs_left_.fetch_sub(1, std::memory_order_relaxed);
-            return;
-        }
-        if (!currently_processing_query()) {
-            jobs_left_.fetch_sub(1, std::memory_order_relaxed);
-            return;
-        }
-        std::lock_guard<std::recursive_mutex> lock(buffer_mutex_);
+    void batch_add(T *distances, I *indices, int num_values) {
         int pos = 0;
         while (pos < num_values) {
-            int available = static_cast<int>(topk_.size()) - curr_offset_;
+            int available = capacity_ - head_;
             if (available <= 0) {
                 flush();
-                available = static_cast<int>(topk_.size()) - curr_offset_;
+                available = capacity_ - head_;
             }
             int to_copy = std::min(num_values - pos, available);
             for (int i = 0; i < to_copy; i++) {
-                topk_[curr_offset_++] = { distances[pos + i], indices[pos + i] };
+                vals_[head_] = distances[pos + i];
+                ids_[head_] = indices[pos + i];
+                head_++;
             }
             pos += to_copy;
         }
-        jobs_left_.fetch_sub(1, std::memory_order_relaxed);
-        partitions_scanned_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    DistanceType flush() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        if (curr_offset_ > k_) {
-            if (is_descending_) {
-                std::partial_sort(topk_.begin(), topk_.begin() + k_, topk_.begin() + curr_offset_,
-                                  [](const auto &a, const auto &b) { return a.first > b.first; });
+    T flush() {
+
+
+        int n = head_;
+        int m = std::min(n, k_);
+
+        // 1) build identity permutation
+        for (int i = 0; i < n; ++i) {
+            ord_[i] = i;
+        }
+
+        auto cmp = [&](int a, int b) {
+            return is_desc_ ? vals_[a] > vals_[b] : vals_[a] < vals_[b];
+        };
+
+
+        // 2) select top‐m indices into ord_[0..m)
+        if (n > m) {
+            if (m < 10) {
+                miniselect::heap_select(ord_, ord_ + m, ord_ + n, cmp);
+            } else if (m < n * 0.001) {
+                miniselect::floyd_rivest_select(ord_, ord_ + m, ord_ + n, cmp);
             } else {
-                std::partial_sort(topk_.begin(), topk_.begin() + k_, topk_.begin() + curr_offset_,
-                                  [](const auto &a, const auto &b) { return a.first < b.first; });
+                miniselect::pdqpartial_sort_branchless(ord_, ord_ + m, ord_ + n, cmp);
             }
-            curr_offset_ = k_; // After flush, retain only the top-k elements
+
         } else {
-            // sort the curr_offset_ elements
-            if (is_descending_) {
-                std::sort(topk_.begin(), topk_.begin() + curr_offset_,
-                          [](const auto &a, const auto &b) { return a.first > b.first; });
-            } else {
-                std::sort(topk_.begin(), topk_.begin() + curr_offset_,
-                          [](const auto &a, const auto &b) { return a.first < b.first; });
-            }
-        }
-        return topk_[std::min(curr_offset_, k_ - 1)].first;
-    }
-
-    std::vector<DistanceType> get_topk() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        flush(); // Ensure the buffer is properly flushed
-
-        std::vector<DistanceType> topk_distances(std::min(curr_offset_, k_));
-        for (int i = 0; i < std::min(curr_offset_, k_); i++) {
-            topk_distances[i] = topk_[i].first;
+            miniselect::pdqsort_branchless(ord_, ord_ + n, cmp);
         }
 
-        return topk_distances;
-    }
 
-    DistanceType get_kth_distance() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        flush(); // Ensure the buffer is properly flushed
-        return topk_[std::min(curr_offset_, k_ - 1)].first;
-    }
+        // 5) copy the winners back to vals_/ids_ and clamp head_
+        std::vector<T> temp_v(m);
+        std::vector<I> temp_i(m);
 
-    // Get the current top-k indices (after final flush)
-    std::vector<IdType> get_topk_indices() {
-        std::lock_guard<std::recursive_mutex> buffer_lock(buffer_mutex_);
-        flush(); // Ensure the buffer is properly flushed
-
-        std::vector<IdType> topk_indices(std::min(curr_offset_, k_));
-        for (int i = 0; i < std::min(curr_offset_, k_); i++) {
-            topk_indices[i] = topk_[i].second;
+        for (int i = 0; i < m; ++i) {
+            int original_slot_idx = ord_[i]; // ord_[i] is the original index of the i-th best item
+            // (e.g. ord_[0] is index of best, ord_[1] of 2nd best)
+            temp_v[i] = vals_[original_slot_idx];
+            temp_i[i] = ids_[original_slot_idx];
         }
-        return topk_indices;
+
+        // Now copy from temporary buffers to the main buffers
+        for (int i = 0; i < m; ++i) {
+            vals_[i] = temp_v[i];
+            ids_[i]  = temp_i[i];
+        }
+
+        // 5) clamp head_ and return the k-th value (or extreme if too few)
+        head_ = m;
+        if (head_ == 0) {
+            return is_desc_
+                   ? -std::numeric_limits<T>::infinity()
+                   :  std::numeric_limits<T>::infinity();
+        }
+        int ret_i = std::min(k_ - 1, head_ - 1);
+        return vals_[ret_i];
+    }
+
+
+    std::vector<T> get_topk(bool sort = true) {
+        if (sort || head_ > k_) flush();
+        int n = head_;
+        std::vector<T> out;
+        out.reserve(n);
+        for (int i = 0; i < n; ++i) {
+            out.push_back(vals_[i]);
+        }
+        return out;
+    }
+
+    T get_kth_distance() {
+        flush();
+        if (head_ < k_) {
+            // not enough elements: return the sentinel extreme
+            return is_desc_
+                   ? -std::numeric_limits<T>::infinity()
+                   : std::numeric_limits<T>::infinity();
+        }
+        return vals_[k_ - 1];
+    }
+
+    std::vector<I> get_topk_indices(bool sort = true) {
+        if (sort || head_ > k_) flush();
+        int n = head_;
+        std::vector<I> out;
+        out.reserve(n);
+        for (int i = 0; i < n; ++i) {
+            out.push_back(ids_[i]);
+        }
+        return out;
     }
 };
 
 // Type alias for convenience
 using TopkBuffer = TypedTopKBuffer<float, int64_t>;
 
-inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer>> buffers) {
-    int n = buffers.size();
-    int k = buffers[0]->k_;
-    Tensor topk_distances = torch::empty({n, k}, torch::kFloat32);
-    Tensor topk_indices = torch::empty({n, k}, torch::kInt64);
-
-    auto topk_distances_accessor = topk_distances.accessor<float, 2>();
-    auto topk_indices_accessor = topk_indices.accessor<int64_t, 2>();
-
-    for (int i = 0; i < n; i++) {
-        vector<float> distances = buffers[i]->get_topk();
-        vector<int64_t> indices = buffers[i]->get_topk_indices();
-
-        int curr_k = std::min(k, (int) distances.size());
-
-        for (int j = 0; j < curr_k; j++) {
-            topk_distances_accessor[i][j] = distances[j];
-            topk_indices_accessor[i][j] = indices[j];
-        }
-    }
-
-    return std::make_tuple(topk_indices, topk_distances);
-}
-
-inline vector<shared_ptr<TopkBuffer>> create_buffers(int n, int k, bool is_descending) {
-    vector<shared_ptr<TopkBuffer>> buffers(n);
-    for (int i = 0; i < n; i++) {
-        buffers[i] = make_shared<TopkBuffer>(k, is_descending, 10 * k);
+inline vector<shared_ptr<TopkBuffer>> create_buffers(int batch_size, int k, bool is_desc, int cap=10000) {
+    vector<shared_ptr<TopkBuffer>> buffers;
+    for (int i = 0; i < batch_size; i++) {
+        buffers.push_back(make_shared<TopkBuffer>(k, is_desc, cap, 0));
     }
     return buffers;
 }
+
+// vector<shared_ptr<TopkBuffer>> local_buffers = create_buffers(batch_size, k, (metric_ == faiss::METRIC_INNER_PRODUCT));
+
+ inline std::tuple<Tensor, Tensor> buffers_to_tensor(vector<shared_ptr<TopkBuffer>> buffers) {
+     int n = buffers.size();
+     int k = buffers[0]->k();
+     Tensor topk_distances = torch::empty({n, k}, torch::kFloat32);
+     Tensor topk_indices = torch::empty({n, k}, torch::kInt64);
+
+     auto topk_distances_accessor = topk_distances.accessor<float, 2>();
+     auto topk_indices_accessor = topk_indices.accessor<int64_t, 2>();
+
+     for (int i = 0; i < n; i++) {
+         vector<float> distances = buffers[i]->get_topk();
+         vector<int64_t> indices = buffers[i]->get_topk_indices();
+
+         int curr_k = std::min(k, (int) distances.size());
+
+         for (int j = 0; j < curr_k; j++) {
+             topk_distances_accessor[i][j] = distances[j];
+             topk_indices_accessor[i][j] = indices[j];
+         }
+     }
+
+     return std::make_tuple(topk_indices, topk_distances);
+ }
 
 inline void scan_list_no_ids_inner_product(const float *query_vec,
                                                    const float *list_vecs,
                                                    int list_size,
                                                    int d,
-                                                   TopkBuffer &buffer) {
+                                                   TopkBuffer &buffer,
+                                                   float pivot) {
     const float *vec = list_vecs;
+    float dist;
     for (int l = 0; l < list_size; l++) {
-        buffer.add(faiss::fvec_inner_product(query_vec, vec, d), l);
+        dist = faiss::fvec_inner_product(query_vec, vec, d);
+        if (dist > pivot) {
+            buffer.add(dist, l);
+        }
         vec += d;  // move pointer to next vector
     }
 }
@@ -254,10 +359,14 @@ inline void scan_list_no_ids_l2(const float *query_vec,
                                       const float *list_vecs,
                                       int list_size,
                                       int d,
-                                      TopkBuffer &buffer) {
+                                      TopkBuffer &buffer,
+                                      float pivot) {
     const float *vec = list_vecs;
     for (int l = 0; l < list_size; l++) {
-        buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), l);
+        float dist = sqrt(faiss::fvec_L2sqr(query_vec, vec, d));
+        if (dist < pivot) {
+            buffer.add(dist, l);
+        }
         vec += d;
     }
 }
@@ -267,10 +376,14 @@ inline void scan_list_with_ids_inner_product(const float *query_vec,
                                                      const int64_t *list_ids,
                                                      int list_size,
                                                      int d,
-                                                     TopkBuffer &buffer) {
+                                                     TopkBuffer &buffer,
+                                                     float pivot) {
     const float *vec = list_vecs;
     for (int l = 0; l < list_size; l++) {
-        buffer.add(faiss::fvec_inner_product(query_vec, vec, d), list_ids[l]);
+        float dist = faiss::fvec_inner_product(query_vec, vec, d);
+        if (dist > pivot) {
+            buffer.add(dist, list_ids[l]);
+        }
         vec += d;
     }
 }
@@ -280,10 +393,14 @@ inline void scan_list_with_ids_l2(const float *query_vec,
                                         const int64_t *list_ids,
                                         int list_size,
                                         int d,
-                                        TopkBuffer &buffer) {
+                                        TopkBuffer &buffer,
+                                        float pivot) {
     const float *vec = list_vecs;
     for (int l = 0; l < list_size; l++) {
-        buffer.add(sqrt(faiss::fvec_L2sqr(query_vec, vec, d)), list_ids[l]);
+        float dist = sqrt(faiss::fvec_L2sqr(query_vec, vec, d));
+        if (dist < pivot) {
+            buffer.add(dist, list_ids[l]);
+        }
         vec += d;
     }
 }
@@ -295,75 +412,553 @@ inline void scan_list(const float *query_vec,
                             int list_size,
                             int d,
                             TopkBuffer &buffer,
-                            faiss::MetricType metric = faiss::METRIC_L2) {
+                            faiss::MetricType metric,
+                            float pivot = NULL) {
     // Dispatch based on metric type and whether list_ids is provided.
+
+    if (pivot == NULL) {
+        pivot = metric == faiss::METRIC_INNER_PRODUCT
+                ? -std::numeric_limits<float>::infinity()
+                : std::numeric_limits<float>::infinity();
+    }
+
     if (metric == faiss::METRIC_INNER_PRODUCT) {
         if (list_ids == nullptr)
-            scan_list_no_ids_inner_product(query_vec, list_vecs, list_size, d, buffer);
+            scan_list_no_ids_inner_product(query_vec, list_vecs, list_size, d, buffer, pivot);
         else
-            scan_list_with_ids_inner_product(query_vec, list_vecs, list_ids, list_size, d, buffer);
+            scan_list_with_ids_inner_product(query_vec, list_vecs, list_ids, list_size, d, buffer, pivot);
     } else { // Assume L2 (or similar)
         if (list_ids == nullptr)
-            scan_list_no_ids_l2(query_vec, list_vecs, list_size, d, buffer);
+            scan_list_no_ids_l2(query_vec, list_vecs, list_size, d, buffer, pivot);
         else
-            scan_list_with_ids_l2(query_vec, list_vecs, list_ids, list_size, d, buffer);
+            scan_list_with_ids_l2(query_vec, list_vecs, list_ids, list_size, d, buffer, pivot);
+    }
+}
+
+inline void ip_blas(
+        const float*   __restrict x,
+        const float*   __restrict y,
+        const int64_t  *list_ids,
+        size_t                      d,
+        size_t                      nx,
+        size_t                      ny,
+        size_t                      db_blas_bs,   // = bs_y
+        size_t                      k,
+        vector<shared_ptr<TopkBuffer>> &topk_buffers,
+        float*        __restrict    ip_block,     // nx * bs_y
+        vector<std::atomic<float>*>   pivot = {})      // db_blas_bs
+{
+    if (nx == 0 || ny == 0) return;
+
+    const size_t bs_x = nx;
+    const     size_t bs_y = db_blas_bs;
+    int64_t *list_ids_ptr = (int64_t *) list_ids;
+
+    for (size_t i0 = 0; i0 < nx; i0 += bs_x) {
+        const size_t i1 = std::min(i0 + bs_x, nx);
+        const size_t q_chunk = i1 - i0;
+
+        for (size_t j0 = 0; j0 < ny; j0 += bs_y) {
+            const size_t j1      = std::min(j0 + bs_y, ny);
+            const size_t db_chunk = j1 - j0;
+
+            // use torch matmul
+# ifdef __APPLE__ // use torch on macOS
+            Tensor x_tensor = torch::from_blob((void*) (x + i0 * d), {(int64_t) q_chunk, (int64_t) d}, torch::kFloat32);
+            Tensor y_tensor = torch::from_blob((void*) (y + j0 * d), {(int64_t) db_chunk, (int64_t) d}, torch::kFloat32);
+            Tensor ip_tensor = torch::from_blob(ip_block, {(int64_t) q_chunk, (int64_t) db_chunk}, torch::kFloat32);
+            torch::matmul_out(ip_tensor, x_tensor, y_tensor.transpose(0, 1));
+#else // use BLAS on Linux
+            {
+                const float one = 1.f;
+                float zero = 0.f;
+                FINTEGER nyi = FINTEGER(db_chunk);
+                FINTEGER nxi = FINTEGER(q_chunk);
+                FINTEGER di  = FINTEGER(d);
+                sgemm_("Transpose","Not transpose",
+                       &nyi,&nxi,&di,
+                       &one,
+                       y + j0 * d, &di,
+                       x + i0 * d, &di,
+                       &zero,
+                       ip_block,    &nyi);
+            }
+#endif
+
+
+            /* IP → L2² */
+            if (k > 1) {
+                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                    float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
+
+                    // collect distances closer than pivot
+                    if (pivot.size() > 0) {
+                        float curr_pivot = pivot[qi]->load(std::memory_order_relaxed);
+                        line_ptr = ip_block + qi * db_chunk; // Reset line_ptr to the start of the current column
+                        for (size_t pj = 0; pj < db_chunk; ++pj) {
+                            if (*line_ptr > curr_pivot) {
+                                topk_buffers[qi]->add(*line_ptr, list_ids_ptr[j0 + pj]);
+                            }
+                            line_ptr++; // Move to the next element in the column
+                        }
+                    } else {
+                        topk_buffers[qi]->batch_add(ip_block + qi * db_chunk, list_ids_ptr + j0, db_chunk);
+                    }
+                }
+            } else if (k == 1) {
+                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                    float* line_ptr = ip_block + qi * db_chunk; // Pointer to current column in ip_block
+                    float best_dist = -std::numeric_limits<float>::infinity();
+                    int64_t best_id = -1;
+
+                    for (size_t pj = 0; pj < db_chunk; ++pj) {
+                        if (*line_ptr > best_dist) {
+                            best_dist = *line_ptr;
+                            best_id = list_ids_ptr[j0 + pj];
+                        }
+                        line_ptr++; // Move to the next element in the column
+                    }
+                    topk_buffers[qi]->add(best_dist, best_id);
+                }
+            }
+        }
+    }
+}
+
+inline void l2_blas(
+        const float*   __restrict x,
+        const float*   __restrict y,
+        const int64_t  *list_ids,
+        size_t                      d,
+        size_t                      nx,
+        size_t                      ny,
+        size_t                      db_blas_bs,   // = bs_y
+        size_t                      k,
+        vector<shared_ptr<TopkBuffer>> &topk_buffers,
+        float*        __restrict    ip_block,     // nx * bs_y
+        float*        __restrict    norms_x,      // bs_x
+        float*        __restrict    norms_y,     // db_blas_bs
+        vector<std::atomic<float>*>   pivot)      
+{
+    if (nx == 0 || ny == 0) return;
+
+    const size_t bs_x = nx;
+    const     size_t bs_y = db_blas_bs;
+    int64_t *list_ids_ptr = (int64_t *) list_ids;
+
+    for (size_t i0 = 0; i0 < nx; i0 += bs_x) {
+        const size_t i1 = std::min(i0 + bs_x, nx);
+        const size_t q_chunk = i1 - i0;
+
+        /* ‖x‖² for this query block */
+        faiss::fvec_norms_L2sqr(norms_x, x + i0 * d, d, q_chunk);
+
+        for (size_t j0 = 0; j0 < ny; j0 += bs_y) {
+            const size_t j1      = std::min(j0 + bs_y, ny);
+            const size_t db_chunk = j1 - j0;
+
+            /* ‖y‖² for this database block */
+            faiss::fvec_norms_L2sqr(norms_y, y + j0 * d, d, db_chunk);
+
+            // use torch matmul
+            // Tensor x_tensor = torch::from_blob((void*) (x + i0 * d), {(int64_t) q_chunk, (int64_t) d}, torch::kFloat32);
+            // Tensor y_tensor = torch::from_blob((void*) (y + j0 * d), {(int64_t) db_chunk, (int64_t) d}, torch::kFloat32);
+            // Tensor ip_tensor = torch::from_blob(ip_block, {(int64_t) q_chunk, (int64_t) db_chunk}, torch::kFloat32);
+            // torch::matmul_out(ip_tensor, x_tensor, y_tensor.transpose(0, 1));
+
+            /* SGEMM */
+            {
+                const float one = 1.f;
+                float zero = 0.f;
+                FINTEGER nyi = FINTEGER(db_chunk);
+                FINTEGER nxi = FINTEGER(q_chunk);
+                FINTEGER di  = FINTEGER(d);
+                sgemm_("Transpose","Not transpose",
+                       &nyi,&nxi,&di,
+                       &one,
+                       y + j0 * d, &di,
+                       x + i0 * d, &di,
+                       &zero,
+                       ip_block,    &nyi);
+            }
+
+            // for (int64_t qi = 0; qi < (int64_t)q_chunk; ++qi) {
+            //     float* line = ip_block + qi * db_chunk;
+            //     const float xn = norms_x[qi];
+            //     for (size_t pj = 0; pj < db_chunk; ++pj, ++line) {
+            //         float d2 = xn + norms_y[pj] - 2.f * (*line);
+            //         *line = (d2 < 0.f || !std::isfinite(d2)) ? 0.f : d2;
+            //     }
+            // }
+
+            /* IP → L2² */
+            int num_flushes = 0;
+            int num_top_k_add_all = 0;
+            int buffer_not_added = 0;
+            
+            float* line_ptr = ip_block;
+            for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                const float current_norm_x = norms_x[qi];
+                
+                #pragma unroll
+                for (size_t pj = 0; pj < db_chunk; ++pj) {
+                    *line_ptr = current_norm_x + norms_y[pj] - 2.f * (*line_ptr);
+                    line_ptr++; 
+                }
+            }
+
+            line_ptr = ip_block;
+            if (__builtin_expect(pivot.size() > 0, 1)) {
+                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                    const float curr_pivot = pivot[qi]->load(std::memory_order_relaxed);
+                    const float curr_pivot_sq = curr_pivot * curr_pivot; // Compare squared distances
+
+                    #pragma unroll
+                    for (size_t pj = 0; pj < db_chunk; ++pj) {
+                        // Check if distance is within the pivot radius
+                        if (__builtin_expect(*line_ptr < curr_pivot_sq, 0)) {
+                            topk_buffers[qi]->add(std::sqrt(*line_ptr), list_ids_ptr[j0 + pj]);
+                        }
+                        line_ptr++; 
+                    }
+                }
+            } else { 
+                for (int64_t qi = 0; qi < static_cast<int64_t>(q_chunk); ++qi) {
+                    topk_buffers[qi]->batch_add(line_ptr, list_ids_ptr + j0, db_chunk);
+                    line_ptr += db_chunk;
+                }
+            }
+        }
     }
 }
 
 inline void batched_scan_list(const float *query_vecs,
                               const float *list_vecs,
                               const int64_t *list_ids,
-                              int num_queries,
-                              int list_size,
-                              int dim,
-                              vector<shared_ptr<TopkBuffer>> &topk_buffers,
-                              MetricType metric = faiss::METRIC_L2) {
-    if (list_size == 0 || list_vecs == nullptr) {
-        // No list vectors to process;
+                              int           num_queries,
+                              int           list_size,
+                              int           dim,
+                              std::vector<std::shared_ptr<TopkBuffer>> &topk_buffers,
+                              MetricType    metric,
+                              /* optional scratch supplied by caller: may be nullptr */
+                              float        *ip_block       /* = nullptr */,
+                              float        *norms_x        /* = nullptr */,
+                              float        *norms_y_buf    /* = nullptr */,
+                              int            blas_db_bs    /* = BLAS_DB_BS */,
+                              int            blas_q_bs     /* = 128 */,
+                              std::vector<std::atomic<float>*> pivots /* = {} */)
+{
+
+    if (list_size == 0 || num_queries == 0 || list_vecs == nullptr) {
         return;
     }
 
-    // Ensure k does not exceed list_size
-    int k = topk_buffers[0]->k_;
-    int k_max = std::min(k, list_size);
+    const bool need_norm = (metric == faiss::METRIC_L2);
+    const int  k         = std::min(topk_buffers[0]->k(), list_size);
 
-    int64_t *labels = (int64_t *) malloc(num_queries * k_max * sizeof(int64_t));
-    float *distances = (float *) malloc(num_queries * k_max * sizeof(float));
+    // ---------------------------------------------------------------
+    //  thread‐local scratch buffers: reused across calls, resized only if
+    //  current block exceeds previous capacity
+    // ---------------------------------------------------------------
+    thread_local std::vector<float>  TLS_ip;     // holds up to (blas_q_bs × blas_db_bs)
+    thread_local std::vector<float>  TLS_nx;     // holds up to blas_q_bs
+    thread_local std::vector<float>  TLS_ny;     // holds up to blas_db_bs
 
-    if (metric == faiss::METRIC_INNER_PRODUCT) {
-        faiss::float_minheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
-        faiss::knn_inner_product(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr);
-    } else if (metric == faiss::METRIC_L2) {
-        faiss::float_maxheap_array_t res = {size_t(num_queries), size_t(k_max), labels, distances};
-        faiss::knn_L2sqr(query_vecs, list_vecs, dim, num_queries, list_size, &res, nullptr, nullptr);
-    } else {
-        throw std::runtime_error("Metric type not supported");
+    // ---------------------------------------------------------------
+    //  If L2 and caller gave no norms_x, ensure TLS_nx can hold blas_q_bs
+    // ---------------------------------------------------------------
+    if (need_norm && norms_x == nullptr) {
+        if ((int)TLS_nx.size() < blas_q_bs) {
+            TLS_nx.resize(blas_q_bs);
+        }
     }
 
-    // map the labels to the actual list_ids
-    if (list_ids != nullptr) {
-        for (int i = 0; i < num_queries; i++) {
-            for (int j = 0; j < k_max; j++) {
-                labels[i * k_max + j] = list_ids[labels[i * k_max + j]];
+    // ---------------------------------------------------------------
+    //  Loop over query‐blocks of size ≤ blas_q_bs
+    // ---------------------------------------------------------------
+    for (int q_off = 0; q_off < num_queries; q_off += blas_q_bs) {
+        int q_blk = std::min(blas_q_bs, num_queries - q_off);
+        const float *q_ptr  = query_vecs + size_t(q_off) * dim;
+        float       *q_norms;
+
+        // If caller supplied norms_x, point at offset; else use TLS_nx[0..q_blk-1]
+        if (need_norm) {
+            if (norms_x != nullptr) {
+                q_norms = norms_x + q_off;
+            } else {
+                q_norms = TLS_nx.data();
+                // compute ‖x‖² for this q‐block
+                for (int i = 0; i < q_blk; ++i) {
+                    const float *xptr = q_ptr + size_t(i) * dim;
+                    float sumsq = 0.f;
+
+                    for (int d = 0; d < dim; ++d) {
+                        sumsq += xptr[d] * xptr[d];
+                    }
+                    q_norms[i] = sumsq;
+                }
+            }
+        } else {
+            q_norms = nullptr;
+        }
+
+        // build a small vector of the q_blk TopkBuffers
+        std::vector<std::shared_ptr<TopkBuffer>> sub_buffers;
+        sub_buffers.reserve(q_blk);
+        for (int i = 0; i < q_blk; ++i) {
+            sub_buffers.push_back(topk_buffers[q_off + i]);
+        }
+
+        // ---------------------------------------------------------------
+        //  Ensure TLS_ip can hold q_blk × blas_db_bs distances if needed
+        // ---------------------------------------------------------------
+        if (ip_block == nullptr) {
+            size_t need_ip = size_t(q_blk) * size_t(blas_db_bs);
+            if (TLS_ip.size() < need_ip) {
+                std::cout << "Resizing TLS_ip from " << TLS_ip.size()
+                          << " to " << need_ip << std::endl;
+                TLS_ip.resize(need_ip);
+            }
+        }
+
+        // ---------------------------------------------------------------
+        //  Loop over database blocks of size ≤ blas_db_bs
+        // ---------------------------------------------------------------
+        for (int db_off = 0; db_off < list_size; db_off += blas_db_bs) {
+            int blk = std::min(blas_db_bs, list_size - db_off);
+            const float    *d_ptr  = list_vecs + size_t(db_off) * dim;
+            const int64_t  *d_ids  = list_ids  + db_off;
+
+            // Decide where to write "ip_block": either caller‐owned or TLS_ip
+            float *blk_ip = (ip_block != nullptr ? ip_block
+                                                 : TLS_ip.data());
+
+            // If L2 and caller gave no norms_y_buf, ensure TLS_ny fits blk
+            
+            float *blk_norm_y = nullptr;
+            if (need_norm) {
+                if (norms_y_buf != nullptr) {
+                    blk_norm_y = norms_y_buf;
+                } else {
+                    if ((int)TLS_ny.size() < blk) {
+                        TLS_ny.resize(blk);
+                    }
+                    blk_norm_y = TLS_ny.data();
+                }
+            }
+
+            // Dispatch to the appropriate BLAS kernel
+            if (metric == faiss::METRIC_INNER_PRODUCT) {
+                ip_blas(q_ptr,
+                        d_ptr,
+                        d_ids,
+                        dim,
+                        q_blk,
+                        blk,
+                        blk,
+                        k,
+                        sub_buffers,
+                        blk_ip,
+                        pivots);
+            } else {  // faiss::METRIC_L2
+                l2_blas(q_ptr,
+                        d_ptr,
+                        d_ids,
+                        dim,
+                        q_blk,
+                        blk,
+                        blk,
+                        k,
+                        sub_buffers,
+                        blk_ip,
+                        q_norms,
+                        blk_norm_y,
+                        pivots);
             }
         }
     }
-
-    // if the metric is l2, convert the distances to sqrt
-    if (metric == faiss::METRIC_L2) {
-        for (int i = 0; i < num_queries * k_max; i++) {
-            distances[i] = sqrt(distances[i]);
-        }
-    }
-
-    // add distances to the topk buffers
-    for (int i = 0; i < num_queries; i++) {
-        topk_buffers[i]->batch_add(distances + i * k_max, labels + i * k_max, k_max);
-    }
-
-    free(labels);
-    free(distances);
 }
+
+// inline void batched_scan_list(const float *query_vecs,
+//                               const float *list_vecs,
+//                               const int64_t *list_ids,
+//                               int           num_queries,
+//                               int           list_size,
+//                               int           dim,
+//                               std::vector<std::shared_ptr<TopkBuffer>> &topk_buffers,
+//                               MetricType    metric,
+//                               /* optional scratch supplied by caller: may be nullptr */
+//                               float        *ip_block       /* = nullptr */,
+//                               float        *norms_x        /* = nullptr */,
+//                               float        *norms_y_buf    /* = nullptr */,
+//                               int            blas_db_bs    /* = BLAS_DB_BS */,
+//                               int            blas_q_bs     /* = 128 */,
+//                               std::vector<std::atomic<float>*> pivots /* = {} */)
+// {
+//     if (list_size == 0 || num_queries == 0 || list_vecs == nullptr) {
+//         return;
+//     }
+//
+//     const bool need_norm = (metric == faiss::METRIC_L2);
+//     // each query has a TopkBuffer in topk_buffers[0..num_queries-1]
+//     const int k = std::min(topk_buffers[0]->k(), list_size);
+//
+//     /* ------------------------------------------------------------------ */
+//     /*  TEMPORARY BUFFERS (only if caller did NOT supply)                 */
+//     /* ------------------------------------------------------------------ */
+//     std::vector<float> tmp_ip;    // for caller‐absent ip_block
+//     std::vector<float> tmp_nx;    // for norms_x if caller did not supply
+//     std::vector<float> tmp_ny;    // for norms_y_buf if caller did not supply
+//
+//     /* ------------------------------------------------------------------ */
+//     /*  PRE‐COMPUTE ‖x‖² FOR ALL QUERIES IF L2 AND NO norms_x GIVEN         */
+//     /* ------------------------------------------------------------------ */
+//     if (need_norm && norms_x == nullptr) {
+//         tmp_nx.resize(blas_q_bs);
+//         norms_x = tmp_nx.data();
+//     }
+//
+//     /* ------------------------------------------------------------------ */
+//     /*  LOOP OVER QUERY BLOCKS OF SIZE ≤ blas_q_bs                          */
+//     /* ------------------------------------------------------------------ */
+//     for (int q_off = 0; q_off < num_queries; q_off += blas_q_bs) {
+//         int q_blk = std::min(blas_q_bs, num_queries - q_off);
+//         const float    *q_ptr     = query_vecs + size_t(q_off) * dim;
+//         float          *q_norms   = need_norm ? (norms_x + q_off) : nullptr;
+//
+//         // build a subvector of TopkBuffers for these q_blk queries
+//         std::vector<std::shared_ptr<TopkBuffer>> sub_buffers;
+//         sub_buffers.reserve(q_blk);
+//         for (int i = 0; i < q_blk; ++i) {
+//             sub_buffers.push_back(topk_buffers[q_off + i]);
+//         }
+//
+//         /* ------------------------------------------------------------------ */
+//         /*  OPTIONALLY GROW tmp_ip TO HOLD q_blk × blas_db_bs DISTANCES       */
+//         /*  (only if caller did not supply ip_block)                           */
+//         /* ------------------------------------------------------------------ */
+//         if (ip_block == nullptr) {
+//             size_t needed = size_t(q_blk) * size_t(blas_db_bs);
+//             if (tmp_ip.size() < needed) {
+//                 tmp_ip.resize(needed);
+//             }
+//         }
+//
+//         /* ------------------------------------------------------------------ */
+//         /*  LOOP OVER DATABASE BLOCKS OF SIZE ≤ blas_db_bs                      */
+//         /* ------------------------------------------------------------------ */
+//         for (int db_off = 0; db_off < list_size; db_off += blas_db_bs) {
+//             int blk = std::min(blas_db_bs, list_size - db_off);
+//             const float    *d_ptr      = list_vecs + size_t(db_off) * dim;
+//             const int64_t  *d_ids      = list_ids + db_off;
+//             float          *blk_ip     = ip_block     ? ip_block     : tmp_ip.data();
+//             float          *blk_norm_y = nullptr;
+//
+//             /* if L2 and no caller norms_y_buf given, grow tmp_ny to size blk */
+//             if (need_norm) {
+//                 if (norms_y_buf != nullptr) {
+//                     blk_norm_y = norms_y_buf;
+//                 } else {
+//                     if ((int)tmp_ny.size() < blk) {
+//                         tmp_ny.resize(blk);
+//                     }
+//                     blk_norm_y = tmp_ny.data();
+//                 }
+//             }
+//
+//             if (metric == faiss::METRIC_INNER_PRODUCT) {
+//                 // q_blk queries, blk database rows → distances in blk_ip
+//                 ip_blas(q_ptr,
+//                         d_ptr,
+//                         d_ids,
+//                         dim,
+//                         q_blk,
+//                         blk,
+//                         blk,
+//                         k,
+//                         sub_buffers,
+//                         blk_ip,
+//                         pivots);
+//             } else if (metric == faiss::METRIC_L2) {
+//                 l2_blas(q_ptr,
+//                         d_ptr,
+//                         d_ids,
+//                         dim,
+//                         q_blk,
+//                         blk,
+//                         blk,
+//                         k,
+//                         sub_buffers,
+//                         blk_ip,
+//                         q_norms,
+//                         blk_norm_y,
+//                         pivots);
+//             } else {
+//                 throw std::runtime_error("batched_scan_list: unsupported metric");
+//             }
+//         }
+//     }
+// }
+
+//
+//
+// inline void batched_scan_list(const float *query_vecs,
+//                               const float *list_vecs,
+//                               const int64_t *list_ids,
+//                               int num_queries,
+//                               int list_size,
+//                               int dim,
+//                               vector<shared_ptr<TopkBuffer>> &topk_buffers,
+//                               MetricType metric,
+//                               float *ip_block = nullptr,
+//                               float *norms_x = nullptr,
+//                               float *norms_y_buf = nullptr,
+//                               int blas_db_bs = BLAS_DB_BS,
+//                               vector<std::atomic<float>*> pivots = {}) {
+//     if (list_size == 0 || list_vecs == nullptr) {
+//         // No list vectors to process;
+//         return;
+//     }
+//
+//     // Ensure k does not exceed list_size
+//     int k = topk_buffers[0]->k();
+//     int k_max = std::min(k, list_size);
+//
+//     if (metric == faiss::METRIC_INNER_PRODUCT) {
+//         ip_blas(
+//                 query_vecs,
+//                 list_vecs,
+//                 list_ids,
+//                 dim,
+//                 num_queries,
+//                 list_size,
+//                 blas_db_bs,
+//                 k_max,
+//                 topk_buffers,
+//                 ip_block,
+//                 pivots
+//         );
+//     } else if (metric == faiss::METRIC_L2) {
+//         l2_blas(
+//                 query_vecs,
+//                 list_vecs,
+//                 list_ids,
+//                 dim,
+//                 num_queries,
+//                 list_size,
+//                 blas_db_bs,
+//                 k_max,
+//                 topk_buffers,
+//                 ip_block,
+//                 norms_x,
+//                 norms_y_buf,
+//                 pivots
+//         );
+//     } else {
+//         throw std::runtime_error("Metric type not supported");
+//     }
+// }
+
 
 // }
 #endif //LIST_SCANNING_H

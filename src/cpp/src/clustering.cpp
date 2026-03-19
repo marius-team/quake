@@ -9,17 +9,145 @@
 #include "faiss/Clustering.h"
 #include "index_partition.h"
 #include <list_scanning.h>
+#include <query_coordinator.h>
+#include <omp.h>
 
-shared_ptr<Clustering> kmeans(Tensor vectors,
+#ifdef QUAKE_ENABLE_GPU
+#include <c10/cuda/CUDAStream.h>
+#include <raft/core/resources.hpp>   // RAFT resources (handle)
+#include <raft/core/device_mdspan.hpp> // RAFT device view (make_device_matrix_view, etc.)
+#include <cuvs/cluster/kmeans.hpp>   // cuVS k-means API
+
+shared_ptr<Clustering> kmeans_cuvs_sample_and_predict(
+    Tensor vectors, Tensor ids,
+    shared_ptr<IndexBuildParams> build_params)
+{
+    /* ----------  unpack / sanity-check parameters  ----------------------- */
+    const int   num_clusters   = build_params->nlist;
+    const int   niter          = build_params->niter;
+    int         gpu_batch_size = build_params->gpu_batch_size;
+    int         gpu_sample_sz  = build_params->gpu_sample_size;
+    const MetricType metric    = str_to_metric_type(build_params->metric);
+
+    TORCH_CHECK(vectors.dim() == 2, "vectors must be [N,D]");
+    TORCH_CHECK(ids.dim()     == 1, "ids must be [N]");
+
+    const int64_t N = vectors.size(0);
+    const int64_t D = vectors.size(1);
+
+    gpu_sample_sz  = std::min(gpu_sample_sz,  (int)N);
+    gpu_batch_size = std::min(gpu_batch_size, (int)N);
+    TORCH_CHECK(gpu_sample_sz > 0 && gpu_sample_sz <= N, "invalid sample size");
+
+    /* ----------  copy to pinned host & (optionally) normalize  ----------- */
+    Tensor cpu_pts = vectors.contiguous().pin_memory();
+    if (metric == faiss::METRIC_INNER_PRODUCT) {
+        // cuVS k-means is Euclidean; approximate cosine by L2 on the unit sphere
+        cpu_pts = cpu_pts.div(cpu_pts.norm(2, 1, /*keepdim=*/true));
+    }
+
+    /* ----------  draw random sample for training  ------------------------ */
+    const Tensor samp_idx  = torch::randperm(N, torch::kLong).slice(0, 0, gpu_sample_sz);
+    const Tensor samp_host = cpu_pts.index_select(0, samp_idx);
+    const Tensor samp_gpu  = samp_host.to(torch::kCUDA, /*non_blocking=*/true).contiguous();
+
+    /* ----------  RAFT handle & cuVS parameters  -------------------------- */
+    raft::resources handle;
+    cudaStream_t stream = c10::cuda::getCurrentCUDAStream();
+    raft::resource::set_cuda_stream(handle, stream);
+
+    cuvs::cluster::kmeans::params params;
+    params.n_clusters = num_clusters;
+    params.init       = cuvs::cluster::kmeans::params::InitMethod::Random;
+    params.max_iter   = niter;
+
+    /* ----------  centroids on device  ------------------------------------ */
+    Tensor cent_gpu = torch::empty({num_clusters, D},
+                                   torch::dtype(torch::kFloat32).device(torch::kCUDA))
+                      .contiguous();
+
+    /* ----------  fit on the sample  -------------------------------------- */
+    {
+        float inertia      = 0.0f;
+        int   actual_iter  = 0;
+        cuvs::cluster::kmeans::fit(
+            handle, params,
+            raft::make_device_matrix_view<const float,int>(samp_gpu.data_ptr<float>(),
+                                                           gpu_sample_sz, (int)D),
+            std::nullopt,
+            raft::make_device_matrix_view<float,int>(cent_gpu.data_ptr<float>(),
+                                                     num_clusters, (int)D),
+            raft::make_host_scalar_view(&inertia),
+            raft::make_host_scalar_view(&actual_iter)
+        );
+    }
+
+    /* ----------  predict every point, in order, exactly once  ------------ */
+    Tensor all_labels = torch::empty({N}, torch::kLong);               // on CPU
+
+    auto run_predict = [&](Tensor batch_host, int64_t dst_off)
+    {
+        const int64_t bs = batch_host.size(0);
+
+        Tensor batch_gpu = batch_host.to(torch::kCUDA, /*non_blocking=*/true)
+                                     .contiguous();
+        Tensor lbl_gpu32 = torch::empty({bs},
+                              torch::dtype(torch::kInt32).device(torch::kCUDA));
+
+        float dummy_inertia = 0.0f;   // storage required by the API
+        cuvs::cluster::kmeans::predict(
+            handle, params,
+            raft::make_device_matrix_view<const float,int>(batch_gpu.data_ptr<float>(),
+                                                           bs, (int)D),
+            std::nullopt,
+            raft::make_device_matrix_view<float,int>(cent_gpu.data_ptr<float>(),
+                                                     num_clusters, (int)D),
+            raft::make_device_vector_view<int,int>(lbl_gpu32.data_ptr<int>(), bs),
+            /*verbose=*/false,
+            raft::make_host_scalar_view(&dummy_inertia)
+        );
+
+        all_labels.narrow(0, dst_off, bs)
+                  .copy_(lbl_gpu32.to(torch::kLong).cpu(), /*non_blocking=*/false);
+    };
+
+    for (int64_t off = 0; off < N; off += gpu_batch_size) {
+        const int64_t bs = std::min<int64_t>(gpu_batch_size, N - off);
+        run_predict(cpu_pts.slice(0, off, off + bs), off);
+    }
+
+    /* ----------  group vectors/ids by cluster on CPU  -------------------- */
+    Tensor lbl_sorted, idx_sorted;
+    std::tie(lbl_sorted, idx_sorted) = torch::sort(all_labels);
+    Tensor vecs_sorted = vectors.index_select(0, idx_sorted);
+    Tensor ids_sorted  = ids.index_select(0,    idx_sorted);
+
+    Tensor counts = torch::bincount(lbl_sorted, /*weights=*/{}, num_clusters);
+    std::vector<int64_t> split_sz(counts.data_ptr<int64_t>(),
+                                  counts.data_ptr<int64_t>() + num_clusters);
+
+    std::vector<Tensor> cluster_vecs = torch::split(vecs_sorted, split_sz, 0);
+    std::vector<Tensor> cluster_ids  = torch::split(ids_sorted,  split_sz, 0);
+
+    /* ----------  package result  ---------------------------------------- */
+    auto out = std::make_shared<Clustering>();
+    out->centroids     = cent_gpu.cpu().contiguous();
+    out->partition_ids = torch::arange(num_clusters, torch::kLong);
+    out->vectors       = std::move(cluster_vecs);
+    out->vector_ids    = std::move(cluster_ids);
+    return out;
+}
+#endif
+
+shared_ptr<Clustering> kmeans_cpu(Tensor vectors,
                               Tensor ids,
-                              int n_clusters,
-                              MetricType metric_type,
-                              int niter,
-                              bool use_gpu /*=false*/,
+                              shared_ptr<IndexBuildParams> build_params,
                               Tensor /* initial_centroids */) {
     // Ensure enough vectors are available and sizes match.
-    assert(vectors.size(0) >= n_clusters * 2);
+    assert(vectors.size(0) >= build_params->nlist * 2);
     assert(vectors.size(0) == ids.size(0));
+
+    MetricType metric_type = str_to_metric_type(build_params->metric);
 
     // Normalize vectors for inner product
     if (metric_type == faiss::METRIC_INNER_PRODUCT)
@@ -29,33 +157,20 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     int d = vectors.size(1);
 
     faiss::Index* index_ptr = nullptr;
-
-    if (use_gpu) {
-        // Check if GPU resources are available.
-        #ifdef FAISS_ENABLE_GPU
-        faiss::gpu::StandardGpuResources gpu_res;
-        if (metric_type == faiss::METRIC_INNER_PRODUCT)
-            index_ptr = new faiss::gpu::GpuIndexFlatIP(&gpu_res, d);
-        else
-            index_ptr = new faiss::gpu::GpuIndexFlatL2(&gpu_res, d);
-        #else
-        throw std::runtime_error("GPU resources are not available. Please compile with FAISS_ENABLE_GPU.");
-        #endif
-    } else {
-        if (metric_type == faiss::METRIC_INNER_PRODUCT)
-            index_ptr = new faiss::IndexFlatIP(d);
-        else
-            index_ptr = new faiss::IndexFlatL2(d);
-    }
+    if (metric_type == faiss::METRIC_INNER_PRODUCT)
+        index_ptr = new faiss::IndexFlatIP(d);
+    else
+        index_ptr = new faiss::IndexFlatL2(d);
 
     faiss::ClusteringParameters cp;
-    cp.niter = niter;
+    cp.niter = build_params->niter;
+    cp.spherical = (metric_type == faiss::METRIC_INNER_PRODUCT);
 
-    faiss::Clustering clus(d, n_clusters, cp);
+    faiss::Clustering clus(d, build_params->nlist, cp);
     clus.train(n, vectors.data_ptr<float>(), *index_ptr);
 
     // Retrieve centroids as a torch Tensor.
-    Tensor centroids = torch::from_blob(clus.centroids.data(), {n_clusters, d}, torch::kFloat32).clone();
+    Tensor centroids = torch::from_blob(clus.centroids.data(), {build_params->nlist, d}, torch::kFloat32).clone();
     if (metric_type == faiss::METRIC_INNER_PRODUCT)
         centroids = centroids / centroids.norm(2, 1).unsqueeze(1);
 
@@ -72,7 +187,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     Tensor sorted_ids = ids.index_select(0, sorted_indices);
 
     // Compute counts per cluster using bincount.
-    Tensor counts_tensor = torch::bincount(sorted_assignments, /*weights=*/{}, n_clusters);
+    Tensor counts_tensor = torch::bincount(sorted_assignments, /*weights=*/{}, build_params->nlist);
     // Ensure counts are on CPU to extract split sizes.
     counts_tensor = counts_tensor.to(torch::kCPU);
     // Convert counts tensor to std::vector<int64_t>
@@ -83,7 +198,7 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     vector<Tensor> cluster_vectors = torch::split(sorted_vectors, counts_vector, 0);
     vector<Tensor> cluster_ids = torch::split(sorted_ids, counts_vector, 0);
 
-    Tensor partition_ids = torch::arange(n_clusters, torch::kInt64);
+    Tensor partition_ids = torch::arange(build_params->nlist, torch::kInt64);
 
     shared_ptr<Clustering> clustering = std::make_shared<Clustering>();
     clustering->centroids = centroids;
@@ -96,15 +211,44 @@ shared_ptr<Clustering> kmeans(Tensor vectors,
     return clustering;
 }
 
+shared_ptr<Clustering> kmeans(Tensor vectors,
+                              Tensor ids,
+                              shared_ptr<IndexBuildParams> build_params,
+                              Tensor /* initial_centroids */) {
+    if (build_params->use_gpu) {
+    #ifdef QUAKE_ENABLE_GPU
+        return kmeans_cuvs_sample_and_predict(
+            vectors,
+            ids,
+            build_params);
+    #else
+            throw std::runtime_error("GPU support is not enabled. Please compile with QUAKE_ENABLE_GPU.");
+    #endif
+    } else {
+        return kmeans_cpu(vectors, ids, build_params);
+    }
+}
+
+
 tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
     Tensor centroids,
-    vector<shared_ptr<IndexPartition>> partitions,
+    vector<shared_ptr<IndexPartition>> &partitions,
     MetricType metric,
-    int refinement_iterations) {
+    int refinement_iterations,
+    int num_threads) {
+
+    size_t max_nq = 0;
+    for (auto &p : partitions) {
+        max_nq = std::max(max_nq, (size_t)p->num_vectors_);
+    }
+    max_nq = max_nq * 10; // Ensure we allocate enough capacity
 
     // Determine number of clusters and dimension.
     int n_clusters = centroids.size(0);
     int d = centroids.size(1);
+
+    vector<shared_ptr<TopkBuffer> > buffers = create_buffers(max_nq, 1, (metric == faiss::METRIC_INNER_PRODUCT), n_clusters);
+
 
     // Run for the desired number of iterations (if refinement_iterations==0, do one pass).
     int iterations = (refinement_iterations > 0) ? refinement_iterations : 1;
@@ -113,14 +257,23 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
     Tensor centroid_counts = torch::zeros({n_clusters}, torch::kInt64);
     auto centroid_sums_accessor = centroid_sums.accessor<float, 2>();
     auto centroid_counts_accessor = centroid_counts.accessor<int64_t, 1>();
+    Tensor centroid_ids = torch::arange(n_clusters, torch::kInt64);
+    auto centroid_ids_ptr = centroid_ids.data_ptr<int64_t>();
 
     vector<shared_ptr<IndexPartition>> prev_partitions = partitions;
     vector<shared_ptr<IndexPartition>> new_partitions;
 
     for (int iter = 0; iter < iterations; iter++) {
-
         if (iter > 0) {
             centroids = centroid_sums / centroid_counts.unsqueeze(1).to(torch::kFloat32);
+
+            // normalize centroids if using inner product metric
+            if (metric == faiss::METRIC_INNER_PRODUCT) {
+                centroids = centroids
+                          / centroids.norm(2,1)
+                                    .unsqueeze(1)
+                                    .to(torch::kFloat32);
+            }
         }
 
         // Reset accumulators.
@@ -133,11 +286,11 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
             new_partitions[i] = make_shared<IndexPartition>();
             new_partitions[i]->set_code_size(partitions[0]->code_size_);
             new_partitions[i]->resize(10);
+            new_partitions[i]->set_core_id(partitions[i]->core_id_);
         }
 
         float *centroids_ptr = centroids.data_ptr<float>();
 
-        // Process each existing partition.
         for (auto &part: partitions) {
             int64_t nvec = part->num_vectors_;
             if (nvec <= 0) continue;
@@ -145,18 +298,21 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
             float *part_vecs = (float *) part->codes_;
             int64_t *part_vec_ids = part->ids_;
 
-            // Create batched TopK buffers (k=1 for nearest centroid).
-            vector<shared_ptr<TopkBuffer> > buffers = create_buffers(nvec, 1, false);
-
             // Use batched_scan_list to get nearest centroid for each vector.
             batched_scan_list(part_vecs,
                               centroids_ptr,
-                              nullptr,
+                              centroid_ids_ptr,
                               nvec,
                               n_clusters,
                               d,
                               buffers,
-                              metric);
+                                metric,
+                                nullptr,
+                                nullptr,
+                                nullptr,
+                                128,
+                                BLAS_DB_BS,
+                                {});
 
             // For each vector in this partition, determine its assignment.
             for (int i = 0; i < nvec; i++) {
@@ -173,10 +329,13 @@ tuple<Tensor, vector<shared_ptr<IndexPartition> >> kmeans_refine_partitions(
                 centroid_counts_accessor[assigned_cluster]++;
 
                 new_partitions[assigned_cluster]->append(1, vec_id, (uint8_t *) vec_ptr);
+
+                // reset the buffer for this slot
+                buffers[i]->reset();
             }
         } // end for each partition
+
         std::move(new_partitions.begin(), new_partitions.end(), partitions.begin());
     } // end iterations
-
     return std::make_tuple(centroids, partitions);
 }

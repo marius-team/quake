@@ -1,0 +1,117 @@
+# numa_latency_experiment.yaml
+dataset:
+  name: sift1m
+  num_queries: 10000
+  k: 1
+
+trials: 3
+warmup: 1
+overwrite: true  # Set to true to force all indexes to rerun
+force_rebuild: false  # Set to true to force all indexes to rebuild
+
+indexes:
+  - name: Quake_16
+    index: Quake
+    build_params:
+      nc: 1000
+      metric: l2
+      num_workers: 1
+      num_merge_workers: 1
+      use_numa: true
+      parent:
+        num_workers: 1
+        num_merge_workers: 1
+        use_numa: true
+    search_params:
+      nprobe: 100
+      batch_size: 64
+      parent:
+        batched_scan: true
+        batch_size: 128
+      batched_scan: true
+#
+#  - name: Quake_16_numa
+#    index: Quake
+#    build_params:
+#      nc: 1000
+#      metric: l2
+#      num_workers: 16
+#      use_numa: true
+#      parent_num_workers: 4
+#    search_params:
+#      nprobe: 20
+#      batched_scan: true
+#
+#  - name: Quake_16_numa_no_batch
+#    index: Quake
+#    build_params:
+#      nc: 1000
+#      metric: l2
+#      num_workers: 16
+#      use_numa: true
+#      parent_num_workers: 4
+#    search_params:
+#      nprobe: 20
+#      batched_scan: false
+
+#  - name: FaissIVF
+#    index: IVF
+#    build_params:
+#      nc: 1000
+#      metric: l2
+#    search_params:
+#      nprobe: 20
+#      omp_num_threads_search: 16
+#
+#
+#  - name: FaissHNSW
+#    index: HNSW
+#    build_params:
+#      m: 64
+#      ef_construction: 128
+#      metric: l2
+#      omp_num_threads_build: 1
+#    search_params:
+#      ef_search: 16
+#      omp_num_threads_search: 1
+
+#
+#  - name: SCANN
+#    index: SCANN
+#    build_params:
+#      num_leaves: 1000
+#      metric: squared_l2
+#    search_params:
+#      leaves_to_search: 15
+#
+#  - name: FaissHNSW
+#    index: HNSW
+#    build_params:
+#      m: 64
+#      ef_construction: 128
+#      metric: l2
+##      omp_num_threads_build: 16
+#    search_params:
+#      ef_search: 24
+#
+#  - name: DiskANN
+#    index: DiskANN
+#    build_params:
+#      complexity: 128
+#      graph_degree: 64
+#      metric: l2
+#    search_params:
+#      complexity: 16
+#
+#  - name: SVS
+#    index: SVS
+#    build_params:
+#      graph_max_degree: 64
+#      alpha: 1.1
+#      window_size: 128
+#      metric: l2
+#    search_params:
+#      search_window_size: 24
+
+output:
+  results_csv: numa_single_query_results.csv

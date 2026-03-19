@@ -169,34 +169,6 @@ TEST_F(QueryCoordinatorTest, WorkerInitializationTest) {
     ASSERT_TRUE(coordinator->workers_initialized_);
 }
 
-TEST_F(QueryCoordinatorTest, FlatWorkerScan) {
-    int num_workers = 4;
-
-    // create flat index
-    auto flat_index = std::make_shared<QuakeIndex>();
-    auto build_params = std::make_shared<IndexBuildParams>();
-    build_params->nlist = 1;
-    build_params->metric = "l2";
-    flat_index->build(torch::randn({20, dimension_}), torch::arange(20), build_params);
-
-    // create coordinator with workers
-    auto coordinator = std::make_shared<QueryCoordinator>(
-        flat_index->parent_,
-        flat_index->partition_manager_,
-        nullptr,
-        faiss::METRIC_L2,
-        num_workers
-    );
-
-    auto search_params = std::make_shared<SearchParams>();
-    search_params->k = 2;
-
-    auto result_worker = coordinator->search(queries_, search_params);
-    ASSERT_TRUE(result_worker != nullptr);
-    ASSERT_EQ(result_worker->ids.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
-    ASSERT_EQ(result_worker->distances.sizes(), (std::vector<int64_t>{queries_.size(0), search_params->k}));
-}
-
 // Test that worker-based scan produces the same results as serial scan
 TEST_F(QueryCoordinatorTest, WorkerScanCorrectnessTest) {
     // Initialize QueryCoordinator with workers

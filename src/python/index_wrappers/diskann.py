@@ -5,8 +5,9 @@ from typing import Tuple
 import diskannpy as dap
 import numpy as np
 import torch
+from pathlib import Path
 
-from quake import SearchTimingInfo
+from quake import SearchTimingInfo, SearchResult
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_numpy, to_torch
 
@@ -101,16 +102,28 @@ class DiskANNDynamic(IndexWrapper):
         timing_info = SearchTimingInfo()
 
         start = time.time()
-        indices, distances = self.index.batch_search(
-            query, k_neighbors=k, complexity=complexity, num_threads=num_threads
-        )
+        if query.shape[0] == 1:
+            indices, distances = self.index.search(
+                query.flatten(), k_neighbors=k, complexity=complexity)
+            indices = indices.reshape(1, -1)
+            distances = distances.reshape(1, -1)
+        else:
+            # batch search
+            indices, distances = self.index.batch_search(
+                query, k_neighbors=k, complexity=complexity, num_threads=num_threads
+            )
         end = time.time()
-        timing_info.total_time_us = int((end - start) * 1e6)
+        timing_info.total_time_ns = int((end - start) * 1e9)
         indices = to_torch(indices.astype(np.int64))
         indices = indices - 1  # ids are 1-indexed
         distances = to_torch(distances)
 
-        return indices, distances, timing_info
+        search_result = SearchResult()
+        search_result.ids = to_torch(indices)
+        search_result.distances = to_torch(distances)
+        search_result.timing_info = timing_info
+
+        return search_result
 
     def save(self, path: str):
         """
@@ -119,13 +132,10 @@ class DiskANNDynamic(IndexWrapper):
         :param path: The path to save the index to.
         :type path: str
         """
-        # assert self.index is not None
-        # if not Path(path).exists():
-        #     Path(path).mkdir(exist_ok=True)
-        # self.index.save(path)
-
-        # TODO: save/load index
-        raise RuntimeError("DiskANNDynamic.save() not implemented")
+        assert self.index is not None
+        if not Path(path).exists():
+            Path(path).mkdir(exist_ok=True)
+        self.index.save(path)
 
     def load(
         self,
@@ -141,16 +151,16 @@ class DiskANNDynamic(IndexWrapper):
         :param path: The path to load the index from.
         :type path: str
         """
-        # self.index = dap.DynamicMemoryIndex.from_file(
-        #     index_directory=path,
-        #     max_vectors=max_vectors,
-        #     complexity=complexity,
-        #     graph_degree=graph_degree,
-        #     num_threads=num_threads,
-        # )
+        self.index = dap.DynamicMemoryIndex.from_file(
+            index_directory=path,
+            max_vectors=max_vectors,
+            complexity=complexity,
+            graph_degree=graph_degree,
+            num_threads=num_threads,
+        )
 
-        # TODO: save/load index
-        raise RuntimeError("DiskANNDynamic.save() not implemented")
+        # # TODO: save/load index
+        # raise RuntimeError("DiskANNDynamic.save() not implemented")
 
     def add(self, vectors: torch.Tensor, ids: torch.Tensor, num_threads: int = 0):
         """
@@ -190,3 +200,9 @@ class DiskANNDynamic(IndexWrapper):
 
     def centroids(self) -> torch.Tensor | None:
         return super().centroids()
+
+    def index_state(self) -> str:
+        return ""
+
+    def maintenance(self):
+        pass

@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""
+Master runner for OSDI2025 vector‑search experiments.
+"""
+import argparse
+from pathlib import Path
+
+from test.experiments.osdi2025.kick_the_tires.run import run_experiment as run_kick_the_tires
+from test.experiments.osdi2025.numa_single_query.run import run_experiment as run_numa_single
+from test.experiments.osdi2025.numa_multi_query.run  import run_experiment as run_numa_multi
+from test.experiments.osdi2025.aps_recall_targets.run import run_experiment as run_aps_recall
+from test.experiments.osdi2025.early_termination.run import run_experiment as run_early_termination
+from test.experiments.osdi2025.multi_level.run import run_experiment as run_multi_level
+from test.experiments.osdi2025.vary_levels.run import run_experiment as run_vary_levels
+from test.experiments.osdi2025.maintenance_ablation.run import run_experiment as run_ablation
+from test.experiments.osdi2025.vary_batch_size.run import run_experiment as run_vary_batch_size
+from test.experiments.osdi2025.wiki_workload.run import run_experiment as run_wiki_workload
+from test.experiments.osdi2025.read_only_workload.run import run_experiment as run_read_only_workload
+from test.experiments.osdi2025.open_images_workload.run import run_experiment as run_open_images_workload
+
+EXPERIMENTS = {
+    "kick_the_tires":   run_kick_the_tires,
+    "numa_single_query":  run_numa_single,
+    "numa_multi_query":   run_numa_multi,
+    "aps_recall_targets": run_aps_recall,
+    "early_termination":   run_early_termination,
+    "multi_level":        run_multi_level,
+    "vary_levels":        run_vary_levels,
+    "maintenance_ablation": run_ablation,
+    "vary_batch_size":    run_vary_batch_size,
+    "wiki_workload":      run_wiki_workload,
+    "read_only_workload": run_read_only_workload,
+    "open_images_workload": run_open_images_workload
+}
+
+def main():
+    parser = argparse.ArgumentParser(description="Run one OSDI2025 experiment")
+    parser.add_argument("-x","--experiment", choices=EXPERIMENTS.keys(), required=True)
+    parser.add_argument("-c","--config", required=True,
+                        help="Config name (without .yaml) under configs/")
+    parser.add_argument("-o","--output-dir", default=None,
+                        help="Where to write results (csv + plots)")
+    args = parser.parse_args()
+
+    base     = Path(__file__).resolve().parent
+    cfg_path = base / args.experiment / "configs" / f"{args.config}.yaml"
+    if not cfg_path.is_file():
+        raise FileNotFoundError(f"Missing config: {cfg_path}")
+
+    out_dir = Path(args.output_dir) if args.output_dir \
+        else base / args.experiment / "results" / args.config
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # dispatch
+    EXPERIMENTS[args.experiment](str(cfg_path), str(out_dir))
+
+if __name__ == "__main__":
+    main()

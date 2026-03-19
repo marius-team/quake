@@ -46,11 +46,11 @@ class MaintenancePolicy {
    */
   void reset();
 
- private:
   shared_ptr<PartitionManager> partition_manager_;  ///< Manages partition state.
   shared_ptr<MaintenancePolicyParams> params_;        ///< Maintenance parameters.
   shared_ptr<MaintenanceCostEstimator> cost_estimator_; ///< Cost estimator for maintenance actions.
   shared_ptr<HitCountTracker> hit_count_tracker_;       ///< Hit count tracker for partition hit rates.
+  std::unordered_map<int64_t, int64_t> snapshot_sizes_; /// Map to keep track of index sizes
 
   /**
    * @brief Perform local refinement on a set of partition IDs.
@@ -58,6 +58,8 @@ class MaintenancePolicy {
    * @param partition_ids Tensor of partition IDs.
    */
   void local_refinement(const Tensor& partition_ids);
+private:
+  static constexpr bool debug_ = false;   
 };
 
 #endif  // MAINTENANCE_POLICY_REFACTORED_H

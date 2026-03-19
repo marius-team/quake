@@ -28,11 +28,12 @@ using torch::Tensor;
 // Global benchmark parameters
 static const int64_t DIM = 128;
 static const int64_t NUM_VECTORS = 100000;   // number of database vectors
-static const int64_t N_LIST = 100;           // number of clusters for IVF
-static const int64_t NUM_QUERIES = 10;     // number of queries for search benchmark
-static const int64_t K = 10;                  // top-K neighbors
-static const int64_t N_PROBE = 32;             // number of probes for IVF
+static const int64_t N_LIST = 1000;           // number of clusters for IVF
+static const int64_t NUM_QUERIES = 1000;     // number of queries for search benchmark
+static const int64_t K = 1;                  // top-K neighbors
+static const int64_t N_PROBE = 20;             // number of probes for IVF
 static const int64_t N_WORKERS = 12;           // number of workers for parallel query coordinator
+static const int64_t N_PARENT_WORKERS = 12;
 
 // Helper functions to generate random data and sequential IDs
 static Tensor generate_data(int64_t num, int64_t dim) {
@@ -117,6 +118,8 @@ protected:
         build_params->metric = "l2";
         build_params->niter = 3;
         build_params->num_workers = N_WORKERS;
+        build_params->parent_params = std::make_shared<IndexBuildParams>();
+        build_params->parent_params->num_workers = N_PARENT_WORKERS;
         index_->build(data_, ids_, build_params);
     }
 };
@@ -305,6 +308,8 @@ TEST_F(QuakeWorkerIVFBenchmark, SearchBatch) {
     search_params->k = K;
     search_params->nprobe = N_PROBE;
     search_params->batched_scan = true;
+    search_params->parent_params = std::make_shared<SearchParams>();
+    search_params->parent_params->batched_scan = true;
 
     index_->search(queries, search_params);
 
@@ -314,6 +319,14 @@ TEST_F(QuakeWorkerIVFBenchmark, SearchBatch) {
     auto elapsed = duration_cast<milliseconds>(end - start).count();
 
     std::cout << "[Quake IVF Worker] Batched search time: " << elapsed << " ms" << std::endl;
+
+    // print out timing info
+    auto timing_info = result->timing_info;
+    std::cout << "Total time: " << timing_info->total_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "Parent search time: " << timing_info->parent_info->total_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "Job enqueue time: " << timing_info->job_enqueue_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "Result aggregate time: " << timing_info->result_aggregate_time_ns / 1e6 << " ms" << std::endl;
+    std::cout << "Job Wait time: " << timing_info->job_wait_time_ns / 1e6 << " ms" << std::endl;
     ASSERT_GT(elapsed, 0);
 }
 
@@ -488,3 +501,196 @@ TEST_F(FaissIVFBenchmark, Remove) {
     std::cout << "[Faiss IVF] Remove time: " << elapsed << " ms" << std::endl;
     SUCCEED();
 }
+
+// -------------------------------------------------------------------------
+// SEARCH, ADD, REMOVE, AND MAINTENANCE TEST
+// -------------------------------------------------------------------------
+TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
+    // Repeatedly search, add, remove, and perform maintenance to see if the index remains consistent.
+
+    int64_t dimension = 128;
+    int64_t num_vectors = 10000;
+    int64_t num_queries = 100;
+    int64_t batch_size = 10000;
+    int n_ops = 100;
+
+    QuakeIndex index;
+    auto build_params = std::make_shared<IndexBuildParams>();
+    build_params->nlist = 100;
+    build_params->metric = "ip";
+    build_params->niter = 5;
+    build_params->num_workers = 1;
+
+    auto maintenance_params = std::make_shared<MaintenancePolicyParams>();
+    maintenance_params->refinement_radius = 50;
+    maintenance_params->refinement_iterations = 3;
+    maintenance_params->split_threshold_ns = 1;
+    maintenance_params->delete_threshold_ns = 1;
+    maintenance_params->enable_delete_rejection = false;
+    maintenance_params->enable_split_rejection = false;
+    maintenance_params->window_size = 1000;
+
+    Tensor data_vectors = torch::randn({num_vectors, dimension}, torch::kFloat32);
+    Tensor data_ids = torch::arange(num_vectors, torch::kInt64);
+
+
+    // add level
+    auto parent_index_build_params = std::make_shared<IndexBuildParams>();
+    parent_index_build_params->nlist = 100;
+    parent_index_build_params->metric = "ip";
+    parent_index_build_params->niter = 5;
+    parent_index_build_params->num_workers = 1;
+    // build_params->parent_params = parent_index_build_params;
+
+    // auto grandparent_index_build_params = std::make_shared<IndexBuildParams>();
+    // grandparent_index_build_params->nlist = 1;
+    // grandparent_index_build_params->metric = "l2";
+    // grandparent_index_build_params->num_workers = 0;
+    // build_params->parent_params->parent_params = grandparent_index_build_params;
+
+    index.build(data_vectors, data_ids, build_params);
+    //
+    index.initialize_maintenance_policy(maintenance_params);
+
+    // timers
+    int64_t search_time = 0;
+    int64_t add_time = 0;
+    int64_t remove_time = 0;
+    int64_t maintenance_time = 0;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    int64_t num_deleted = 0;
+
+    Tensor origin = torch::zeros(dimension);
+    Tensor drift = .1 * torch::ones(dimension);
+
+    for (int i = 0; i < n_ops; i++) {
+        std::cout << "[SearchAddRemoveMaintenanceTest] Iteration " << i << "\n";
+        // Search
+        auto query_vectors = torch::randn({num_queries, dimension}, torch::kFloat32) + origin;
+        auto search_params = std::make_shared<SearchParams>();
+        search_params->nprobe = 12;
+        search_params->k = 10;
+        search_params->batched_scan = true;
+        search_params->num_threads = 1;
+
+        auto parent_search_params = std::make_shared<SearchParams>();
+        parent_search_params->nprobe = 50;
+        parent_search_params->batched_scan = true;
+        search_params->parent_params = parent_search_params;
+
+        start = std::chrono::high_resolution_clock::now();
+        auto search_result = index.search(query_vectors, search_params);
+        end = std::chrono::high_resolution_clock::now();
+        search_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        ASSERT_EQ(search_result->ids.size(0), query_vectors.size(0));
+        ASSERT_EQ(search_result->ids.size(1), search_params->k);
+
+        // Add
+        auto add_vectors = torch::randn({batch_size, dimension}, torch::kFloat32) + origin;
+        origin += drift;
+        auto add_ids = torch::arange(batch_size, torch::kInt64) + num_vectors;
+        start = std::chrono::high_resolution_clock::now();
+        auto add_info = index.add(add_vectors, add_ids);
+        end = std::chrono::high_resolution_clock::now();
+        add_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        num_vectors += batch_size;
+        ASSERT_EQ(add_info->n_vectors, batch_size);
+
+        // Remove
+        auto remove_ids = torch::arange(batch_size) + num_deleted;
+        num_deleted += batch_size;
+        start = std::chrono::high_resolution_clock::now();
+        auto remove_info = index.remove(remove_ids);
+        end = std::chrono::high_resolution_clock::now();
+        remove_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        ASSERT_EQ(remove_info->n_vectors, batch_size);
+
+        start = std::chrono::high_resolution_clock::now();
+        auto timing_info = index.maintenance();
+        end = std::chrono::high_resolution_clock::now();
+        maintenance_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+        std::cout << "n_splits=" << timing_info->n_splits << ", n_deletes=" << timing_info->n_deletes
+                  << ", delete_time=" << timing_info->delete_time_us << " μs"
+                  << ", split_time=" << timing_info->split_time_us << " μs"
+                  << ", total_time=" << timing_info->total_time_us << " μs\n";
+    }
+
+    // print out mean times per operation
+    float mean_search_time = static_cast<float>(search_time) / n_ops;
+    float mean_add_time = static_cast<float>(add_time) / n_ops;
+    float mean_remove_time = static_cast<float>(remove_time) / n_ops;
+    float mean_maintenance_time = static_cast<float>(maintenance_time) / n_ops;
+
+    std::cout << "[SearchAddRemoveMaintenanceTest] Mean search time: " << mean_search_time << " μs\n";
+    std::cout << "[SearchAddRemoveMaintenanceTest] Mean add time: " << mean_add_time << " μs\n";
+    std::cout << "[SearchAddRemoveMaintenanceTest] Mean remove time: " << mean_remove_time << " μs\n";
+    std::cout << "[SearchAddRemoveMaintenanceTest] Mean maintenance time: " << mean_maintenance_time << " μs\n";
+
+    SUCCEED();
+}
+
+// TEST(FaissIndexStressTest, SearchAddRemoveMaintenanceTest) {
+//     // Repeatedly search, add, remove, and perform maintenance to see if the index remains consistent.
+//
+//     int64_t dimension = 128;
+//     int64_t num_vectors = 100000;
+//     int64_t num_queries = 1;
+//     int64_t batch_size = 10000;
+//     int n_ops = 100;
+//
+//     Tensor data_vectors = torch::randn({num_vectors, dimension}, torch::kFloat32);
+//     Tensor data_ids = torch::arange(num_vectors, torch::kInt64);
+//
+//     auto quantizer = new faiss::IndexFlatL2(dimension);
+//     auto index = new faiss::IndexIVFFlat(quantizer, dimension, 1000, faiss::METRIC_L2);
+//     index->train(num_vectors, data_vectors.data_ptr<float>());
+//     index->add(num_vectors, data_vectors.data_ptr<float>());
+//
+//     // timers
+//     int64_t search_time = 0;
+//     int64_t add_time = 0;
+//     int64_t remove_time = 0;
+//     int64_t maintenance_time = 0;
+//
+//     auto start = std::chrono::high_resolution_clock::now();
+//     auto end = std::chrono::high_resolution_clock::now();
+//
+//     for (int i = 0; i < n_ops; i++) {
+//         // Search
+//         auto query_vectors = generate_data(num_queries, dimension);
+//         std::vector<float> distances(num_queries * K);
+//         std::vector<faiss::idx_t> labels(num_queries * K);
+//
+//         start = std::chrono::high_resolution_clock::now();
+//         index->nprobe = 12;
+//         index->search(num_queries, query_vectors.data_ptr<float>(), 12, distances.data(), labels.data());
+//         end = std::chrono::high_resolution_clock::now();
+//         search_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+//
+//         // Add
+//         auto add_vectors = generate_data(batch_size, dimension);
+//         auto add_ids = generate_ids(batch_size, num_vectors);
+//         start = std::chrono::high_resolution_clock::now();
+//         index->add(batch_size, add_vectors.data_ptr<float>());
+//         end = std::chrono::high_resolution_clock::now();
+//         add_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+//         num_vectors += batch_size;
+//     }
+//     // print out mean times per operation
+//     float mean_search_time = static_cast<float>(search_time) / n_ops;
+//     float mean_add_time = static_cast<float>(add_time) / n_ops;
+//     float mean_remove_time = static_cast<float>(remove_time) / n_ops;
+//     float mean_maintenance_time = static_cast<float>(maintenance_time) / n_ops;
+//
+//     std::cout << "[SearchAddRemoveMaintenanceTest] Mean search time: " << mean_search_time << " μs\n";
+//     std::cout << "[SearchAddRemoveMaintenanceTest] Mean add time: " << mean_add_time << " μs\n";
+//     std::cout << "[SearchAddRemoveMaintenanceTest] Mean remove time: " << mean_remove_time << " μs\n";
+//     std::cout << "[SearchAddRemoveMaintenanceTest] Mean maintenance time: " << mean_maintenance_time << " μs\n";
+//
+//     SUCCEED();
+// }
+

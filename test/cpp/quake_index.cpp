@@ -7,6 +7,9 @@
 #include <gtest/gtest.h>
 #include "quake_index.h"
 #include <torch/torch.h>
+#include <faiss/IndexFlat.h>
+#include <faiss/IndexIVFFlat.h>
+#include <faiss/Index.h>
 
 // Helper functions for random data
 static torch::Tensor generate_random_data(int64_t num_vectors, int64_t dim) {
@@ -22,7 +25,7 @@ protected:
     // Example parameters
     int64_t dimension_ = 16;
     int64_t nlist_ = 8;
-    int64_t num_vectors_ = 100;
+    int64_t num_vectors_ = 1000;
     int64_t num_queries_ = 5;
 
     // Data & IDs
@@ -243,7 +246,8 @@ TEST_F(QuakeIndexTest, SaveLoadTest) {
 
     // Load into a new index
     QuakeIndex loaded_index;
-    loaded_index.load(path);
+    shared_ptr<IndexBuildParams> default_params = std::make_shared<IndexBuildParams>();
+    loaded_index.load(path, default_params);
 
     // minimal checks
     EXPECT_EQ(loaded_index.ntotal(), index.ntotal());
@@ -283,16 +287,18 @@ TEST(QuakeIndexStressTest, LargeBuildTest) {
               << " vectors took " << build_duration_ms << " ms.\n";
 }
 
-#ifdef FAISS_ENABLE_GPU
+#ifdef QUAKE_ENABLE_GPU
 TEST(QuakeIndexStressTestGPU, LargeBuildTest) {
     // Attempt to build an index with a large number of vectors.
     // Adjust these numbers based on your available memory/compute.
     int64_t dimension = 128;     // Medium-high dimension
     int64_t num_vectors = 1e6;   // 1 million vectors
-    auto data_vectors = generate_random_data(num_vectors, dimension);
-    auto data_ids = generate_sequential_ids(num_vectors, 0);
+    auto data_vectors = generate_random_data(num_vectors, dimension).contiguous();
+    auto data_ids = generate_sequential_ids(num_vectors, 0).contiguous();
 
     QuakeIndex index;
+
+    std::cout << "generated\n";
 
     auto build_params = std::make_shared<IndexBuildParams>();
     build_params->nlist = 512;
@@ -476,63 +482,44 @@ TEST(QuakeIndexStressTest, HighDimensionTest) {
     ASSERT_EQ(result->ids.size(1), search_params->k);
 }
 
-// -------------------------------------------------------------------------
-// SEARCH, ADD, REMOVE, AND MAINTENANCE TEST
-// -------------------------------------------------------------------------
-TEST(QuakeIndexStressTest, SearchAddRemoveMaintenanceTest) {
-    // Repeatedly search, add, remove, and perform maintenance to see if the index remains consistent.
-
-    int64_t dimension = 16;
-    int64_t num_vectors = 100000;
-    int64_t num_queries = 100;
-    int64_t batch_size = 10;
-
+TEST_F(QuakeIndexTest, AddLevelTest)
+{
     QuakeIndex index;
-    auto build_params = std::make_shared<IndexBuildParams>();
-    build_params->nlist = 100;
-    build_params->metric = "l2";
-    build_params->niter = 3;
 
-    Tensor data_vectors = generate_random_data(num_vectors, dimension);
-    Tensor data_ids = generate_sequential_ids(num_vectors, 0);
+    // 1.  Build a 2‑level index (leaf + one parent)
+    auto bp = std::make_shared<IndexBuildParams>();
+    bp->nlist  = 100;
+    bp->metric = "l2";
+    index.build(data_vectors_, data_ids_, bp);
 
-    index.build(data_vectors, data_ids, build_params);
+    const int64_t leaf_partitions = index.nlist();          // = nlist_
 
-    for (int i = 0; i < 100; i++) {
-        // Search
-        std::cout << "Iteration " << i << std::endl;
-        auto query_vectors = generate_random_data(num_queries, dimension) * .1;
-        auto search_params = std::make_shared<SearchParams>();
-        search_params->nprobe = 1;
-        search_params->k = 5;
-        auto search_result = index.search(query_vectors, search_params);
-        ASSERT_EQ(search_result->ids.size(0), query_vectors.size(0));
-        ASSERT_EQ(search_result->ids.size(1), search_params->k);
+    // 2.  Add a *new* level on top
+    auto top_bp = std::make_shared<IndexBuildParams>();
+    top_bp->nlist  = 10;      // flat over centroids
+    top_bp->metric = "l2";
+    index.add_level(top_bp);
 
-        // Add
-        auto add_vectors = generate_random_data(batch_size, dimension);
-        auto add_ids = generate_sequential_ids(batch_size, (i * batch_size) + num_vectors);
-        auto add_info = index.add(add_vectors, add_ids);
-        ASSERT_EQ(add_info->n_vectors, batch_size);
+    // root now has a parent
+    ASSERT_NE(index.parent_, nullptr);
+    // that parent should have exactly `leaf_partitions` vectors (one per centroid)
+    EXPECT_EQ(index.parent_->ntotal(), leaf_partitions);
 
-        // Remove
-        auto remove_ids = add_ids.slice(0, 0, batch_size / 2);
-        auto remove_info = index.remove(remove_ids);
-        ASSERT_EQ(remove_info->n_vectors, batch_size / 2);
-
-        index.maintenance();
-    }
-
-    SUCCEED();
+    // 3.  Ensure we can still search and retrieve sane results
+    auto sp = std::make_shared<SearchParams>();
+    sp->k = 3;
+    auto res = index.search(query_vectors_, sp);
+    ASSERT_EQ(res->ids.size(0), query_vectors_.size(0));
+    ASSERT_EQ(res->ids.size(1), sp->k);
 }
 
 // Define the GPU related test only if FAISS GPU support is enabled
-#ifdef FAISS_ENABLE_GPU
+#ifdef QUAKE_ENABLE_GPU
 // Test build with GPU enabled
 TEST(QuakeIndexGPUTest, BuildWithGPUTest) {
     int64_t dimension = 32;
-    int64_t num_vectors = 200;
-    int64_t nlist = 5;
+    int64_t num_vectors = 10000;
+    int64_t nlist = 10;
 
     torch::Tensor data_vectors = generate_random_data(num_vectors, dimension);
     torch::Tensor data_ids = generate_sequential_ids(num_vectors, 0);

@@ -4,7 +4,7 @@ from typing import Optional, Tuple, Union
 import faiss
 import torch
 
-from quake import SearchTimingInfo
+from quake import SearchTimingInfo, SearchResult
 from quake.index_wrappers.faiss_ivf import metric_str_to_faiss
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_numpy, to_torch
@@ -85,11 +85,15 @@ class FaissHNSW(IndexWrapper):
         distances, indices = self.index.search(query, k)
         end = time.time()
 
-        timing_info.total_time_us = int((end - start) * 1e6)
-        distances = to_torch(distances)
-        indices = to_torch(indices)
+        timing_info.total_time_ns = int((end - start) * 1e9)
 
-        return indices, distances, timing_info
+        search_result = SearchResult()
+        search_result.ids = to_torch(indices)
+        search_result.distances = to_torch(distances)
+        search_result.timing_info = timing_info
+
+        return search_result
+
 
     def save(self, filename: str):
         """
@@ -130,3 +134,9 @@ class FaissHNSW(IndexWrapper):
         """
         # throw a runtime error
         raise RuntimeError("Faiss HNSW does not support removal of vectors.")
+
+    def index_state(self) -> str:
+        return ""
+
+    def maintenance(self):
+        pass

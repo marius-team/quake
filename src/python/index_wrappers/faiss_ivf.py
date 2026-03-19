@@ -233,6 +233,7 @@ class FaissIVF(IndexWrapper):
         search_result.ids = to_torch(indices)
         search_result.distances = to_torch(distances)
         search_result.timing_info = timing_info
+        search_result.timing_info.parent_info = SearchTimingInfo()
 
         return search_result
 
@@ -259,7 +260,7 @@ class FaissIVF(IndexWrapper):
         """
         faiss.write_index(self.index, str(filename))
 
-    def load(self, filename: str):
+    def load(self, filename: str, **kwargs):
         """
         Load the index from a file.
 

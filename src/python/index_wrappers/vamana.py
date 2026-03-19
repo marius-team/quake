@@ -6,6 +6,8 @@ import torch
 
 from quake.index_wrappers.wrapper import IndexWrapper
 from quake.utils import to_numpy, to_path, to_torch
+from quake import SearchTimingInfo, SearchResult
+import time
 
 
 class Vamana(IndexWrapper):
@@ -53,11 +55,24 @@ class Vamana(IndexWrapper):
         self.index = svs.DynamicVamana.build(
             parameters=parameters, data=vectors, ids=ids, distance_type=distance, num_threads=num_threads
         )
-        self.index.search_window_size = 128
 
-    def search(self, queries: torch.Tensor, k: int) -> Tuple[np.ndarray, np.ndarray]:
+    def search(self, queries: torch.Tensor, k: int, search_window_size: int) -> Tuple[np.ndarray, np.ndarray]:
+
+        start_time = time.time()
+        self.index.search_window_size = search_window_size
         indices, distances = self.index.search(queries=to_numpy(queries).astype(np.float32), n_neighbors=k)
-        return to_torch(indices.astype(np.int64)), to_torch(distances)
+
+        end_time = time.time()
+        timing_info = SearchTimingInfo()
+        timing_info.total_time_ns = int((end_time - start_time) * 1e9)
+
+        search_result = SearchResult()
+        search_result.ids = to_torch(indices)
+        search_result.distances = to_torch(distances)
+        search_result.timing_info = timing_info
+
+        return search_result
+
 
     def add(self, vectors: torch.Tensor, ids: Optional[torch.Tensor] = None):
         if ids is None:
@@ -99,3 +114,9 @@ class Vamana(IndexWrapper):
 
     def centroids(self) -> torch.Tensor | None:
         return super().centroids()
+
+    def index_state(self) -> str:
+        return ""
+
+    def maintenance(self):
+        pass

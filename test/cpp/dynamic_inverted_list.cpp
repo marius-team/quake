@@ -556,6 +556,136 @@ TEST_F(DynamicInvertedListTest, SerializationTest) {
     remove(filename.c_str());
 }
 
+// ---------------------------------------------------------------------
+//  Map‑consistency tests
+// ---------------------------------------------------------------------
+
+// After removing a middle element the map must point the *swapped* id
+TEST_F(DynamicInvertedListTest, MapConsistencyAfterRemoveSwap)
+{
+    const size_t list_no   = 0;
+    const size_t n_entries = 3;
+
+    std::vector<uint8_t> codes;
+    std::vector<idx_t>   ids;
+    generate_random_codes(n_entries, codes);
+    generate_sequential_ids(n_entries, ids, 10);     // ids = 10,11,12
+
+    invlists->add_entries(list_no, n_entries, ids.data(), codes.data());
+
+    // Remove id 11 (middle) – id 12 will be swapped into slot 1
+    invlists->remove_entry(list_no, 11);
+
+    // --- removed id must be gone
+    EXPECT_THROW( { invlists->get_vectors_by_id({11}); }, std::runtime_error );
+
+    // --- swapped id 12 must still be retrievable and vector intact
+    auto vec_ptrs = invlists->get_vectors_by_id({12});
+    ASSERT_EQ(vec_ptrs.size(), 1u);
+    EXPECT_EQ(
+        std::memcmp(vec_ptrs[0],
+                    codes.data() + 2 * code_size,   // original bytes of id 12
+                    code_size),
+        0);
+}
+
+
+// Removing many IDs in one pass must keep the map sound
+TEST_F(DynamicInvertedListTest, MapConsistencyBulkRemove)
+{
+    const size_t list_no   = 1;
+    const size_t n_entries = 10;
+
+    std::vector<uint8_t> codes;
+    std::vector<idx_t>   ids;
+    generate_random_codes(n_entries, codes);
+    generate_sequential_ids(n_entries, ids, 100);    // ids = 100..109
+
+    invlists->add_entries(list_no, n_entries, ids.data(), codes.data());
+
+    // Remove every even id (5 victims)
+    std::vector<idx_t> victims;
+    for (idx_t id : ids)
+        if (id % 2 == 0) victims.push_back(id);
+
+    invlists->remove_entries_from_partition(list_no, victims);
+
+    // All survivors must be accessible and the bytes match
+    std::vector<idx_t> survivors;
+    for (idx_t id : ids)
+        if (id % 2) survivors.push_back(id);
+
+    auto vecs = invlists->get_vectors_by_id(survivors);
+    ASSERT_EQ(vecs.size(), survivors.size());
+    for (size_t k = 0; k < survivors.size(); ++k) {
+        size_t orig_idx = survivors[k] - 100;                // 0‑based
+        EXPECT_EQ(
+            std::memcmp(vecs[k],
+                        codes.data() + orig_idx * code_size,
+                        code_size),
+            0);
+    }
+}
+
+
+// batch_update_entries must leave every moved id valid in the map
+TEST_F(DynamicInvertedListTest, MapConsistencyBatchUpdate)
+{
+    const size_t old_p = 2;
+    const size_t new_p = 3;
+    const size_t n     = 6;          // vectors
+
+    std::vector<uint8_t> codes;
+    std::vector<idx_t>   ids;
+    generate_random_codes(n, codes);
+    generate_sequential_ids(n, ids, 500);          // 500..505
+    invlists->add_entries(old_p, n, ids.data(), codes.data());
+
+    // mark last 3 vectors to move
+    std::vector<int64_t> part_of(n, (int64_t)old_p);
+    for (size_t i = 3; i < n; ++i) part_of[i] = (int64_t)new_p;
+
+    std::vector<uint8_t> new_codes = codes;        // unchanged payload
+    std::vector<int64_t> ids_i64(ids.begin(), ids.end());
+
+    invlists->batch_update_entries(old_p,
+                                   part_of.data(),
+                                   new_codes.data(),
+                                   ids_i64.data(),
+                                   (int)n);
+
+    // all ids must still retrieve the identical vector bytes
+    auto vecs = invlists->get_vectors_by_id({ids.begin(), ids.end()});
+    ASSERT_EQ(vecs.size(), n);
+
+    for (size_t k = 0; k < n; ++k)
+        EXPECT_EQ(
+            std::memcmp(vecs[k],
+                        codes.data() + k * code_size,
+                        code_size),
+            0);
+}
+
+TEST_F(DynamicInvertedListTest, LazyBuildMapGuard)
+{
+    const size_t list_no = 4;
+    std::vector<uint8_t> codes;
+    std::vector<idx_t>   ids;
+    generate_random_codes(1, codes);
+    generate_sequential_ids(1, ids, 900);
+
+    invlists->add_entries(list_no, 1, ids.data(), codes.data());
+
+    // Brutally wipe the internal map (undefined behaviour normally, but
+    // we do it via the public API by resetting and rebuilding).
+    invlists->build_map();               // ensure filled first
+    invlists->id_to_location_.clear();   // <-- direct access because we are a friend in unit test
+
+    // the read accessor should transparently rebuild
+    float tmp[4];
+    EXPECT_TRUE(invlists->get_vector_for_id(ids[0], tmp));
+}
+
 // NUMA related tests (only if QUAKE_USE_NUMA is defined)
 #ifdef QUAKE_USE_NUMA
 TEST_F(DynamicInvertedListTest, NumaTests) {

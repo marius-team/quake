@@ -53,6 +53,15 @@ PYBIND11_MODULE(_bindings, m) {
         and maintain your index.
     )pbdoc";
 
+    /*********** Index Partition Bindings ***********/
+    class_<IndexPartition>(m, "IndexPartition")
+        .def_readwrite_static("delete_resize_threshold", &IndexPartition::delete_resize_threshold_)
+        .def_readwrite_static("capacity_resize_threshold", &IndexPartition::capacity_resize_threshold_);
+
+     class_<QueryCoordinator>(m, "QueryCoordinator")
+        .def_readwrite_static("partition_chunk_size", &QueryCoordinator::batch_scan_partition_chunk_size_)
+        .def_readwrite_static("query_chunk_size", &QueryCoordinator::batch_scan_query_chunk_size_);
+
     /*********** QuakeIndex Binding ***********/
     class_<QuakeIndex, shared_ptr<QuakeIndex>>(m, "QuakeIndex")
         .def(init<int>(), arg("current_level") = 0,
@@ -69,6 +78,10 @@ PYBIND11_MODULE(_bindings, m) {
                      "         - num_workers: default = " + std::to_string(DEFAULT_NUM_WORKERS);
                  return doc.c_str();
              })())
+        .def("add_level", &QuakeIndex::add_level,
+             "Add a new level to the index.\n\n"
+             "Args:\n"
+             "    build_params (IndexBuildParams): Parameters for building the new level.")
         .def("search", &QuakeIndex::search,
              ([]() -> const char* {
                  static const std::string doc = std::string("Search the index for nearest neighbors.\n\n"
@@ -127,6 +140,10 @@ PYBIND11_MODULE(_bindings, m) {
             return oss.str();
         });
 
+    // bool use_gpu = false;
+    // int gpu_batch_size = DEFAULT_GPU_BATCH_SIZE;
+    // int gpu_sample_size = DEFAULT_GPU_SAMPLE_SIZE;
+
     /*********** IndexBuildParams Binding ***********/
     class_<IndexBuildParams, shared_ptr<IndexBuildParams>>(m, "IndexBuildParams")
         .def(init<>())
@@ -138,6 +155,19 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Distance metric. default = ") + DEFAULT_METRIC).c_str())
         .def_readwrite("num_workers", &IndexBuildParams::num_workers,
              (std::string("Number of workers. default = ") + std::to_string(DEFAULT_NUM_WORKERS)).c_str())
+        .def_readwrite("parent_params", &IndexBuildParams::parent_params,
+             "Parameters for the parent index, if any.")
+        .def_readwrite("num_merge_workers", &IndexBuildParams::num_merge_workers,
+             (std::string("Number of workers for merging. default = ") + std::to_string(DEFAULT_NUM_MERGE_WORKERS)).c_str())
+        .def_readwrite("use_numa", &IndexBuildParams::use_numa,
+         (std::string("Flag to use NUMA for index building. default = ") + std::to_string(false)).c_str())
+        .def_readwrite("use_gpu", &IndexBuildParams::use_gpu,
+             (std::string("Flag to use GPU for index building. default = ") + std::to_string(false)).c_str())
+        .def_readwrite("gpu_batch_size", &IndexBuildParams::gpu_batch_size,
+             (std::string("Batch size for GPU index building. default = ") + std::to_string(DEFAULT_GPU_BATCH_SIZE)).c_str())
+        .def_readwrite("gpu_sample_size", &IndexBuildParams::gpu_sample_size,
+             (std::string("Sample size for GPU index building. default = ") + std::to_string(DEFAULT_GPU_SAMPLE_SIZE)).c_str())
+
         .def("__repr__", [](const IndexBuildParams &p) {
             std::ostringstream oss;
             oss << "{";
@@ -170,6 +200,29 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Threshold to trigger recomputation of APS. default = ") + std::to_string(DEFAULT_RECOMPUTE_THRESHOLD)).c_str())
         .def_readwrite("aps_flush_period_us", &SearchParams::aps_flush_period_us,
              (std::string("APS flush period in microseconds. default = ") + std::to_string(DEFAULT_APS_FLUSH_PERIOD_US)).c_str())
+        .def_readwrite("batch_size", &SearchParams::batch_size,
+             (std::string("Batch size for batched scan. default = ") + std::to_string(MAX_SUBBATCH)).c_str())
+        .def_readwrite("k_factor", &SearchParams::k_factor,
+             "Factor to adjust the number of neighbors to return.")
+        .def_readwrite("track_hits", &SearchParams::track_hits,
+             "Flag to track hits for maintenance policy.")
+        .def_readwrite("use_auncel", &SearchParams::use_auncel,
+                "Flag to use Auncel recall estimation for search.")
+        .def_readwrite("auncel_a", &SearchParams::auncel_a,
+                "Auncel parameter a for recall estimation.")
+        .def_readwrite("auncel_b", &SearchParams::auncel_b,
+                "Auncel parameter b for recall estimation.")
+        .def_readwrite("use_spann", &SearchParams::use_spann,
+                "Flag to use SPANN for search.")
+        .def_readwrite("spann_eps", &SearchParams::spann_eps,
+                "SPANN parameter epsilon for search.")
+        .def_readwrite("sample_prefix", &SearchParams::sample_prefix,
+                "Prefix length for APS sampling.")
+        .def_readwrite("sample_stride", &SearchParams::sample_stride,
+                "Stride length for APS sampling.")
+
+        .def_readwrite("parent_params", &SearchParams::parent_params,
+             "Search parameters for the parent index, if any.")
         .def("__repr__", [](const SearchParams &s) {
             std::ostringstream oss;
             oss << "{";
@@ -198,12 +251,18 @@ PYBIND11_MODULE(_bindings, m) {
              (std::string("Number of refinement iterations. default = ") + std::to_string(DEFAULT_REFINEMENT_ITERATIONS)).c_str())
         .def_readwrite("min_partition_size", &MaintenancePolicyParams::min_partition_size,
              (std::string("Minimum allowed partition size. default = ") + std::to_string(DEFAULT_MIN_PARTITION_SIZE)).c_str())
+        .def_readwrite("max_partition_size", &MaintenancePolicyParams::max_partition_size,
+            (std::string("Maximum allowed partition size. default = ") + std::to_string(-1)).c_str())
         .def_readwrite("alpha", &MaintenancePolicyParams::alpha,
              (std::string("Alpha parameter. default = ") + std::to_string(DEFAULT_ALPHA)).c_str())
         .def_readwrite("enable_split_rejection", &MaintenancePolicyParams::enable_split_rejection,
              (std::string("Enable split rejection. default = ") + std::to_string(DEFAULT_ENABLE_SPLIT_REJECTION)).c_str())
         .def_readwrite("enable_delete_rejection", &MaintenancePolicyParams::enable_delete_rejection,
              (std::string("Enable delete rejection. default = ") + std::to_string(DEFAULT_ENABLE_DELETE_REJECTION)).c_str())
+        .def_readwrite("split_knn_iterations", &MaintenancePolicyParams::split_knn_iterations,
+             (std::string("Number of clustering iterations to perform during a clustering. default = ") + std::to_string(DEFAULT_NITER)).c_str())
+        .def_readwrite("partition_reduction_threshold", &MaintenancePolicyParams::partition_reduction_threshold,
+             (std::string("Threshold for deleting a partition based on the number of vectors it has lost. default = ") + std::to_string(DEFAULT_PARTITION_REDUCTION_THRESHOLD)).c_str())   
         .def_readwrite("delete_threshold_ns", &MaintenancePolicyParams::delete_threshold_ns,
              (std::string("Delete threshold (ns). default = ") + std::to_string(DEFAULT_DELETE_THRESHOLD_NS)).c_str())
         .def_readwrite("split_threshold_ns", &MaintenancePolicyParams::split_threshold_ns,
@@ -233,10 +292,8 @@ PYBIND11_MODULE(_bindings, m) {
              "Time taken for split operations in microseconds.")
          .def_readonly("delete_time_us", &MaintenanceTimingInfo::delete_time_us,
              "Time taken for delete operations in microseconds.")
-         .def_readonly("split_refine_time_us", &MaintenanceTimingInfo::split_refine_time_us,
+         .def_readonly("refinement_time_us", &MaintenanceTimingInfo::refinement_time_us,
              "Time taken for refinement of split operations in microseconds.")
-         .def_readonly("delete_refine_time_us", &MaintenanceTimingInfo::delete_refine_time_us,
-             "Time taken for refinement of delete operations in microseconds.")
          .def_readonly("n_splits", &MaintenanceTimingInfo::n_splits,
              "Number of partition split operations performed.")
          .def_readonly("n_deletes", &MaintenanceTimingInfo::n_deletes,
@@ -247,8 +304,7 @@ PYBIND11_MODULE(_bindings, m) {
              oss << "\"total_time_us\": " << t.total_time_us << ", ";
              oss << "\"split_time_us\": " << t.split_time_us << ", ";
              oss << "\"delete_time_us\": " << t.delete_time_us << ", ";
-             oss << "\"split_refine_time_us\": " << t.split_refine_time_us << ", ";
-             oss << "\"delete_refine_time_us\": " << t.delete_refine_time_us << ", ";
+             oss << "\"refinement_time_us\": " << t.refinement_time_us << ", ";
              oss << "\"n_splits\": " << t.n_splits << ", ";
              oss << "\"n_deletes\": " << t.n_deletes;
              oss << "}";
@@ -275,6 +331,14 @@ PYBIND11_MODULE(_bindings, m) {
              return oss.str();
          });
 
+
+    // double worker_wait_time_ns = 0; ///< Average worker wait time in nanoseconds.
+    // double worker_process_time_ns = 0; ///< Average worker process time in nanoseconds.
+    // double worker_process_preamble_time_ns = 0; ///< Average worker process preamble time in nanoseconds.
+    // double worker_enqueue_time_ns = 0; ///< Average worker enqueue time in nanoseconds.
+    // double worker_job_time_ns = 0; ///< Average worker job time in nanoseconds.
+    // double worker_scan_time_ns = 0; ///< Average worker scan time in nanoseconds.
+
     /*********** SearchTimingInfo Binding ***********/
     class_<SearchTimingInfo, shared_ptr<SearchTimingInfo>>(m, "SearchTimingInfo")
          .def(init<>())
@@ -282,6 +346,8 @@ PYBIND11_MODULE(_bindings, m) {
              "Total time taken for the search operation in nanoseconds.")
         .def_readwrite("buffer_init_time_ns", &SearchTimingInfo::buffer_init_time_ns,
              "Time spent on initializing buffers in nanoseconds.")
+         .def_readwrite("copy_query_time_ns", &SearchTimingInfo::copy_query_time_ns,
+                "Time spent on copying query vectors to NUMA buffers in nanoseconds.")
         .def_readwrite("job_enqueue_time_ns", &SearchTimingInfo::job_enqueue_time_ns,
              "Time spent on creating jobs in nanoseconds.")
         .def_readwrite("boundary_distance_time_ns", &SearchTimingInfo::boundary_distance_time_ns,
@@ -300,6 +366,26 @@ PYBIND11_MODULE(_bindings, m) {
              "Parameters used for the search operation.")
          .def_readwrite("parent_info", &SearchTimingInfo::parent_info,
              "Search info for the parent index.")
+        .def_readwrite("aps_time_ns", &SearchTimingInfo::aps_time_ns,
+            "Time spent on APS in nanoseconds.")
+        .def_readwrite("scan_time_ns", &SearchTimingInfo::scan_time_ns,
+            "Time spent on scanning in nanoseconds.")
+            .def_readwrite("worker_wait_time_ns", &SearchTimingInfo::worker_wait_time_ns,
+                "Average worker wait time in nanoseconds.")
+        .def_readwrite("worker_process_time_ns", &SearchTimingInfo::worker_process_time_ns,
+                 "Average worker process time in nanoseconds.")
+        .def_readwrite("worker_process_preamble_time_ns", &SearchTimingInfo::worker_process_preamble_time_ns,
+                 "Average worker process preamble time in nanoseconds.")
+        .def_readwrite("worker_enqueue_time_ns", &SearchTimingInfo::worker_enqueue_time_ns,
+                 "Average worker enqueue time in nanoseconds.")
+        .def_readwrite("worker_job_time_ns", &SearchTimingInfo::worker_job_time_ns,
+                 "Average worker job time in nanoseconds.")
+        .def_readwrite("worker_scan_time_ns", &SearchTimingInfo::worker_scan_time_ns,
+                 "Average worker scan time in nanoseconds.")
+         .def_readwrite("local_scan_throughput", &SearchTimingInfo::local_scan_throughput,
+                 "Average batch scan throughput")
+        .def_readwrite("worker_partition_size", &SearchTimingInfo::worker_partition_size,
+                 "Average worker partition size")
          .def("__repr__", [](const SearchTimingInfo &s) {
              std::ostringstream oss;
              oss << "{";

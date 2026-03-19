@@ -19,7 +19,7 @@ static float measure_actual_latency(const ListScanLatencyEstimator& estimator,
   torch::Tensor ids = torch::randperm(n);
   torch::Tensor query = torch::rand({estimator.d_});
 
-  auto topk_buffer = make_shared<TopkBuffer>(k, false);
+  auto topk_buffer = make_shared<TopkBuffer>(k, false, k * 100, 0);
 
   const float* query_ptr = query.data_ptr<float>();
   const float* vectors_ptr = vectors.data_ptr<float>();
@@ -28,7 +28,8 @@ static float measure_actual_latency(const ListScanLatencyEstimator& estimator,
   uint64_t total_latency_ns = 0;
   for (int m = 0; m < estimator.n_trials_; ++m) {
     auto start = std::chrono::high_resolution_clock::now();
-    scan_list(query_ptr, vectors_ptr, ids_ptr, n, estimator.d_, *topk_buffer);
+    scan_list(query_ptr, vectors_ptr, ids_ptr, n, estimator.d_, *topk_buffer,
+              faiss::METRIC_L2, 10000000.0);
     auto end = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);

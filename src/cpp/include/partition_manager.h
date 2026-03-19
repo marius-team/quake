@@ -26,6 +26,7 @@ public:
     shared_ptr<QuakeIndex> parent_ = nullptr; ///< Pointer to a higher-level parent index.
     std::shared_ptr<faiss::DynamicInvertedLists> partition_store_ = nullptr; ///< Pointer to the inverted lists.
     int64_t curr_partition_id_ = 0; ///< Current partition ID.
+    int num_workers_ = 0; ///< Number of workers for parallel processing.
 
     bool debug_ = false; ///< If true, print debug information.
     bool check_uniques_ = false; ///< If true, check that vector IDs are unique and don't already exist in the index.
@@ -56,14 +57,14 @@ public:
     * @param assignments Tensor of shape [num_vectors] containing partition IDs. If not provided, vectors are assigned using the parent index.
     * @return Timing information for the operation.
     */
-    shared_ptr<ModifyTimingInfo> add(const Tensor &vectors, const Tensor &vector_ids, const Tensor &assignments = Tensor(), bool check_uniques = true);
+    shared_ptr<ModifyTimingInfo> add(const Tensor &vectors, const Tensor &vector_ids, const Tensor &assignments = Tensor(), bool check_uniques = true, bool record_delta = false);
 
     /**
      * @brief Remove vectors by ID from the index.
      * @param ids Tensor of shape [num_to_remove].
      * @return Timing information for the operation.
      */
-    shared_ptr<ModifyTimingInfo> remove(const Tensor &ids);
+    shared_ptr<ModifyTimingInfo> remove(const Tensor &ids, bool record_delta = false);
 
     /**
      * @brief Get vectors by ID.
@@ -80,7 +81,7 @@ public:
      * @brief Split a given partition into multiple smaller ones.
      * @param partition_ids The partition IDs to split.
      */
-    shared_ptr<Clustering> split_partitions(const Tensor &partition_ids);
+    shared_ptr<Clustering> split_partitions(const Tensor &partition_ids, int knn_iteration = DEFAULT_NITER);
 
     /**
     * @brief Refine selected partitions using k-means
@@ -103,6 +104,22 @@ public:
     void add_partitions(shared_ptr<Clustering> partitions);
 
     /**
+     * @brief Calculate the churn factor of the index
+     */
+    float get_churn_factor(int64_t churn_factor); 
+
+    /**
+     * @brief Returns the percentage of the cluster that has been deleted since last mainteance
+     */
+    float get_delete_factor(int64_t partition_id);
+
+    /**
+     * @brief Updates the centroid based on its delta
+     * 
+     */
+    int64_t update_centroid(int64_t partition_id, float* centroid_buffer);
+
+    /**
      * @brief Select partitions and their centroids.
      * @param partition_ids Tensor of shape [num_partitions] containing partition IDs.
      * @param copy If true, copies the data; otherwise, uses references.
@@ -113,13 +130,13 @@ public:
      * @brief Distribute the partitions across multiple workers.
      * @param num_workers The number of workers to distribute the partitions across.
      */
-    void distribute_partitions(int num_workers);
+    void distribute_partitions(int num_workers, bool use_numa = false);
 
     /**
      * @brief Set the core ID for a given partition.
      * @param partition_id The ID of the partition.
      */
-    void set_partition_core_id(int64_t partition_id, int core_id);
+    void set_partition_core_id(int64_t partition_id, int core_id, bool use_numa = false);
 
     /**
      * @brief Return the core ID for a given partition.

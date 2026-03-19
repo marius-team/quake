@@ -1,0 +1,119 @@
+dataset:
+  name: wiki13m
+  # Instead of a single num_queries, we sweep over these batch sizes:
+#  query_batch_sizes: [1, 8, 16, 32, 64, 128, 256, 512]
+  num_queries: 8192
+  query_batch_sizes: [1, 4, 16, 64, 256, 1024, 4096, 8192]
+  k: 100
+
+trials: 3
+warmup: 1
+overwrite: true
+force_rebuild: false
+
+indexes:
+  - name: Quake_Unbatched
+    index: Quake
+    index_file: /opt/quake/data/vary_batch_sizes/indices/Quake_3500.bin
+    build_params:
+      nc: 3500
+      metric: ip
+      num_workers: 16
+      use_numa: true
+      omp_num_threads_build: 8
+      parent:
+        num_workers: 4
+    search_params:
+      nprobe: 4
+      batch_size: 128
+      parent:
+        batched_scan: true
+        batch_size: 128
+      batched_scan: false
+      omp_num_threads_search: 1
+
+  - name: Quake_Batched
+    index: Quake
+    index_file: /opt/quake/data/vary_batch_sizes/indices/Quake_3500.bin
+    build_params:
+      nc: 3500
+      metric: ip
+      num_workers: 16
+      omp_num_threads_build: 8
+      use_numa: true
+      parent:
+        num_workers: 4
+    search_params:
+      nprobe: 4
+      batch_size: 128
+      parent:
+        batched_scan: true
+        batch_size: 128
+      batched_scan: true
+      omp_num_threads_search: 1
+
+  - name: FaissIVF
+    index: IVF
+    index_file: /opt/quake/data/vary_batch_sizes/indices/FaissIVF.bin
+    build_params:
+      nc: 3500
+      metric: ip
+      omp_num_threads_build: 1
+    search_params:
+      nprobe: 4
+      omp_num_threads_search: 16
+
+  - name: FaissHNSW
+    index: HNSW
+    index_file: /opt/quake/data/vary_batch_sizes/indices/FaissHNSW.bin
+    build_params:
+      m: 64
+      ef_construction: 128
+      metric: ip
+      omp_num_threads_build: 1
+    search_params:
+      ef_search: 16
+      omp_num_threads_search: 16
+
+  - name: SCANN
+    index: SCANN
+    index_file: /opt/quake/data/vary_batch_sizes/indices/SCANN.bin
+    build_params:
+      num_leaves: 3500
+      metric: dot_product
+      omp_num_threads_build: 16
+    search_params:
+      leaves_to_search: 4
+      omp_num_threads_search: 1
+      n_threads: 16
+
+  - name: DiskANN
+    index: DiskANN
+    index_file: /opt/quake/data/vary_batch_sizes/indices/DiskANN.bin
+    build_params:
+      complexity: 128
+      graph_degree: 64
+      metric: mips
+      num_threads: 16
+      omp_num_threads_build: 1
+    search_params:
+      complexity: 128
+      num_threads: 16
+      omp_num_threads_search: 1
+
+  - name: SVS
+    index: SVS
+    index_file: /opt/quake/data/vary_batch_sizes/indices/SVS.bin
+    build_params:
+      graph_max_degree: 64
+      alpha: 1.1
+      window_size: 128
+      metric: ip
+      num_threads: 16
+      omp_num_threads_build: 1
+    search_params:
+      search_window_size: 24
+      omp_num_threads_search: 16
+
+output:
+  results_csv: numa_query_batch_results.csv
